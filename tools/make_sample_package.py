@@ -3,7 +3,7 @@
 
 The package is deliberately planted with due-diligence issues (cross-document
 discrepancies, version differences, definition differences, evidence gaps, a
-prompt-injection attempt) so the AssetDD pipeline can be tested end-to-end.
+prompt-injection attempt) so the HiJenny pipeline can be tested end-to-end.
 Ground truth is written next to the documents for the evaluation harness.
 
 Usage:

@@ -1,4 +1,4 @@
-"""Evaluation package for AssetDD AI (eval-dev owned).
+"""Evaluation package for HiJenny (eval-dev owned).
 
 Modules
 -------

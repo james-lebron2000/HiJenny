@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""AssetDD AI benchmark harness (eval-dev owned).
+"""HiJenny benchmark harness (eval-dev owned).
 
-Runs the real pipeline (``assetdd.pipeline.run_pipeline``) on a document package,
+Runs the real pipeline (``hijenny.pipeline.run_pipeline``) on a document package,
 then scores the persisted store against adjudicated ground truth:
 
-    python3 -m eval.benchmark --package data/sample_package --fresh --out /tmp/assetdd_eval
+    python3 -m eval.benchmark --package data/sample_package --fresh --out /tmp/hijenny_eval
     python3 -m eval.benchmark --project prj_xxx --package data/sample_package
-    python3 -m eval.benchmark --lifecycle --out /tmp/assetdd_eval
-    python3 -m eval.benchmark --clean-control --out /tmp/assetdd_eval
-    python3 -m eval.benchmark --adversarial --out /tmp/assetdd_eval
+    python3 -m eval.benchmark --lifecycle --out /tmp/hijenny_eval
+    python3 -m eval.benchmark --clean-control --out /tmp/hijenny_eval
+    python3 -m eval.benchmark --adversarial --out /tmp/hijenny_eval
 
 Outputs ``scorecard.json`` + ``scorecard.md`` in the ``--out`` directory
 (default ``eval/reports``, git-ignored) with tables, per-field accuracy,
@@ -48,13 +48,13 @@ SCORECARD_JSON = "scorecard.json"
 SCORECARD_MD = "scorecard.md"
 
 _STAGE_MODULES: tuple[tuple[str, str], ...] = (
-    ("INGEST", "assetdd.ingestion"),
-    ("EXTRACT", "assetdd.extraction"),
-    ("VALIDATE", "assetdd.validation"),
-    ("CONSISTENCY", "assetdd.agents.consistency"),
-    ("GAP", "assetdd.agents.gap"),
-    ("QUESTIONS", "assetdd.agents.questions"),
-    ("REPORT", "assetdd.reporting"),
+    ("INGEST", "hijenny.ingestion"),
+    ("EXTRACT", "hijenny.extraction"),
+    ("VALIDATE", "hijenny.validation"),
+    ("CONSISTENCY", "hijenny.agents.consistency"),
+    ("GAP", "hijenny.agents.gap"),
+    ("QUESTIONS", "hijenny.agents.questions"),
+    ("REPORT", "hijenny.reporting"),
 )
 
 _INACTIVE_FINDING_STATUSES = {"resolved", "dismissed"}
@@ -69,8 +69,8 @@ _HONESTY_BANNER = (
 
 
 # ---------------------------------------------------------------------------
-# Environment / imports (assetdd imports happen lazily so the harness can set a
-# temporary data dir first and never touch data/assetdd.db)
+# Environment / imports (hijenny imports happen lazily so the harness can set a
+# temporary data dir first and never touch data/hijenny.db)
 # ---------------------------------------------------------------------------
 
 
@@ -79,22 +79,22 @@ def _now() -> str:
 
 
 def _setup_environment(work_dir: Path) -> None:
-    """Force all AssetDD runtime output into the temp work dir."""
+    """Force all HiJenny runtime output into the temp work dir."""
     data_dir = work_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["ASSETDD_DATA_DIR"] = str(data_dir)
-    os.environ.pop("ASSETDD_PACKAGE_DIR", None)
+    os.environ["HIJENNY_DATA_DIR"] = str(data_dir)
+    os.environ.pop("HIJENNY_PACKAGE_DIR", None)
 
 
 def _store_and_pipeline():
-    from assetdd import pipeline, store  # noqa: PLC0415 - lazy on purpose
+    from hijenny import pipeline, store  # noqa: PLC0415 - lazy on purpose
 
     return store, pipeline
 
 
 def _import_ingestion():
     try:
-        import assetdd.ingestion as ingestion  # noqa: PLC0415
+        import hijenny.ingestion as ingestion  # noqa: PLC0415
 
         return ingestion
     except Exception:  # noqa: BLE001 - module may still be under construction
@@ -514,7 +514,7 @@ def _build_scorecard(
     expected_injection = ground_truth.get("injection") or {}
     adversarial_block["expected_injection"] = expected_injection
     if expected_injection.get("anchor"):
-        from assetdd.schemas import normalize_ws  # noqa: PLC0415 - tiny helper
+        from hijenny.schemas import normalize_ws  # noqa: PLC0415 - tiny helper
 
         anchor = normalize_ws(str(expected_injection["anchor"])).lower()
         anchor_pages: list[dict] = []
@@ -738,7 +738,7 @@ def _heading(level: int, text: str) -> str:
 def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
     meta = scorecard["meta"]
     lines: list[str] = []
-    lines.append(_heading(heading_level, "AssetDD AI — Evaluation Scorecard"))
+    lines.append(_heading(heading_level, "HiJenny — Evaluation Scorecard"))
     lines.append("")
     lines.append(f"> {_HONESTY_BANNER}")
     lines.append("")
@@ -1686,7 +1686,7 @@ def _write_lifecycle_outputs(combined: dict, out_dir: Path) -> dict[str, str]:
     )
     meta = combined["meta"]
     lines: list[str] = [
-        "# AssetDD AI — Lifecycle Evaluation Scorecard",
+        "# HiJenny — Lifecycle Evaluation Scorecard",
         "",
         f"> {_HONESTY_BANNER}",
         "",
@@ -1746,7 +1746,7 @@ def _headline(scorecard: dict) -> str:
 def _resolve_db_path(args: argparse.Namespace, work_dir: Path) -> Path:
     if args.database:
         return Path(args.database).expanduser().resolve()
-    return work_dir / "data" / "assetdd.db"
+    return work_dir / "data" / "hijenny.db"
 
 
 def _print_missing(missing: list[str]) -> None:
@@ -1797,7 +1797,7 @@ def _cmd_package(args: argparse.Namespace, out_dir: Path, work_dir: Path) -> int
 
 
 def _cmd_project(args: argparse.Namespace, out_dir: Path, work_dir: Path) -> int:
-    from assetdd import config  # noqa: PLC0415 - after env is untouched
+    from hijenny import config  # noqa: PLC0415 - after env is untouched
 
     db_path = Path(args.database).expanduser().resolve() if args.database else Path(config.DB_PATH)
     store, pipeline = _store_and_pipeline()
@@ -1892,7 +1892,7 @@ def _cmd_lifecycle(args: argparse.Namespace, out_dir: Path, work_dir: Path) -> i
 
     ingestion = _import_ingestion()
     if ingestion is None or not hasattr(ingestion, "ingest_directory"):
-        print("ERROR: assetdd.ingestion.ingest_directory unavailable; cannot upload v2.")
+        print("ERROR: hijenny.ingestion.ingest_directory unavailable; cannot upload v2.")
         return 3
     with store.session_scope() as session:
         ingestion.ingest_directory(session, project_id, str(package_v2))
@@ -2039,7 +2039,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m eval.benchmark",
         description=(
-            "AssetDD AI evaluation benchmark. Runs the real pipeline and writes "
+            "HiJenny evaluation benchmark. Runs the real pipeline and writes "
             "a synthetic-corpus scorecard (not real-world validation)."
         ),
     )
@@ -2061,7 +2061,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--database",
         default=None,
-        help="SQLite path (default: isolated temp DB; --project defaults to data/assetdd.db)",
+        help="SQLite path (default: isolated temp DB; --project defaults to data/hijenny.db)",
     )
     parser.add_argument(
         "--fresh",
@@ -2112,7 +2112,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     out_dir = Path(args.out).expanduser().resolve()
-    work_dir = Path(tempfile.mkdtemp(prefix="assetdd_eval_"))
+    work_dir = Path(tempfile.mkdtemp(prefix="hijenny_eval_"))
     try:
         if args.project:
             return _cmd_project(args, out_dir, work_dir)

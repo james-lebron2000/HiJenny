@@ -6,7 +6,7 @@ skipped with a clear reason while pipeline stage modules are still being built i
 parallel; it activates automatically once they are importable.
 
 Tests never depend on ``data/sample_package`` existing (they skip if absent) and
-never touch ``data/assetdd.db``.
+never touch ``data/hijenny.db``.
 """
 from __future__ import annotations
 
@@ -599,13 +599,13 @@ def test_lifecycle_analysis_resolved_persisting_new():
 # ---------------------------------------------------------------------------
 
 _STAGE_MODULES = (
-    "assetdd.ingestion",
-    "assetdd.extraction",
-    "assetdd.validation",
-    "assetdd.agents.consistency",
-    "assetdd.agents.gap",
-    "assetdd.agents.questions",
-    "assetdd.reporting",
+    "hijenny.ingestion",
+    "hijenny.extraction",
+    "hijenny.validation",
+    "hijenny.agents.consistency",
+    "hijenny.agents.gap",
+    "hijenny.agents.questions",
+    "hijenny.reporting",
 )
 
 
@@ -627,8 +627,8 @@ def test_pipeline_integration_scorecard(tmp_path, monkeypatch):
         pytest.skip("pipeline stage modules not importable yet: " + "; ".join(missing))
 
     # Isolate all runtime output and the DB inside tmp_path.
-    monkeypatch.setenv("ASSETDD_DATA_DIR", str(tmp_path / "data"))
-    from assetdd import store  # noqa: PLC0415
+    monkeypatch.setenv("HIJENNY_DATA_DIR", str(tmp_path / "data"))
+    from hijenny import store  # noqa: PLC0415
 
     store.configure(tmp_path / "t.db")
 

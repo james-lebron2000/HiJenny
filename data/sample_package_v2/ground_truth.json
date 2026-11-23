@@ -1,0 +1,320 @@
+{
+  "package": "sample_package_v2",
+  "variant": "v2",
+  "asset_name": "ASD-101 (zafinostat)",
+  "supersedes_package": "sample_package",
+  "facts": [
+    {
+      "field_name": "orr",
+      "document": "Clinical_Study_Report_v2.0.pdf",
+      "document_type": "CSR",
+      "page": 11,
+      "anchor": "objective response rate (ORR) was 44.4%",
+      "value_num": 44.4,
+      "value_text": null,
+      "unit": "%",
+      "population": "ITT",
+      "arm": null,
+      "data_cutoff": "2026-04-30",
+      "assessment_method": "RECIST 1.1",
+      "category": "clinical_efficacy",
+      "tolerance": 0.05,
+      "note": "updated ORR after second data cutoff"
+    },
+    {
+      "field_name": "pfs",
+      "document": "Clinical_Study_Report_v2.0.pdf",
+      "document_type": "CSR",
+      "page": 13,
+      "anchor": "median progression-free survival (PFS) was 7.8 months",
+      "value_num": 7.8,
+      "value_text": null,
+      "unit": "months",
+      "population": "ITT",
+      "arm": null,
+      "data_cutoff": "2026-04-30",
+      "assessment_method": "RECIST 1.1",
+      "category": "clinical_efficacy",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "os",
+      "document": "Clinical_Study_Report_v2.0.pdf",
+      "document_type": "CSR",
+      "page": 14,
+      "anchor": "median overall survival (OS) was 18.2 months",
+      "value_num": 18.2,
+      "value_text": null,
+      "unit": "months",
+      "population": "ITT",
+      "arm": null,
+      "data_cutoff": "2026-04-30",
+      "assessment_method": "RECIST 1.1",
+      "category": "clinical_efficacy",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "sae",
+      "document": "Clinical_Study_Report_v2.0.pdf",
+      "document_type": "CSR",
+      "page": 16,
+      "anchor": "Serious adverse events (SAEs) were reported in 24 patients (19.0%)",
+      "value_num": 19.0,
+      "value_text": null,
+      "unit": "%",
+      "population": "SAFETY",
+      "arm": null,
+      "data_cutoff": "2026-04-30",
+      "assessment_method": null,
+      "category": "clinical_safety",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "orr",
+      "document": "Investigator_Brochure_v3.1.pdf",
+      "document_type": "IB",
+      "page": 2,
+      "anchor": "ORR was 44.4%",
+      "value_num": 44.4,
+      "value_text": null,
+      "unit": "%",
+      "population": "ITT",
+      "arm": null,
+      "data_cutoff": "2026-04-30",
+      "assessment_method": "RECIST 1.1",
+      "category": "clinical_efficacy",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "n_fas",
+      "document": "Statistical_Analysis_Plan_v2.0.pdf",
+      "document_type": "SAP",
+      "page": 2,
+      "anchor": "FAS population comprised 120 patients",
+      "value_num": 120,
+      "value_text": null,
+      "unit": "patients",
+      "population": null,
+      "arm": null,
+      "data_cutoff": null,
+      "assessment_method": null,
+      "category": "statistics",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "n_pp",
+      "document": "Statistical_Analysis_Plan_v2.0.pdf",
+      "document_type": "SAP",
+      "page": 7,
+      "anchor": "per-protocol population (n=118)",
+      "value_num": 118,
+      "value_text": null,
+      "unit": "patients",
+      "population": null,
+      "arm": null,
+      "data_cutoff": null,
+      "assessment_method": null,
+      "category": "statistics",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "multiplicity",
+      "document": "Statistical_Analysis_Plan_v2.0.pdf",
+      "document_type": "SAP",
+      "page": 7,
+      "anchor": "No multiplicity adjustment is required",
+      "value_num": null,
+      "value_text": "no multiplicity adjustment; one-sided alpha 0.05",
+      "unit": null,
+      "population": null,
+      "arm": null,
+      "data_cutoff": null,
+      "assessment_method": null,
+      "category": "statistics",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "subgroup_analysis",
+      "document": "Clinical_Study_Report_v2.0.pdf",
+      "document_type": "CSR",
+      "page": 19,
+      "anchor": "Subgroup analyses are pre-specified by line of therapy and MTAP status",
+      "value_num": null,
+      "value_text": "subgroup results reported",
+      "unit": null,
+      "population": null,
+      "arm": null,
+      "data_cutoff": null,
+      "assessment_method": null,
+      "category": "clinical_efficacy",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "sae",
+      "document": "Safety_Summary_v2.0.pdf",
+      "document_type": "SAFETY",
+      "page": 2,
+      "anchor": "Serious adverse events (SAEs) were reported in 24 patients (19.0%)",
+      "value_num": 19.0,
+      "value_text": null,
+      "unit": "%",
+      "population": "SAFETY",
+      "arm": null,
+      "data_cutoff": "2026-04-30",
+      "assessment_method": null,
+      "category": "clinical_safety",
+      "tolerance": 0.05,
+      "note": null
+    },
+    {
+      "field_name": "orr",
+      "document": "Commercial_Forecast_v2.pptx",
+      "document_type": "COMMERCIAL",
+      "page": 3,
+      "anchor": "ORR 44.4% (56/126)",
+      "value_num": 44.4,
+      "value_text": null,
+      "unit": "%",
+      "population": "ITT",
+      "arm": null,
+      "data_cutoff": "2026-04-30",
+      "assessment_method": "RECIST 1.1",
+      "category": "clinical_efficacy",
+      "tolerance": 0.05,
+      "note": null
+    }
+  ],
+  "finding_topics": [
+    {
+      "topic_id": "typeC_orr_fas_bicr",
+      "finding_type": "definition_difference",
+      "field_name": "orr",
+      "document_types": [
+        "CSR"
+      ],
+      "keywords": [
+        "FAS",
+        "BICR",
+        "sensitivity"
+      ],
+      "expected_severity": "medium",
+      "expected_status_v2": "persisting"
+    },
+    {
+      "topic_id": "gap_monitoring_audit",
+      "finding_type": "evidence_gap",
+      "field_name": "audit_summary",
+      "document_types": [
+        "CSR",
+        "PROTOCOL"
+      ],
+      "keywords": [
+        "audit",
+        "monitoring"
+      ],
+      "expected_severity": "low",
+      "expected_status_v2": "persisting"
+    },
+    {
+      "topic_id": "prompt_injection_ib",
+      "finding_type": "technical_concern",
+      "document_types": [
+        "IB"
+      ],
+      "keywords": [
+        "injection",
+        "ignore all previous instructions"
+      ],
+      "expected_severity": "high",
+      "expected_status_v2": "persisting"
+    },
+    {
+      "topic_id": "typeB_data_cutoff",
+      "finding_type": "version_difference",
+      "field_name": "data_cutoff",
+      "document_types": [
+        "CSR",
+        "SAFETY"
+      ],
+      "keywords": [
+        "cutoff",
+        "2026-04-30",
+        "2026-01-15"
+      ],
+      "expected_severity": "low",
+      "expected_status_v2": "persisting",
+      "rationale": "Single-version documents (disposition/deviations) still state the earlier cutoff while updated v2 documents state 2026-04-30."
+    }
+  ],
+  "question_topics": [
+    {
+      "topic_id": "q_fas_bicr",
+      "finding_topic_id": "typeC_orr_fas_bicr",
+      "keywords": [
+        "FAS",
+        "BICR",
+        "sensitivity",
+        "population"
+      ]
+    },
+    {
+      "topic_id": "q_audit",
+      "finding_topic_id": "gap_monitoring_audit",
+      "keywords": [
+        "audit",
+        "monitoring",
+        "quality"
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "dimension": "population",
+      "requirement": "per-protocol population definition and size",
+      "expected_status": "sufficient"
+    },
+    {
+      "dimension": "statistics",
+      "requirement": "multiplicity / alpha control",
+      "expected_status": "sufficient"
+    },
+    {
+      "dimension": "efficacy",
+      "requirement": "subgroup analyses results",
+      "expected_status": "sufficient"
+    }
+  ],
+  "lifecycle": {
+    "resolved_topics": [
+      "typeA_orr_csr_vs_ppt",
+      "typeA_sae_csr_vs_safety",
+      "typeB_orr_ib_cutoff",
+      "typeB_pfs_ib_cutoff",
+      "typeB_sae_ib_cutoff",
+      "gap_pp_population",
+      "gap_subgroup_results"
+    ],
+    "persisting_topics": [
+      "typeC_orr_fas_bicr",
+      "gap_monitoring_audit",
+      "prompt_injection_ib",
+      "typeB_data_cutoff"
+    ],
+    "new_topics": []
+  },
+  "eval_notes": {
+    "duplicates": "Identical (field_name, document, value) predictions count once.",
+    "page_semantics": "1-based PDF page; PPTX slide number."
+  },
+  "known_limitations": [
+    "Synthetic data; second-round update only."
+  ]
+}

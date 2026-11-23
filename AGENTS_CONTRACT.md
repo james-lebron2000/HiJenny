@@ -1,9 +1,9 @@
-# AssetDD AI — Multi-Agent Engineering Contract (v1, Lead-owned)
+# HiJenny — Multi-Agent Engineering Contract (v1, Lead-owned)
 
 Read this before writing code. It is the interface contract between the Lead and
-the module owners. **Do not edit frozen files** (`assetdd/schemas.py`,
-`assetdd/db.py`, `assetdd/store.py`, `assetdd/interfaces.py`,
-`assetdd/pipeline.py`, `assetdd/config.py`). If a contract change is genuinely
+the module owners. **Do not edit frozen files** (`hijenny/schemas.py`,
+`hijenny/db.py`, `hijenny/store.py`, `hijenny/interfaces.py`,
+`hijenny/pipeline.py`, `hijenny/config.py`). If a contract change is genuinely
 required, message the Lead first; do not edit unilaterally.
 
 ## 0. What we are building
@@ -26,21 +26,21 @@ must trace to page/quote. Offline default mode must work with **no API key**
   python-pptx, reportlab, pandas, numpy, pyyaml, pytest, httpx.
 - **Do not add new dependencies.** No `pip install`.
 - Run tests: `python3 -m pytest tests/test_<yours>.py -q`
-- SQLite DB path defaults to `data/assetdd.db`. **Tests must isolate themselves**:
-  `store.configure(tmp_path / "test.db")` (or `ASSETDD_DB_PATH` env) before use.
-  Never write to the shared `data/assetdd.db` during tests.
+- SQLite DB path defaults to `data/hijenny.db`. **Tests must isolate themselves**:
+  `store.configure(tmp_path / "test.db")` (or `HIJENNY_DB_PATH` env) before use.
+  Never write to the shared `data/hijenny.db` during tests.
 - No network calls at import time. LLM calls only when `config.llm_available()`.
 
 ## 2. Frozen contracts (read, don't edit)
 
 | File | What it gives you |
 |---|---|
-| `assetdd/schemas.py` | Enums (`DocType`, `FieldName`, `EvidenceCategory`, `FindingType`, `Severity`, `Priority`, `CoverageStatus`, `Owner`, `RunState`...), `EvidenceDraft`, `FindingDraft`, `QuestionDraft`, `CoverageDraft`, normalisation helpers (`normalize_population`, `normalize_method`, `normalize_date`, `normalize_trial`), `comparable_key`, `new_id`, `utcnow`. |
-| `assetdd/db.py` | SQLAlchemy tables (do not query them directly). |
-| `assetdd/store.py` | **All persistence goes through here.** `session_scope()`, `save_evidence_batch`, `get_evidence`, `save_findings`, `save_questions`, `replace_coverage`, `list_*`, `project_stats`, review-event logging, etc. Returns plain dicts. |
-| `assetdd/interfaces.py` | `ParsedDocument` / `ParsedPage` / `ParsedTable` / `TextBlock`, `quote_from_page`. |
-| `assetdd/pipeline.py` | State machine. Loads these handlers lazily: |
-| `assetdd/config.py` | Paths, LLM settings, `llm_available()`, `ensure_dirs()`. |
+| `hijenny/schemas.py` | Enums (`DocType`, `FieldName`, `EvidenceCategory`, `FindingType`, `Severity`, `Priority`, `CoverageStatus`, `Owner`, `RunState`...), `EvidenceDraft`, `FindingDraft`, `QuestionDraft`, `CoverageDraft`, normalisation helpers (`normalize_population`, `normalize_method`, `normalize_date`, `normalize_trial`), `comparable_key`, `new_id`, `utcnow`. |
+| `hijenny/db.py` | SQLAlchemy tables (do not query them directly). |
+| `hijenny/store.py` | **All persistence goes through here.** `session_scope()`, `save_evidence_batch`, `get_evidence`, `save_findings`, `save_questions`, `replace_coverage`, `list_*`, `project_stats`, review-event logging, etc. Returns plain dicts. |
+| `hijenny/interfaces.py` | `ParsedDocument` / `ParsedPage` / `ParsedTable` / `TextBlock`, `quote_from_page`. |
+| `hijenny/pipeline.py` | State machine. Loads these handlers lazily: |
+| `hijenny/config.py` | Paths, LLM settings, `llm_available()`, `ensure_dirs()`. |
 
 ### Stage handler contract (called by `pipeline.py`)
 
@@ -50,13 +50,13 @@ def handler(session, project_id: str, force: bool = False) -> dict:  # stats
 
 | Stage | Module (owner) | Must return stats with at least |
 |---|---|---|
-| INGEST | `assetdd/ingestion.py` `ingest_project` (parser-dev) | `documents_parsed`, `documents_failed`, `pages_parsed` |
-| EXTRACT | `assetdd/extraction/__init__.py` `extract_project` (extraction-dev) | `documents_extracted`, `evidence_created`, `assets`, `trials` |
-| VALIDATE | `assetdd/validation.py` `validate_project` (extraction-dev) | `checked`, `verified`, `failed`, `flagged` |
-| CONSISTENCY | `assetdd/agents/consistency.py` `run` (analysis-dev) | `findings_created`, `findings_updated`, `comparisons` |
-| GAP | `assetdd/agents/gap.py` `run` (analysis-dev) | `coverage_items`, `gaps`, `findings_created` |
-| QUESTIONS | `assetdd/agents/questions.py` `run` (analysis-dev) | `questions_created`, `questions_updated`, `merged` |
-| REPORT | `assetdd/reporting.py` `generate_project_outputs` (app-dev) | `report_path`, `questions_xlsx` |
+| INGEST | `hijenny/ingestion.py` `ingest_project` (parser-dev) | `documents_parsed`, `documents_failed`, `pages_parsed` |
+| EXTRACT | `hijenny/extraction/__init__.py` `extract_project` (extraction-dev) | `documents_extracted`, `evidence_created`, `assets`, `trials` |
+| VALIDATE | `hijenny/validation.py` `validate_project` (extraction-dev) | `checked`, `verified`, `failed`, `flagged` |
+| CONSISTENCY | `hijenny/agents/consistency.py` `run` (analysis-dev) | `findings_created`, `findings_updated`, `comparisons` |
+| GAP | `hijenny/agents/gap.py` `run` (analysis-dev) | `coverage_items`, `gaps`, `findings_created` |
+| QUESTIONS | `hijenny/agents/questions.py` `run` (analysis-dev) | `questions_created`, `questions_updated`, `merged` |
+| REPORT | `hijenny/reporting.py` `generate_project_outputs` (app-dev) | `report_path`, `questions_xlsx` |
 
 `force=True` means recompute from scratch (delete/ignore prior derived rows for
 that document/project). Without `force`, be idempotent: re-running must not
@@ -81,11 +81,11 @@ already; respect it).
 
 | Owner | Scope |
 |---|---|
-| **Lead** | `assetdd/{schemas,db,store,interfaces,pipeline,config}.py`, `tools/`, `README.md`, `docs/`, `tests/test_e2e.py`, `pyproject.toml`, integration fixes |
-| parser-dev | `assetdd/parsers/`, `assetdd/ingestion.py`, `tests/test_parsers.py`, `tests/test_ingestion.py` |
-| extraction-dev | `assetdd/extraction/`, `assetdd/llm.py`, `assetdd/validation.py`, `tests/test_extraction.py`, `tests/test_llm.py` |
-| analysis-dev | `assetdd/agents/`, `assetdd/rules.py`, `assetdd/rules/**/*.yaml`, `tests/test_agents.py`, `tests/test_rules.py` |
-| app-dev | `assetdd/api/`, `assetdd/reporting.py`, `assetdd/exports.py`, `web/`, `tests/test_api.py`, `tests/test_exports.py` |
+| **Lead** | `hijenny/{schemas,db,store,interfaces,pipeline,config}.py`, `tools/`, `README.md`, `docs/`, `tests/test_e2e.py`, `pyproject.toml`, integration fixes |
+| parser-dev | `hijenny/parsers/`, `hijenny/ingestion.py`, `tests/test_parsers.py`, `tests/test_ingestion.py` |
+| extraction-dev | `hijenny/extraction/`, `hijenny/llm.py`, `hijenny/validation.py`, `tests/test_extraction.py`, `tests/test_llm.py` |
+| analysis-dev | `hijenny/agents/`, `hijenny/rules.py`, `hijenny/rules/**/*.yaml`, `tests/test_agents.py`, `tests/test_rules.py` |
+| app-dev | `hijenny/api/`, `hijenny/reporting.py`, `hijenny/exports.py`, `web/`, `tests/test_api.py`, `tests/test_exports.py` |
 | eval-dev | `eval/`, `corpus/`, `tests/test_eval.py` |
 
 Only touch files in your scope. Shared state lives in `data/` (git-ignored).
@@ -111,7 +111,7 @@ cutoff) for lifecycle/version tests.
 
 ## 6. Definition of done for each module
 
-- Code runs end-to-end through `assetdd.pipeline.run_pipeline(project_id)` on the
+- Code runs end-to-end through `hijenny.pipeline.run_pipeline(project_id)` on the
   sample package without exceptions.
 - Your tests pass: `python3 -m pytest tests/test_<yours>.py -q` (all green).
 - No hidden TODOs/stubs; no hardcoded answers for the sample corpus (patterns
@@ -124,7 +124,7 @@ cutoff) for lifecycle/version tests.
 
 - Document classification is heuristic + filename/metadata based
   (`ib`, `csr`, `protocol`, `sap`, `safety`, `disposition`, `cmc`, `patent`,
-  `commercial`, `regulatory`, `nonclinical`). Put it in `assetdd/ingestion.py`.
+  `commercial`, `regulatory`, `nonclinical`). Put it in `hijenny/ingestion.py`.
 - Chunking is for retrieval only; evidence extraction reads pages directly.
 - Findings created by consistency/gap agents must carry `dedup_key`; questions
   must carry `dedup_key` derived from finding/rule (stable across re-runs).

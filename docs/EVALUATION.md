@@ -1,4 +1,4 @@
-# Evaluation — AssetDD AI (synthetic corpus)
+# Evaluation — HiJenny (synthetic corpus)
 
 > **Honesty rule.** Every number here is measured on a hand-built, synthetic
 > due-diligence package (or a generated control). It demonstrates that the

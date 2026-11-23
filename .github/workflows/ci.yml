@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Tests (unit + end-to-end)
+        run: python -m pytest -q
+
+      - name: Generate sample package (deterministic)
+        run: python tools/make_sample_package.py --out /tmp/sample_package --variant v1 --force
+
+      - name: Smoke-test CLI pipeline
+        run: |
+          python -m hijenny.cli demo --package /tmp/sample_package --name "CI smoke"

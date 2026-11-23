@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from assetdd.interfaces import ParsedDocument
-from assetdd.parsers import (
+from hijenny.interfaces import ParsedDocument
+from hijenny.parsers import (
     UnsupportedFormatError,
     detect_format,
     parse_docx,
@@ -22,8 +22,8 @@ from assetdd.parsers import (
     parse_xlsx,
     sha256_file,
 )
-from assetdd.parsers.injection import scan_pages, scan_text
-from assetdd.schemas import normalize_ws
+from hijenny.parsers.injection import scan_pages, scan_text
+from hijenny.schemas import normalize_ws
 
 
 # ---------------------------------------------------------------------------

@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text as sql_text
 
-from assetdd import ingestion, store
-from assetdd.schemas import EvidenceCategory, EvidenceDraft, FieldName, normalize_ws
+from hijenny import ingestion, store
+from hijenny.schemas import EvidenceCategory, EvidenceDraft, FieldName, normalize_ws
 
 
 # ---------------------------------------------------------------------------
@@ -526,7 +526,7 @@ def test_ingest_project_parses_registered_upload_with_data_relative_path(
     tmp_path: Path, project: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """API uploads register documents with stored_path relative to config.DATA_DIR."""
-    from assetdd import config
+    from hijenny import config
 
     data_dir = tmp_path / "data"
     monkeypatch.setattr(config, "DATA_DIR", data_dir)

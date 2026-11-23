@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from assetdd import config, rules
-from assetdd.rules import RuleValidationError
-from assetdd.schemas import FieldName, Owner, Priority
+from hijenny import config, rules
+from hijenny.rules import RuleValidationError
+from hijenny.schemas import FieldName, Owner, Priority
 
 MINIMAL_PACK = """
 schema_version: rule-pack-1.0

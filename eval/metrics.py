@@ -1,4 +1,4 @@
-"""Evaluation metrics for AssetDD AI (eval-dev owned).
+"""Evaluation metrics for HiJenny (eval-dev owned).
 
 Design rules
 ------------
@@ -32,7 +32,7 @@ import random
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
-from assetdd.schemas import NUMERIC_FIELDS, normalize_date, normalize_ws
+from hijenny.schemas import NUMERIC_FIELDS, normalize_date, normalize_ws
 
 METRIC_VERSION = "eval-1.0.0"
 DEFAULT_NUMERIC_TOLERANCE = 0.01
@@ -1088,7 +1088,7 @@ def finding_prf(
 
 
 # ---------------------------------------------------------------------------
-# 4. Citation accuracy (independent of assetdd.validation)
+# 4. Citation accuracy (independent of hijenny.validation)
 # ---------------------------------------------------------------------------
 
 
@@ -1116,7 +1116,7 @@ def citation_accuracy(
 ) -> dict:
     """Check every finding/question evidence quote is verbatim on its cited page.
 
-    Independent of ``assetdd.validation``: it re-derives page text from the
+    Independent of ``hijenny.validation``: it re-derives page text from the
     store and compares whitespace-normalised quotes.  A referenced evidence id
     that does not exist, a missing page, or a non-verbatim quote is a failure.
     """

@@ -20,13 +20,13 @@ from pathlib import Path
 
 import pytest
 
-from assetdd import config, store
-from assetdd.extraction import extract_project
-from assetdd.extraction.common import build_document_context, normalize_ws
-from assetdd.extraction.rules_extractor import RulesExtractor
-from assetdd.extraction.table_extractor import TableExtractor
-from assetdd.schemas import EvidenceDraft, FieldName
-from assetdd.validation import validate_project
+from hijenny import config, store
+from hijenny.extraction import extract_project
+from hijenny.extraction.common import build_document_context, normalize_ws
+from hijenny.extraction.rules_extractor import RulesExtractor
+from hijenny.extraction.table_extractor import TableExtractor
+from hijenny.schemas import EvidenceDraft, FieldName
+from hijenny.validation import validate_project
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +302,7 @@ def _save_drafts(project_id: str, document: dict, drafts: list[EvidenceDraft]) -
 
 def _draft(field_name: FieldName, *, quote: str, page: int = 1, value_num=None, value_text=None,
            unit=None, population="ITT", endpoint_def=None, method=None) -> EvidenceDraft:
-    from assetdd.schemas import EvidenceCategory
+    from hijenny.schemas import EvidenceCategory
 
     return EvidenceDraft(
         field_name=field_name,

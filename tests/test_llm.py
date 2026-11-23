@@ -13,11 +13,11 @@ import uuid
 import httpx
 import pytest
 
-from assetdd import config, store
-from assetdd.extraction import extract_project
-from assetdd import llm
-from assetdd.llm import LLMClient, LLMNotAvailable, hybrid_merge
-from assetdd.schemas import EvidenceDraft, EvidenceCategory, FieldName
+from hijenny import config, store
+from hijenny.extraction import extract_project
+from hijenny import llm
+from hijenny.llm import LLMClient, LLMNotAvailable, hybrid_merge
+from hijenny.schemas import EvidenceDraft, EvidenceCategory, FieldName
 
 
 PAGE_TEXT = (

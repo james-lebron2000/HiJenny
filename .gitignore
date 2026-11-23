@@ -1,7 +1,18 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-data/
+.venv/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# generated demo/project artefacts (regenerate with `hijenny demo`)
+data/*
+!data/sample_package/
+!data/sample_package_v2/
+
 *.db
 *.db-wal
 *.db-shm

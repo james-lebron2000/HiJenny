@@ -11,9 +11,9 @@ from typing import Any, Sequence
 
 import pytest
 
-from assetdd import store
-from assetdd.agents import consistency, gap, questions
-from assetdd.schemas import (
+from hijenny import store
+from hijenny.agents import consistency, gap, questions
+from hijenny.schemas import (
     CoverageStatus,
     DocType,
     EvidenceCategory,

@@ -1,4 +1,9 @@
-# AssetDD AI — 医药资产交易智能尽调系统 (MVP)
+# HiJenny — 医药资产交易智能尽调系统
+
+[![CI](https://github.com/james-lebron2000/HiJenny/actions/workflows/ci.yml/badge.svg)](https://github.com/james-lebron2000/HiJenny/actions/workflows/ci.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](pyproject.toml)
+
+**GitHub:** https://github.com/james-lebron2000/HiJenny
 
 **Evidence-first, workflow-driven due diligence for pharma BD / license-in teams.**
 Input: a seller data package (PDF / PPTX / XLSX). Output: a traceable clinical
@@ -7,9 +12,13 @@ question list, and a reviewable due-diligence report — every claim linked to
 document + page + verbatim quote.
 
 > **Status: MVP implemented and running end-to-end** on a 276-page synthetic
-> Phase 2 oncology package (13 documents, 1,000-page class when the CSR appendix
-> is expanded). 166 automated tests. This is a working product prototype, not a
+> Phase 2 oncology package (13 documents; 1,000-page class when the CSR appendix
+> is expanded): 136 verified evidence rows, 11 active findings, 6 seller
+> questions, 174 automated tests. This is a working product prototype, not a
 > validated clinical/regulatory instrument — see [Limitations](#limitations).
+> Product design: [docs/PRODUCT.md](docs/PRODUCT.md). Engineering:
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Evaluation:
+> [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ---
 
@@ -17,7 +26,7 @@ document + page + verbatim quote.
 
 A general LLM reading 1,600 pages cannot reliably tell you *which document a
 number came from*, whether two numbers are even comparable, or what the seller
-*did not* provide. AssetDD AI therefore builds a structured evidence database
+*did not* provide. HiJenny therefore builds a structured evidence database
 first, then reasons over it:
 
 ```
@@ -34,60 +43,64 @@ the single most important product-quality decision in this system.
 
 | Stage | Module | Output |
 |---|---|---|
-| Ingest | `assetdd/ingestion.py`, `assetdd/parsers/` | documents, pages, bboxes, tables, chunks, hashes, version/supersede chain, prompt-injection flags |
-| Extract | `assetdd/extraction/` | clinical evidence (study design, efficacy, safety, statistics) with page/table/quote + dimensions |
-| Verify | `assetdd/validation.py` | verbatim-quote check, value-in-quote, numeric plausibility, CR+PR vs ORR, CI ordering, duplicates |
-| Consistency | `assetdd/agents/consistency.py` | Type A contradiction / Type B version difference / Type C definition difference / comparability unclear — only within comparable dimensions |
-| Gap analysis | `assetdd/agents/gap.py`, `assetdd/rules/` | Checklist coverage: sufficient / partial / not found / not applicable, from YAML rule packs |
-| Questions | `assetdd/agents/questions.py` | Deduplicated seller questions with priority, owner, requested documents, evidence links |
-| Deliverables | `assetdd/reporting.py`, `assetdd/exports.py` | Markdown + DOCX report (Decision Brief first), 6-sheet Excel workbook |
-| App | `assetdd/api/`, `web/` | FastAPI + no-build SPA: upload, evidence workspace with PDF page jump, findings/questions review, report |
+| Ingest | `hijenny/ingestion.py`, `hijenny/parsers/` | documents, pages, bboxes, tables, chunks, hashes, version/supersede chain, prompt-injection flags |
+| Extract | `hijenny/extraction/` | clinical evidence (study design, efficacy, safety, statistics) with page/table/quote + dimensions |
+| Verify | `hijenny/validation.py` | verbatim-quote check, value-in-quote, numeric plausibility, CR+PR vs ORR, CI ordering, duplicates |
+| Consistency | `hijenny/agents/consistency.py` | Type A contradiction / Type B version difference / Type C definition difference / comparability unclear — only within comparable dimensions |
+| Gap analysis | `hijenny/agents/gap.py`, `hijenny/rules/` | Checklist coverage: sufficient / partial / not found / not applicable, from YAML rule packs |
+| Questions | `hijenny/agents/questions.py` | Deduplicated seller questions with priority, owner, requested documents, evidence links |
+| Deliverables | `hijenny/reporting.py`, `hijenny/exports.py` | Markdown + DOCX report (Decision Brief first), 6-sheet Excel workbook |
+| App | `hijenny/api/`, `web/` | FastAPI + no-build SPA: upload, evidence workspace with PDF page jump, findings/questions review, report |
 
 ## 3. Quickstart (no API key needed)
 
-Python 3.11 + the pre-installed libraries (PyMuPDF, FastAPI, reportlab,
-openpyxl, python-docx, python-pptx, SQLAlchemy, pytest). No cloud services are
-required; **offline rule-based extraction is the default mode**.
+Python 3.11. No cloud services are required; **offline rule-based extraction is
+the default mode**. The sample package is committed, so the demo runs immediately
+after install:
 
 ```bash
-# 1) generate the synthetic seller data package (deterministic)
-python3 tools/make_sample_package.py --out data/sample_package --variant v1 --filler 180
-python3 tools/make_sample_package.py --out data/sample_package_v2 --variant v2
+pip install -e ".[dev]"        # installs runtime dependencies + pytest/reportlab
 
-# 2) run the full pipeline and produce the deliverables
-python3 -m assetdd.cli demo --package data/sample_package \
+# 1) run the full pipeline and produce the deliverables
+hijenny demo --package data/sample_package \
     --name "ASD-101 License-in Clinical Due Diligence" \
     --asset "ASD-101 (zafinostat)" --indication "MTAP-deleted advanced solid tumors" --phase "Phase 2"
 
-# 3) inspect results
-python3 -m assetdd.cli status --project <project_id>
-open data/projects/<project_id>/exports/AssetDD_Report.md
+# (equivalent) python3 -m hijenny.cli demo --package data/sample_package ...
+
+# 2) inspect results
+hijenny status --project <project_id>
+open data/projects/<project_id>/exports/HiJenny_Report.md
 open data/projects/<project_id>/exports/Seller_Questions.xlsx
 
-# 4) web app
-python3 -m assetdd.cli serve --port 8123     # http://127.0.0.1:8123/
+# 3) web app (upload -> analyze -> evidence workspace -> review -> report)
+hijenny serve --port 8123     # http://127.0.0.1:8123/
+
+# 4) optional: regenerate the synthetic data package deterministically
+python3 tools/make_sample_package.py --out data/sample_package --variant v1 --filler 180 --force
+python3 tools/make_sample_package.py --out data/sample_package_v2 --variant v2 --force
 ```
 
 Optional LLM mode (OpenAI-compatible endpoint; the adapter sends *document
 text as data*, never as instructions):
 
 ```bash
-export ASSETDD_LLM_API_KEY=...  ASSETDD_LLM_MODEL=gpt-4o-mini
-export ASSETDD_EXTRACT_MODE=hybrid   # rules first, LLM fills gaps
+export HIJENNY_LLM_API_KEY=...  HIJENNY_LLM_MODEL=gpt-4o-mini
+export HIJENNY_EXTRACT_MODE=hybrid   # rules first, LLM fills gaps
 ```
 
 ### Tests
 
 ```bash
-python3 -m pytest -q          # unit + integration; the e2e test runs the real pipeline
+python3 -m pytest -q          # 174 unit + integration tests; the e2e test runs the real pipeline
 ```
 
 ## 4. Architecture
 
 ```
-                    FastAPI + SPA (assetdd/api, web/)
+                    FastAPI + SPA (hijenny/api, web/)
                                 |
-                    Workflow state machine (assetdd/pipeline.py)
+                    Workflow state machine (hijenny/pipeline.py)
    CREATED -> PARSING -> EXTRACTING -> VALIDATING -> ANALYZING
            -> GENERATING_QUESTIONS -> HUMAN_REVIEW -> REPORT_READY
                                 |
@@ -196,7 +209,7 @@ others, not that it matches expert performance on real filings.
 ## 9. Repository layout
 
 ```
-assetdd/            pipeline, schemas, DB/store, parsers, extraction, agents, rules, API, reporting, exports
+hijenny/            pipeline, schemas, DB/store, parsers, extraction, agents, rules, API, reporting, exports
   parsers/          PyMuPDF / DOCX / PPTX / XLSX parsers + injection scanner
   extraction/       rule + table extractors, asset/trial resolver, LLM adapter, validation
   agents/           consistency, gap analysis, question generation
@@ -207,8 +220,9 @@ tools/              synthetic seller-package generator (+ ground truth)
 eval/               metrics, benchmark CLI, scorecards
 corpus/             adjudication + adversarial fixtures
 tests/              unit + end-to-end integration tests
-docs/               architecture and methodology notes
-data/               generated packages and project artefacts (git-ignored)
+docs/               PRODUCT.md (product design), ARCHITECTURE.md (engineering), EVALUATION.md (scorecards)
+data/               committed sample packages + generated project artefacts (git-ignored)
+.github/workflows/  CI: install, 174 tests, deterministic package generation, CLI smoke test
 ```
 
 ## 10. MVP scope boundaries (deliberate)

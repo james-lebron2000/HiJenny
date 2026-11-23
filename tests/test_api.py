@@ -1,7 +1,7 @@
-"""API tests for AssetDD AI (app-dev owned).
+"""API tests for HiJenny (app-dev owned).
 
 Isolation: each test gets a fresh SQLite DB (``store.configure``) and a fresh
-DATA_DIR (``config.DATA_DIR`` monkeypatched), so the shared ``data/assetdd.db``
+DATA_DIR (``config.DATA_DIR`` monkeypatched), so the shared ``data/hijenny.db``
 is never touched.
 """
 from __future__ import annotations
@@ -13,10 +13,10 @@ import types
 import pytest
 from fastapi.testclient import TestClient
 
-from assetdd import config, pipeline, store
-from assetdd.api.main import app
-import assetdd.api.main as api_main
-from assetdd.schemas import (
+from hijenny import config, pipeline, store
+from hijenny.api.main import app
+import hijenny.api.main as api_main
+from hijenny.schemas import (
     CoverageDraft,
     CoverageStatus,
     EvidenceCategory,
@@ -209,7 +209,7 @@ def test_health_and_llm_status(client):
     assert health.status_code == 200
     body = health.json()
     assert body["status"] == "ok"
-    assert body["service"].startswith("AssetDD AI")
+    assert body["service"].startswith("HiJenny")
     assert "version" in body and "storage" not in body
 
     llm = client.get("/api/llm-status")
@@ -224,7 +224,7 @@ def test_ui_is_served(client):
     index = client.get("/")
     assert index.status_code == 200
     assert "text/html" in index.headers["content-type"]
-    assert "AssetDD AI" in index.text
+    assert "HiJenny" in index.text
     assert "/static/app.js" in index.text
 
     script = client.get("/static/app.js")
@@ -314,13 +314,13 @@ def test_upload_registers_documents_and_serves_files(client, env):
     assert served.headers["content-type"] == "application/pdf"
     assert served.content == pdf_bytes
 
-    assert client.get("/api/files/projects/../assetdd/store.py").status_code == 404
+    assert client.get("/api/files/projects/../hijenny/store.py").status_code == 404
     assert client.get("/api/files/%2e%2e/%2e%2e/etc/passwd").status_code in (400, 403, 404)
     assert client.get("/api/files/AGENTS_CONTRACT.md").status_code == 404
     # Only project document/export artefacts are ever served (not the DB).
     (env["data_dir"] / "secret.txt").write_text("do not serve me", encoding="utf-8")
     assert client.get("/api/files/secret.txt").status_code == 404
-    assert client.get("/api/files/assetdd.db").status_code == 404
+    assert client.get("/api/files/hijenny.db").status_code == 404
     assert client.get(f"/api/files/projects/{project_id}/documents/../../secret.txt").status_code == 404
 
     # Document detail + pages.
@@ -377,7 +377,7 @@ def test_upload_parses_with_ingestion_module(client, monkeypatch):
     project = create_project(client)
     project_id = project["project_id"]
 
-    fake = types.ModuleType("assetdd.ingestion")
+    fake = types.ModuleType("hijenny.ingestion")
     calls: list[str] = []
 
     def ingest_file(session, project_id, document_id, force=False):
@@ -399,7 +399,7 @@ def test_upload_parses_with_ingestion_module(client, monkeypatch):
         return {"document_id": document_id, "pages": 1}
 
     fake.ingest_file = ingest_file
-    monkeypatch.setitem(sys.modules, "assetdd.ingestion", fake)
+    monkeypatch.setitem(sys.modules, "hijenny.ingestion", fake)
 
     response = upload_pdf(client, project_id, "protocol.pdf", parse=True, content=make_pdf_bytes("Protocol", "Dose escalation study."))
     assert response.status_code == 200, response.text

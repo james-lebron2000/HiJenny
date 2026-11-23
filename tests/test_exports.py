@@ -1,4 +1,4 @@
-"""Export / report generation tests for AssetDD AI (app-dev owned).
+"""Export / report generation tests for HiJenny (app-dev owned).
 
 Every test isolates itself with ``store.configure(tmp_path/'t.db')`` and a
 monkeypatched ``config.DATA_DIR``.
@@ -13,8 +13,8 @@ import pytest
 from openpyxl import load_workbook
 from docx import Document
 
-from assetdd import config, exports, reporting, store
-from assetdd.schemas import (
+from hijenny import config, exports, reporting, store
+from hijenny.schemas import (
     CoverageDraft,
     CoverageStatus,
     EvidenceCategory,

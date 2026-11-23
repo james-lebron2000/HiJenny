@@ -1,5 +1,5 @@
 /* ==========================================================================
-   AssetDD AI — review UI (vanilla JS, no build step)
+   HiJenny — review UI (vanilla JS, no build step)
    Views: Projects | Upload & Analysis | Evidence Workspace | Findings & Questions | Report
    ========================================================================== */
 'use strict';
@@ -312,7 +312,7 @@ async function renderProjects(seq) {
     state.projects = data.projects || [];
     if (!state.projects.some((p) => p.project_id === state.projectId)) {
       state.projectId = state.projects.length ? state.projects[0].project_id : null;
-      if (state.projectId) localStorage.setItem('assetdd.project', state.projectId);
+      if (state.projectId) localStorage.setItem('hijenny.project', state.projectId);
     }
     updateTopbar();
     updateSidebarBadges();
@@ -500,7 +500,7 @@ async function renderUpload(seq) {
           <button class="btn primary" data-action="run-analysis">▶ Run analysis</button>
         </div>
       </div>
-      ${ingestionMissing ? `<div class="notice warn"><span>⚠️</span><div>The parsing module (<code>assetdd.ingestion</code>) is not installed yet. Uploads are registered and saved; pages/evidence appear once the parser is available and analysis is run.</div></div>` : ''}
+      ${ingestionMissing ? `<div class="notice warn"><span>⚠️</span><div>The parsing module (<code>hijenny.ingestion</code>) is not installed yet. Uploads are registered and saved; pages/evidence appear once the parser is available and analysis is run.</div></div>` : ''}
       ${statStrip([
         { k: 'Documents', v: s.documents || state.documents.length },
         { k: 'Pages parsed', v: s.pages || 0 },
@@ -1122,8 +1122,8 @@ function renderReportView() {
       <div class="card-head"><h2>Outputs</h2><span class="sub">Files under data/projects/&lt;id&gt;/exports/</span></div>
       <div class="card-body">
         <div class="kv-grid">
-          <div class="kv"><span class="k">Markdown report</span><span class="v">${md.exists ? `<a href="${esc(md.url)}" download>${esc(md.name || 'AssetDD_Report.md')}</a>` : 'not generated'}</span></div>
-          <div class="kv"><span class="k">Word report</span><span class="v">${docx.exists ? `<a href="${esc(docx.url)}">${esc(docx.name || 'AssetDD_Report.docx')}</a>` : 'not generated'}</span></div>
+          <div class="kv"><span class="k">Markdown report</span><span class="v">${md.exists ? `<a href="${esc(md.url)}" download>${esc(md.name || 'HiJenny_Report.md')}</a>` : 'not generated'}</span></div>
+          <div class="kv"><span class="k">Word report</span><span class="v">${docx.exists ? `<a href="${esc(docx.url)}">${esc(docx.name || 'HiJenny_Report.docx')}</a>` : 'not generated'}</span></div>
           <div class="kv"><span class="k">Questions workbook</span><span class="v">${xlsx.exists ? `<a href="${esc(xlsx.url)}">${esc(xlsx.name || 'Seller_Questions.xlsx')}</a>` : 'not generated'}</span></div>
         </div>
       </div>
@@ -1136,7 +1136,7 @@ async function handleAction(action, el) {
     if (action === 'toggle-create-project') { state.showCreateForm = !state.showCreateForm; renderView(); return; }
     if (action === 'open-project') {
       state.projectId = el.dataset.id;
-      localStorage.setItem('assetdd.project', state.projectId);
+      localStorage.setItem('hijenny.project', state.projectId);
       state.project = null; state.documents = []; state.evidenceAll = []; state.findings = []; state.questions = [];
       state.previewDocId = null; state.selectedEvidenceId = null; state.outputs = null;
       await ensureProjectLoaded();
@@ -1278,7 +1278,7 @@ async function handleSubmit(form, formEl) {
     if (!payload.name) { toast('Project name is required', 'warn'); return; }
     const res = await api('/api/projects', jsonOptions('POST', payload));
     state.projectId = res.project.project_id;
-    localStorage.setItem('assetdd.project', state.projectId);
+    localStorage.setItem('hijenny.project', state.projectId);
     state.project = res.project;
     state.showCreateForm = false;
     const list = await api('/api/projects');
@@ -1440,7 +1440,7 @@ function bindGlobalEvents() {
     projectSelect.addEventListener('change', async () => {
       const value = projectSelect.value;
       state.projectId = value || null;
-      if (value) localStorage.setItem('assetdd.project', value);
+      if (value) localStorage.setItem('hijenny.project', value);
       state.project = null; state.documents = []; state.evidenceAll = []; state.findings = []; state.questions = [];
       state.previewDocId = null; state.selectedEvidenceId = null; state.outputs = null;
       if (value) await ensureProjectLoaded();
@@ -1458,10 +1458,10 @@ async function init() {
   try {
     const data = await api('/api/projects');
     state.projects = data.projects || [];
-    const stored = localStorage.getItem('assetdd.project');
+    const stored = localStorage.getItem('hijenny.project');
     const valid = state.projects.find((p) => p.project_id === stored);
     state.projectId = valid ? stored : (state.projects[0] ? state.projects[0].project_id : null);
-    if (state.projectId) localStorage.setItem('assetdd.project', state.projectId);
+    if (state.projectId) localStorage.setItem('hijenny.project', state.projectId);
     state.project = null;
   } catch (error) {
     toast(`Could not load projects: ${error.message}`, 'err');

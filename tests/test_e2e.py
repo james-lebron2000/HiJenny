@@ -1,4 +1,4 @@
-"""End-to-end integration test for the AssetDD AI pipeline (Lead-owned).
+"""End-to-end integration test for the HiJenny pipeline (Lead-owned).
 
 Runs the real workflow on the synthetic seller package:
   ingest -> extract -> validate -> consistency -> gap -> questions -> report
@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 
-from assetdd import config, pipeline, store
-from assetdd.schemas import normalize_ws
+from hijenny import config, pipeline, store
+from hijenny.schemas import normalize_ws
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_V1 = ROOT / "data" / "sample_package"
@@ -139,8 +139,8 @@ def test_full_pipeline_on_seller_package(env):
 
     # --- deliverables --------------------------------------------------------
     exports = config.DATA_DIR / "projects" / project_id / "exports"
-    report_md = exports / "AssetDD_Report.md"
-    report_docx = exports / "AssetDD_Report.docx"
+    report_md = exports / "HiJenny_Report.md"
+    report_docx = exports / "HiJenny_Report.docx"
     questions_xlsx = exports / "Seller_Questions.xlsx"
     assert report_md.is_file() and report_md.stat().st_size > 5000
     assert report_docx.is_file() and report_docx.stat().st_size > 5000
