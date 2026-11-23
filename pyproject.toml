@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "HiJenny — evidence-first pharmaceutical BD due diligence (MVP)"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "HiJenny" }]
 keywords = ["pharma", "due-diligence", "clinical-trials", "evidence", "license-in", "llm"]
 dependencies = [
