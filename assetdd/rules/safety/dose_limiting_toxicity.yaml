@@ -1,0 +1,70 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: safety-dose-limiting-toxicity
+  name: Dose-limiting toxicity / dose-modification checklist
+  version: "1.0.0"
+  therapeutic_area: []
+  phase: [1, 2]
+  modality: []
+  description: >
+    Dose-limiting toxicity and dose-modification evidence expectations for
+    dose-escalation and early-phase studies. DLT definition, attribution period
+    and dose-modification rules determine the RP2D and safety margin.
+rules:
+  - rule_id: safety.dlt.grade3
+    name: Dose-limiting toxicity and grade >=3 events
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: dlt_evidence
+        label: DLT observations and grade >=3 events by dose level
+        fields: [grade3_ae]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the dose-limiting toxicity and grade >=3 adverse event
+      details supporting {requirement}, by dose level and with the safety
+      population denominator. Requested documents: {documents}.
+    priority: high
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: The DLT definition and attribution window must be stated to interpret observed events.
+
+  - rule_id: safety.dlt.dose_reduction
+    name: Dose reductions
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: dose_reduction_rate
+        label: Dose reduction rate and reason by dose level
+        fields: [dose_reduction]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the dose reduction data supporting {requirement}, including
+      the dose levels affected and reasons. Requested documents: {documents}.
+    priority: medium
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: Dose reductions signal clinically meaningful toxicity and can affect exposure-response.
+
+  - rule_id: safety.dlt.dose_interruption
+    name: Dose interruptions
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: dose_interruption_rate
+        label: Dose interruption rate and reason by dose level
+        fields: [dose_interruption]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the dose interruption data supporting {requirement},
+      including duration and reasons. Requested documents: {documents}.
+    priority: medium
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: Frequent interruptions can compromise the intended dose intensity.

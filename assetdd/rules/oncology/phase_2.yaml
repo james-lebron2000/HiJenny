@@ -1,0 +1,294 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: oncology-phase-2
+  name: Oncology Phase 2 clinical due-diligence checklist
+  version: "1.0.0"
+  therapeutic_area: oncology
+  phase: [2]
+  modality: []
+  description: >
+    Core clinical, safety, population and data-quality evidence expected for a
+    single-asset Phase 2 oncology data package in a business-development
+    diligence. Requirements describe evidence to request; absence means the item
+    was not identified in the current package, not that the sponsor failed to do it.
+rules:
+  - rule_id: onco2.study.design
+    name: Study design and treatment arms documented
+    version: "1.0"
+    applies_to: {}
+    dimension: study_design
+    required_evidence:
+      - id: design_statement
+        label: Study design (single-arm, randomized, Simon two-stage, etc.)
+        fields: [design]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the study design description and treatment arm details for
+      {requirement}, including the planned and actual sample size, and confirm
+      whether the design supports the efficacy interpretation. Requested
+      documents: {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [PROTOCOL, CSR]
+    notes: A missing design statement blocks interpretation of every efficacy number.
+
+  - rule_id: onco2.study.registry
+    name: Trial registry identifier and phase
+    version: "1.0"
+    applies_to: {}
+    dimension: study_design
+    required_evidence:
+      - id: registry_id
+        label: Registered trial identifier (e.g. NCT number) and study phase
+        fields: [nct_id]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please confirm the registered trial identifier and phase for the pivotal
+      Phase 2 study ({requirement}), so the package can be matched to public
+      registry records. Requested documents: {documents}.
+    priority: medium
+    owner: Regulatory Affairs
+    required_documents: [CSR, PROTOCOL]
+    notes: Registry linkage supports assessment of publication bias and protocol amendments.
+
+  - rule_id: onco2.efficacy.orr
+    name: Objective response rate (ORR) by analysis population
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: orr_value
+        label: ORR value with numerator/denominator, analysis population, response criteria and data cut-off
+        fields: [orr]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the ORR analysis table (numerator/denominator, analysis
+      population, response criteria and data cut-off) supporting {requirement},
+      and confirm which population is used for the primary efficacy claim.
+      Requested documents: {documents}.
+    priority: critical
+    owner: Clinical Development
+    required_documents: [CSR, SAP]
+    notes: ORR is the typical Phase 2 efficacy readout in oncology; denominator and population must be explicit.
+
+  - rule_id: onco2.efficacy.dcr
+    name: Disease control rate (DCR)
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: dcr_value
+        label: DCR value with analysis population and data cut-off
+        fields: [dcr]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the disease control rate analysis table supporting
+      {requirement}, including response categories, population and data cut-off.
+      Requested documents: {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [CSR]
+    notes: DCR is a secondary endpoint that is often reported inconsistently in summary decks.
+
+  - rule_id: onco2.efficacy.pfs
+    name: Progression-free survival (PFS) and maturity
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: pfs_value
+        label: Median PFS with confidence interval, analysis population and assessment method
+        fields: [pfs]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the PFS analysis table supporting {requirement}, including
+      censoring rules, assessment method and data cut-off. Requested documents:
+      {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [CSR, SAP]
+    notes: PFS maturity determines whether the estimate is reliable at the current cut-off.
+
+  - rule_id: onco2.safety.grade3
+    name: Grade >=3 adverse events
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: grade3_ae
+        label: Grade >=3 adverse event rate by safety population and data cut-off
+        fields: [grade3_ae]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the grade >=3 adverse event table supporting {requirement},
+      with the safety population denominator, CTCAE version and data cut-off.
+      Requested documents: {documents}.
+    priority: high
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: The denominator and CTCAE version are essential to compare safety rates across sources.
+
+  - rule_id: onco2.safety.sae
+    name: Serious adverse events (SAE)
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: sae_value
+        label: SAE rate by safety population and data cut-off
+        fields: [sae]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the serious adverse event table supporting {requirement},
+      including the safety population denominator, seriousness criteria and data
+      cut-off. Requested documents: {documents}.
+    priority: high
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: SAE rates are frequently inconsistent between the CSR, safety summary and commercial deck.
+
+  - rule_id: onco2.population.definitions
+    name: Analysis population definitions and sizes (ITT / FAS / PP)
+    version: "1.0"
+    applies_to: {}
+    dimension: population
+    required_evidence:
+      - id: population_sizes
+        label: Per-protocol, ITT and FAS population definitions and sizes
+        fields: [n_itt, n_fas, n_pp]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the per-protocol, ITT and FAS population definitions and
+      sizes supporting {requirement}, and confirm which patients are excluded
+      from each. Requested documents: {documents}.
+    priority: high
+    owner: Biostatistics
+    required_documents: [SAP, CSR]
+    notes: A PP definition without a size cannot be reconciled; sensitivity analyses need explicit denominators.
+
+  - rule_id: onco2.data.baseline
+    name: Baseline demographics and disease characteristics
+    version: "1.0"
+    applies_to: {}
+    dimension: baseline
+    required_evidence:
+      - id: baseline_values
+        label: Baseline demographics (age, sex) and disease characteristics for the efficacy population
+        fields: [age_median, male_pct]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the baseline characteristics table supporting {requirement},
+      by analysis population. Requested documents: {documents}.
+    priority: medium
+    owner: Clinical Development
+    required_documents: [CSR]
+    notes: Baseline balance and representativeness inform the generalisability of efficacy results.
+
+  - rule_id: onco2.data.disposition
+    name: Patient disposition and discontinuations
+    version: "1.0"
+    applies_to: {}
+    dimension: disposition
+    required_evidence:
+      - id: disposition_values
+        label: Disposition and treatment discontinuation data (enrolled, ongoing, discontinued)
+        fields: [discontinuation]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the patient disposition and treatment discontinuation
+      summary supporting {requirement}. Requested documents: {documents}.
+    priority: medium
+    owner: Clinical Development
+    required_documents: [DISPOSITION, CSR]
+    notes: Disposition reconciles the denominators used across efficacy and safety tables.
+
+  - rule_id: onco2.data.protocol_deviations
+    name: Protocol deviations log and summary
+    version: "1.0"
+    applies_to: {}
+    dimension: quality
+    required_evidence:
+      - id: deviation_summary
+        label: Major protocol deviations, by category and impact on the primary endpoint
+        fields: [protocol_deviation]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the protocol deviations log and summary supporting
+      {requirement}, including major/minor classification and impact on the
+      primary endpoint analysis. Requested documents: {documents}.
+    priority: medium
+    owner: Regulatory Affairs
+    required_documents: [CSR, PROTOCOL]
+    notes: Deviations that affect the primary endpoint should be reflected in the PP analysis.
+
+  - rule_id: onco2.data.subgroup
+    name: Pre-specified subgroup analyses results
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: subgroup_results
+        label: Results of pre-specified subgroup analyses
+        fields: [subgroup_analysis]
+        min_documents: 1
+        min_records: 1
+        acceptable_texts: ["%"]
+    question_template: >-
+      Please provide the subgroup analyses results supporting {requirement}, for
+      the pre-specified subgroups, together with the analysis method and
+      consistency statement. Requested documents: {documents}.
+    priority: medium
+    owner: Biostatistics
+    required_documents: [CSR, SAP]
+    notes: Pre-specification without reported results is a common Phase 2 package gap.
+
+  - rule_id: onco2.data.maturity
+    name: Data cut-off and follow-up maturity
+    version: "1.0"
+    applies_to: {}
+    dimension: data_maturity
+    required_evidence:
+      - id: followup_duration
+        label: Data cut-off date and median follow-up duration
+        fields: [follow_up]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the data cut-off and follow-up duration supporting
+      {requirement}, and confirm whether any later cut-off is available.
+      Requested documents: {documents}.
+    priority: medium
+    owner: Biostatistics
+    required_documents: [CSR, SAP]
+    notes: Follow-up maturity determines whether PFS/OS estimates are interpretable.
+
+  - rule_id: onco2.data.cutoff
+    name: Documented data cut-off
+    version: "1.0"
+    applies_to: {}
+    dimension: data_maturity
+    required_evidence:
+      - id: cutoff_value
+        label: Explicit data cut-off date supporting the reported analysis
+        fields: [data_cutoff]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please confirm the data cut-off date used for the analyses supporting
+      {requirement}, and identify any documents that use an earlier cut-off.
+      Requested documents: {documents}.
+    priority: high
+    owner: Biostatistics
+    required_documents: [CSR, SAP]
+    notes: Without a cut-off date, differing values cannot be attributed to data maturity.

@@ -1,0 +1,51 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: endpoint-pfs
+  name: Progression-free survival (PFS) endpoint checklist
+  version: "1.0.0"
+  therapeutic_area: []
+  phase: [1, 2, 3]
+  modality: []
+  description: >
+    Cross-cutting PFS evidence expectations, including maturity (follow-up) and
+    assessment method, which determine whether a PFS estimate is interpretable.
+rules:
+  - rule_id: endpoint.pfs.value
+    name: PFS estimate with analysis population and assessment method
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: pfs_value
+        label: Median PFS with confidence interval, population and assessment method
+        fields: [pfs]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the PFS analysis supporting {requirement}, including the
+      censoring rules, assessment method and data cut-off. Requested documents:
+      {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [CSR, SAP]
+    notes: PFS is sensitive to assessment schedule and censoring rules.
+
+  - rule_id: endpoint.pfs.maturity
+    name: PFS follow-up maturity
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: followup_duration
+        label: Median follow-up duration supporting the PFS analysis
+        fields: [follow_up]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the follow-up duration and maturity supporting
+      {requirement}, including the data cut-off. Requested documents:
+      {documents}.
+    priority: medium
+    owner: Biostatistics
+    required_documents: [CSR, SAP]
+    notes: Immature follow-up can make a PFS estimate unstable; maturity should be stated.

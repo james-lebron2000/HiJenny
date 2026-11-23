@@ -124,6 +124,11 @@ def load_ground_truth(
                     "Fact-level extraction metrics will be reported as not_scored."
                 ],
                 "raw": {},
+                "eval_notes": {},
+                "ignore_documents": [],
+                "ignore_fields": [],
+                "collapse_duplicates": False,
+                "known_limitations": [],
             }
         )
         return fallback
@@ -150,6 +155,21 @@ def load_ground_truth(
             continue
         facts.append(fact)
 
+    notes = raw.get("eval_notes") or {}
+    ignore_documents = (
+        notes.get("ignore_documents_for_fact_scoring")
+        or raw.get("ignore_documents_for_fact_scoring")
+        or []
+    )
+    ignore_fields = (
+        notes.get("ignore_fields_for_fact_scoring")
+        or raw.get("ignore_fields_for_fact_scoring")
+        or []
+    )
+    # The Lead eval note says identical (field, document, value) predictions are
+    # counted once; honour it whenever the note is present.
+    collapse_duplicates = bool(notes.get("duplicates") or raw.get("collapse_duplicates"))
+
     data = {
         "package": raw.get("package") or directory.name,
         "variant": raw.get("variant")
@@ -169,6 +189,11 @@ def load_ground_truth(
         "lifecycle": dict(raw.get("lifecycle") or {}),
         "injection": dict(raw.get("injection") or {}),
         "expect_no_findings": bool(raw.get("expect_no_findings", False)),
+        "eval_notes": dict(notes) if isinstance(notes, dict) else {},
+        "ignore_documents": [str(d) for d in ignore_documents if d],
+        "ignore_fields": [str(f) for f in ignore_fields if f],
+        "collapse_duplicates": collapse_duplicates,
+        "known_limitations": [str(x) for x in (raw.get("known_limitations") or []) if x],
         "source": "file",
         "path": str(gt_path),
         "warnings": warnings,
@@ -177,9 +202,144 @@ def load_ground_truth(
     return data
 
 
+
+# ---------------------------------------------------------------------------
+# Ground-truth self-check (preflight: do page/anchor/value actually line up?)
+# ---------------------------------------------------------------------------
+
+_DOC_PAGE_CACHE: dict[str, dict[int, str]] = {}
+
+
+def _normalise(text: str | None) -> str:
+    import re
+
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def document_page_texts(path: str | Path) -> dict[int, str]:
+    """Extract 1-based page/slide/sheet text for a package document (read-only)."""
+    target = Path(path)
+    key = str(target)
+    if key in _DOC_PAGE_CACHE:
+        return _DOC_PAGE_CACHE[key]
+    suffix = target.suffix.lower()
+    pages: dict[int, str] = {}
+    if suffix == ".pdf":
+        import fitz  # PyMuPDF
+
+        with fitz.open(target) as document:
+            for index in range(document.page_count):
+                pages[index + 1] = document[index].get_text("text") or ""
+    elif suffix == ".pptx":
+        from pptx import Presentation
+
+        presentation = Presentation(str(target))
+        for index, slide in enumerate(presentation.slides, start=1):
+            parts: list[str] = []
+            for shape in slide.shapes:
+                if getattr(shape, "has_text_frame", False) and shape.has_text_frame:
+                    parts.append(shape.text_frame.text)
+                if getattr(shape, "has_table", False) and shape.has_table:
+                    for row in shape.table.rows:
+                        for cell in row.cells:
+                            parts.append(cell.text)
+            pages[index] = "\n".join(parts)
+    elif suffix == ".xlsx":
+        import openpyxl
+
+        workbook = openpyxl.load_workbook(str(target), data_only=True, read_only=True)
+        for index, sheet in enumerate(workbook.worksheets, start=1):
+            parts = []
+            for row in sheet.iter_rows(values_only=True):
+                parts.append(" | ".join("" if value is None else str(value) for value in row))
+            pages[index] = "\n".join(parts)
+    elif suffix == ".docx":
+        from docx import Document as DocxDocument
+
+        document = DocxDocument(str(target))
+        pages[1] = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    _DOC_PAGE_CACHE[key] = pages
+    return pages
+
+
+def verify_ground_truth_facts(
+    package_dir: str | Path,
+    facts: list[dict],
+    *,
+    default_tolerance: float = 0.05,
+) -> dict:
+    """Check that each fact's page/anchor/value really exist in the package.
+
+    This is a *corpus* preflight, not pipeline scoring: it catches stale or
+    mis-generated ground truth before those errors are misattributed to the
+    pipeline.  Returns ``{"checked", "issues", "ok"}``.
+    """
+    directory = Path(package_dir)
+    issues: list[dict] = []
+    for index, fact in enumerate(facts):
+        document = fact.get("document") or fact.get("filename")
+        page = fact.get("page")
+        if not document or page is None:
+            issues.append({"index": index, "field_name": fact.get("field_name"), "issue": "missing_document_or_page"})
+            continue
+        path = directory / str(document)
+        if not path.exists():
+            issues.append({"index": index, "field_name": fact.get("field_name"), "document": document, "issue": "document_missing"})
+            continue
+        texts = document_page_texts(path)
+        page_text = _normalise(texts.get(int(page), ""))
+        if not page_text:
+            issues.append({"index": index, "field_name": fact.get("field_name"), "document": document, "page": page, "issue": "page_missing"})
+            continue
+        anchor = _normalise(fact.get("anchor"))
+        if anchor and anchor not in page_text:
+            issues.append({"index": index, "field_name": fact.get("field_name"), "document": document, "page": page, "issue": "anchor_not_on_page", "anchor": anchor[:200]})
+            continue
+        value_num = fact.get("value_num")
+        if value_num is not None:
+            import re
+
+            tolerance = fact.get("tolerance")
+            tolerance = float(tolerance) if tolerance is not None else default_tolerance
+            numbers = [
+                float(match.replace(",", ""))
+                for match in re.findall(r"\d[\d,]*(?:\.\d+)?", page_text)
+            ]
+            if not any(abs(number - float(value_num)) <= tolerance for number in numbers):
+                issues.append(
+                    {
+                        "index": index,
+                        "field_name": fact.get("field_name"),
+                        "document": document,
+                        "page": page,
+                        "issue": "value_not_on_page",
+                        "value_num": value_num,
+                        "tolerance": tolerance,
+                    }
+                )
+                continue
+        value_text = fact.get("value_text")
+        # When an anchor is present it already proves the fact is grounded; the
+        # value_text is a normalised value, not necessarily a verbatim string.
+        if value_text and not value_num and not anchor:
+            if _normalise(str(value_text)).lower() not in page_text.lower():
+                issues.append(
+                    {
+                        "index": index,
+                        "field_name": fact.get("field_name"),
+                        "document": document,
+                        "page": page,
+                        "issue": "value_text_not_on_page",
+                        "value_text": str(value_text)[:200],
+                    }
+                )
+    return {"checked": len(facts), "issues": issues, "ok": not issues}
+
 __all__ = [
     "GT_FILENAME",
+    "document_page_texts",
     "load_ground_truth",
     "package_files",
     "package_ground_truth_path",
+    "verify_ground_truth_facts",
 ]

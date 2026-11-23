@@ -196,6 +196,14 @@ def build_clean_package(dest_dir: str | Path) -> dict:
         "lifecycle": {},
         "injection": {},
         "expect_no_findings": True,
+        "eval_notes": {
+            "duplicates": "Identical (field_name, document, value) predictions count once.",
+            "ignore_documents_for_fact_scoring": ["Injection_Fixture_IB.pdf"],
+        },
+        "known_limitations": [
+            "Generated clean control: tiny single-page documents, no real filler "
+            "or real-world messiness (scanned pages, tables split across pages)."
+        ],
     }
     gt_path = package_dir / "ground_truth.json"
     gt_path.write_text(json.dumps(ground_truth, indent=2, sort_keys=True), encoding="utf-8")

@@ -1,0 +1,131 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: safety-adverse-events
+  name: Adverse-event evidence checklist
+  version: "1.0.0"
+  therapeutic_area: []
+  phase: [1, 2, 3]
+  modality: []
+  description: >
+    Cross-cutting safety evidence expectations. Every rate needs its safety
+    population denominator, CTCAE version and data cut-off to be comparable.
+rules:
+  - rule_id: safety.ae.any
+    name: Any-grade adverse events
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: any_ae
+        label: Any-grade adverse event rate by safety population
+        fields: [any_ae]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the any-grade adverse event table supporting {requirement},
+      with the safety population denominator and CTCAE version. Requested
+      documents: {documents}.
+    priority: high
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: Any-grade AE rates frame the overall tolerability profile.
+
+  - rule_id: safety.ae.grade3
+    name: Grade >=3 adverse events
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: grade3_ae
+        label: Grade >=3 adverse event rate by safety population
+        fields: [grade3_ae]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the grade >=3 adverse event table supporting {requirement},
+      with the safety population denominator and data cut-off. Requested
+      documents: {documents}.
+    priority: high
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: Serious toxicity rates are a primary driver of risk-adjusted valuation.
+
+  - rule_id: safety.ae.sae
+    name: Serious adverse events
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: sae_value
+        label: Serious adverse event rate by safety population
+        fields: [sae]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the serious adverse event table supporting {requirement},
+      with the safety population denominator, seriousness criteria and data
+      cut-off. Requested documents: {documents}.
+    priority: high
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: SAE rates are often compared across documents; denominators and cut-offs must match.
+
+  - rule_id: safety.ae.death
+    name: Treatment-related deaths
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: related_death
+        label: Treatment-related death rate and narrative
+        fields: [treatment_related_death]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the treatment-related death data supporting {requirement},
+      including case narratives and the safety population denominator.
+      Requested documents: {documents}.
+    priority: high
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: Any treatment-related death requires case-level diligence.
+
+  - rule_id: safety.ae.trae
+    name: Treatment-related adverse events
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: trae
+        label: Treatment-related adverse event rate and attribution method
+        fields: [treatment_related_ae]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the treatment-related adverse event table supporting
+      {requirement}, with the attribution method and safety population
+      denominator. Requested documents: {documents}.
+    priority: medium
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: Attribution between investigators can differ and should be described.
+
+  - rule_id: safety.ae.aesi
+    name: Adverse events of special interest (AESI)
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: aesi
+        label: Adverse events of special interest for the mechanism/target
+        fields: [aesi]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the adverse events of special interest analysis supporting
+      {requirement}, including the class-effect monitoring plan. Requested
+      documents: {documents}.
+    priority: low
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY, IB]
+    notes: Mechanism-based class effects (e.g. haematological, hepatic) should be explicitly tracked.

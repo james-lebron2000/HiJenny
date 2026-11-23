@@ -1,0 +1,132 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: oncology-phase-3
+  name: Oncology Phase 3 due-diligence checklist (stub)
+  version: "1.0.0"
+  therapeutic_area: oncology
+  phase: [3]
+  modality: []
+  description: >
+    Phase 3 evidence expectations: randomized controlled design, comparator,
+    time-to-event endpoints and multiplicity control. Compact stub intended to
+    extend when a Phase 3 asset enters the pipeline.
+rules:
+  - rule_id: onco3.study.design
+    name: Randomization and blinding
+    version: "1.0"
+    applies_to: {}
+    dimension: study_design
+    required_evidence:
+      - id: design_and_randomization
+        label: Randomized controlled design, randomization ratio and blinding
+        fields: [design, randomization]
+        min_documents: 1
+        min_records: 2
+    question_template: >-
+      Please provide the randomization and blinding details supporting
+      {requirement}, including stratification factors and allocation ratio.
+      Requested documents: {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [PROTOCOL, SAP]
+    notes: Randomization and blinding determine the strength of the causal inference.
+
+  - rule_id: onco3.study.comparator
+    name: Comparator / standard of care
+    version: "1.0"
+    applies_to: {}
+    dimension: study_design
+    required_evidence:
+      - id: comparator_statement
+        label: Comparator regimen and its approval status
+        fields: [comparator]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please describe the comparator regimen supporting {requirement}, including
+      the standard-of-care rationale and any regional differences. Requested
+      documents: {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [PROTOCOL, CSR]
+    notes: Comparator choice drives the commercial and regulatory positioning.
+
+  - rule_id: onco3.efficacy.pfs
+    name: Progression-free survival (primary or key secondary)
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: pfs_value
+        label: PFS estimate with hazard ratio and confidence interval
+        fields: [pfs]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the PFS analysis supporting {requirement}, including the
+      hazard ratio, censoring rules and independent review status. Requested
+      documents: {documents}.
+    priority: critical
+    owner: Biostatistics
+    required_documents: [CSR, SAP]
+    notes: PFS is usually the primary endpoint in oncology Phase 3; audit/adjudication details matter.
+
+  - rule_id: onco3.efficacy.os
+    name: Overall survival
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: os_value
+        label: OS estimate with hazard ratio, maturity and confidence interval
+        fields: [os]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the overall survival analysis supporting {requirement},
+      including maturity, crossover handling and the data cut-off. Requested
+      documents: {documents}.
+    priority: critical
+    owner: Biostatistics
+    required_documents: [CSR, SAP]
+    notes: OS maturity and crossover adjustment are central to Phase 3 value claims.
+
+  - rule_id: onco3.safety.sae
+    name: Serious adverse events in the randomized population
+    version: "1.0"
+    applies_to: {}
+    dimension: safety
+    required_evidence:
+      - id: sae_value
+        label: SAE incidence by arm and safety population
+        fields: [sae]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the SAE table by treatment arm supporting {requirement},
+      with the safety population denominator and data cut-off. Requested
+      documents: {documents}.
+    priority: high
+    owner: Safety / Pharmacovigilance
+    required_documents: [CSR, SAFETY]
+    notes: Arm-level safety rates are needed for benefit-risk comparison.
+
+  - rule_id: onco3.statistics.multiplicity
+    name: Multiplicity and alpha control
+    version: "1.0"
+    applies_to: {}
+    dimension: statistics
+    required_evidence:
+      - id: multiplicity_statement
+        label: Multiplicity strategy / alpha control for primary and key secondary endpoints
+        fields: [multiplicity]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the multiplicity and alpha-control strategy supporting
+      {requirement}, including the testing hierarchy and two-sided/sided alpha.
+      Requested documents: {documents}.
+    priority: high
+    owner: Biostatistics
+    required_documents: [SAP]
+    notes: Confirmatory Phase 3 claims depend on a pre-specified alpha-control strategy.

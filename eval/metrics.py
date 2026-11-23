@@ -289,7 +289,22 @@ def _value_matches(
         detail["expected_date"] = exp_date
         detail["predicted_date"] = pred_date
         return exp_date == pred_date, detail
-    return (bool(exp_norm) and exp_norm == pred_norm), detail
+    if exp_norm and exp_norm == pred_norm:
+        return True, detail
+    # Tolerant free-text matching: the fact's value_text is often a short phrase
+    # taken from a longer extracted sentence (or vice versa); document + page +
+    # field are already matched, so containment / high token recall is safe and
+    # avoids punishing wording differences in e.g. study design text.
+    if len(exp_norm) >= 8 and len(pred_norm) >= 8:
+        if exp_norm in pred_norm or pred_norm in exp_norm:
+            detail["text_match"] = "containment"
+            return True, detail
+        exp_tokens = set(_WORD_RE.findall(exp_norm))
+        pred_tokens = set(_WORD_RE.findall(pred_norm))
+        if exp_tokens and len(exp_tokens & pred_tokens) / len(exp_tokens) >= 0.8:
+            detail["text_match"] = "token_recall>=0.8"
+            return True, detail
+    return False, detail
 
 
 def _match_facts(
@@ -385,6 +400,81 @@ def _match_facts(
         "missed": missed,
         "unmatched_predictions": unmatched,
         "value_mismatches": value_mismatches,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Prediction preparation (honours package eval_notes)
+# ---------------------------------------------------------------------------
+
+
+def _value_key(prediction: Mapping[str, Any]) -> tuple:
+    numeric = _to_float(prediction.get("value_num"), prediction.get("value_text"))
+    if numeric is not None:
+        return ("num", _round(numeric, 6))
+    return ("text", _norm_text(prediction.get("value_text")))
+
+
+def prepare_extraction_predictions(
+    predictions: Sequence[Mapping[str, Any]],
+    *,
+    ignore_documents: Iterable[str] | None = None,
+    ignore_fields: Iterable[str] | None = None,
+    collapse_duplicates: bool = False,
+) -> dict:
+    """Apply the package's ``eval_notes`` before extraction scoring.
+
+    * ``ignore_documents``: evidence from documents that are deliberately outside
+      the fact-scoring scope (e.g. CMC/nonclinical/patent summaries) is dropped,
+      so it is neither TP nor FP.
+    * ``ignore_fields``: fields declared out of scope.
+    * ``collapse_duplicates``: identical (field, document, value) predictions are
+      counted once and extra copies are *not* false positives (Lead eval notes).
+      Without it, strict one-to-one matching counts duplicates as FP.
+
+    Returns ``{"predictions": [...], "scope": {...}}``; the input is not mutated.
+    """
+    ignore_docs = {_norm_doc_token(doc) for doc in (ignore_documents or []) if doc}
+    ignore_fields_norm = {_norm_text(field) for field in (ignore_fields or []) if field}
+    kept: list[Mapping[str, Any]] = []
+    ignored_by_document = 0
+    ignored_by_field = 0
+    collapsed = 0
+    seen: set[tuple] = set()
+    for prediction in predictions:
+        field = _norm_text(prediction.get("field_name"))
+        if field in ignore_fields_norm:
+            ignored_by_field += 1
+            continue
+        doc_tokens = _doc_tokens(prediction)
+        if ignore_docs and doc_tokens & ignore_docs:
+            ignored_by_document += 1
+            continue
+        if collapse_duplicates:
+            document = str(
+                prediction.get("document_id")
+                or prediction.get("filename")
+                or prediction.get("document_type")
+                or ""
+            )
+            key = (field, _norm_doc_token(document), _value_key(prediction))
+            if key in seen:
+                collapsed += 1
+                continue
+            seen.add(key)
+        kept.append(prediction)
+    return {
+        "predictions": kept,
+        "scope": {
+            "input_predictions": len(predictions),
+            "scored_predictions": len(kept),
+            "ignore_documents": sorted(ignore_documents or []),
+            "ignore_fields": sorted(ignore_fields or []),
+            "ignored_by_document": ignored_by_document,
+            "ignored_by_field": ignored_by_field,
+            "collapse_duplicates": bool(collapse_duplicates),
+            "collapsed_duplicates": collapsed,
+        },
     }
 
 
@@ -1281,6 +1371,7 @@ __all__ = [
     "extraction_prf",
     "finding_prf",
     "match_finding_topics",
+    "prepare_extraction_predictions",
     "question_quality",
     "wilson_ci",
 ]

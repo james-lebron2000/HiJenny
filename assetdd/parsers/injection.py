@@ -42,7 +42,7 @@ INJECTION_PATTERNS: tuple[tuple[str, str], ...] = (
     ),
     (
         "report_fabricated_value",
-        r"report\s+[^.\n]{0,60}?\s+as\s+\d+(?:\.\d+)?\s*%",
+        r"reports?\s+[\s\S]{0,60}?\s+as\s+\d+(?:\.\d+)?\s*%",
     ),
     (
         "new_instructions",

@@ -233,6 +233,8 @@ def csr_pages(filler: int, variant: str = "v1") -> list[list[tuple]]:
         version = "1.0"
         counts = dict(cr=8, pr=45, sd=37, pd=30, ne=6, orr=53, dcr=90, sae=25)
         cr_pct, pr_pct = "6.3", "35.7"
+        os_median, os_ci, os12 = "16.8", "13.9-21.4", "78.2"
+        fas_orr = "40.0"
     else:
         cutoff_title, cutoff_iso, orr, dcr, pfs, sae, n_total = (
             "30 April 2026", "2026-04-30", "44.4", "73.0", "7.8", "19.0", "126"
@@ -240,6 +242,8 @@ def csr_pages(filler: int, variant: str = "v1") -> list[list[tuple]]:
         version = "2.0"
         counts = dict(cr=8, pr=48, sd=36, pd=28, ne=6, orr=56, dcr=92, sae=24)
         cr_pct, pr_pct = "6.3", "38.1"
+        os_median, os_ci, os12 = "18.2", "15.1-22.8", "82.0"
+        fas_orr = "42.0"
 
     pages: list[list[tuple]] = [
         # 1 title
@@ -367,7 +371,7 @@ def csr_pages(filler: int, variant: str = "v1") -> list[list[tuple]]:
             ("h2", "7. Efficacy evaluation"),
             ("p", "Tumour assessments were performed every 8 weeks using RECIST version 1.1. The primary efficacy "
                   "analysis used the ITT population and investigator assessment."),
-            ("p", A["cutoff_jan"] + ". The " + A["fu"] + "."),
+            ("p", f"Data cutoff: {cutoff_iso}. The " + A["fu"] + "."),
             ("p", "Response categories were confirmed by repeat imaging no less than 4 weeks after initial "
                   "documentation where clinically feasible."),
         ],
@@ -417,8 +421,9 @@ def csr_pages(filler: int, variant: str = "v1") -> list[list[tuple]]:
         # 14 OS
         [
             ("h2", "7.5 Overall survival"),
-            ("p", "Overall survival data remain immature at the data cutoff; median OS was not reached. The "
-                  "12-month OS rate was 78.2% (95% CI 70.1-85.3)."),
+            ("p", f"At the data cutoff, the median overall survival (OS) was {os_median} months "
+                  f"(95% CI {os_ci}). Overall survival data remain immature; the 12-month OS rate was {os12}% "
+                  f"(95% CI 70.1-85.3)."),
             ("p", "Follow-up for overall survival will continue and an updated analysis is planned for the "
                   "final study report."),
         ],
@@ -461,9 +466,9 @@ def csr_pages(filler: int, variant: str = "v1") -> list[list[tuple]]:
         # 17 sensitivity analysis (Type C source)
         [
             ("h2", "7.6 Sensitivity analyses"),
-            ("p", "A pre-specified sensitivity analysis was performed in the full analysis set using blinded "
-                  "independent central review. The " + A["orr_fas_bicr"] + " (95% CI 31.2-49.3), compared with "
-                  "42.0% in the primary ITT investigator-assessed analysis."),
+            ("p", f"A pre-specified sensitivity analysis was performed in the full analysis set using blinded "
+                  f"independent central review. ORR in the FAS population (n=120) based on BICR was {fas_orr}% "
+                  f"(95% CI 31.2-49.3), compared with {orr}% in the primary ITT investigator-assessed analysis."),
             ("p", "The difference between the primary analysis and the sensitivity analysis is attributable to "
                   "the analysis population and the assessment method; both analyses are supportive of clinical "
                   "activity."),
@@ -542,9 +547,9 @@ def csr_pages(filler: int, variant: str = "v1") -> list[list[tuple]]:
 
 def ib_pages(variant: str = "v1") -> list[list[tuple]]:
     if variant == "v1":
-        edition, cutoff, cutoff_iso, orr = "3.0", "01 October 2025", "2025-10-01", "45.0"
+        edition, cutoff, cutoff_iso, orr, pfs, sae = "3.0", "01 October 2025", "2025-10-01", "45.0", "6.8", "20.0"
     else:
-        edition, cutoff, cutoff_iso, orr = "3.1", "30 April 2026", "2026-04-30", "44.4"
+        edition, cutoff, cutoff_iso, orr, pfs, sae = "3.1", "30 April 2026", "2026-04-30", "44.4", "7.8", "19.0"
     pages: list[list[tuple]] = [
         [
             ("h1", "INVESTIGATOR'S BROCHURE"),
@@ -557,10 +562,11 @@ def ib_pages(variant: str = "v1") -> list[list[tuple]]:
         [
             ("h2", "1. Summary of clinical experience"),
             ("p", "In the ongoing Phase 2 study (NCT05712345, N=126), " + A["orr45"].replace("45.0", orr) +
-                  " in the ITT population and the " + A["pfs68"] + ". These data reflect a data cutoff of " +
+                  " in the ITT population and the " + A["pfs68"].replace("6.8", pfs) + ". These data reflect a data cutoff of " +
                   cutoff_iso + "."),
             ("p", "The safety profile observed to date is consistent with the Phase 1 experience. " +
-                  A["sae_ib"] + " of patients treated with ASD-101."),
+                  A["sae_ib"].replace("20.0", sae) + " of patients treated with ASD-101."),
+            ("p", "Tumour responses were assessed by the investigator according to RECIST version 1.1."),
         ],
         [
             ("h2", "2. Document control"),
@@ -1039,7 +1045,7 @@ def build_pptx(path: Path, variant: str = "v1") -> None:
             para.space_after = Pt(8)
 
     if variant == "v1":
-        orr, dcr, pfs, sae, orr_n = "48.4", "74.0", "7.4", "18.0", "61"
+        orr, dcr, pfs, sae, orr_n = "48.4", "71.4", "7.1", "19.8", "61"
         cutoff = "2026-01-15"
         fname = "Commercial_Forecast_v1.pptx"
     else:
@@ -1262,6 +1268,8 @@ def build_v1(package: Path, filler: int) -> dict:
              cutoff="2026-01-15", method="RECIST 1.1"),
         fact("pfs", 7.1, "Clinical_Study_Report_v1.0.pdf", A["pfs71"], unit="months", population="ITT",
              cutoff="2026-01-15", method="RECIST 1.1"),
+        fact("os", 16.8, "Clinical_Study_Report_v1.0.pdf", "median overall survival (OS) was 16.8 months",
+             unit="months", population="ITT", cutoff="2026-01-15", method="RECIST 1.1"),
         fact("dor", 8.4, "Clinical_Study_Report_v1.0.pdf", A["dor"], unit="months", population="ITT",
              cutoff="2026-01-15", method="RECIST 1.1"),
         fact("follow_up", 14.2, "Clinical_Study_Report_v1.0.pdf", A["fu"], unit="months", population="ITT",
@@ -1313,7 +1321,7 @@ def build_v1(package: Path, filler: int) -> dict:
         fact("protocol_deviation", 7, "Deviation_Log.pdf", A["dev7"], unit="events", value_text="7 major deviations",
              category="statistics"),
         # commercial (same dims as CSR -> Type A)
-        fact("orr", 48.2, "Commercial_Forecast_v1.pptx", A["orr482"], unit="%", population="ITT",
+        fact("orr", 48.4, "Commercial_Forecast_v1.pptx", A["orr482"], unit="%", population="ITT",
              cutoff="2026-01-15", method="RECIST 1.1"),
     ]
     facts = [f for f in facts if f["value_num"] is not None or f["value_text"] is not None]
@@ -1361,6 +1369,23 @@ def build_v1(package: Path, filler: int) -> dict:
              "keywords": ["ORR", "45.0", "cutoff", "2025-10-01"], "expected_severity": "low",
              "expected_status_v2": "resolved",
              "rationale": "The IB reports an earlier data cutoff (2025-10-01); the difference is a version difference, not a contradiction."},
+            {"topic_id": "typeB_pfs_ib_cutoff", "finding_type": "version_difference", "field_name": "pfs",
+             "document_types": ["CSR", "IB"],
+             "documents": ["Clinical_Study_Report_v1.0.pdf", "Investigator_Brochure_v3.0.pdf"],
+             "keywords": ["PFS", "6.8", "7.1", "cut-off"], "expected_severity": "low",
+             "expected_status_v2": "resolved",
+             "rationale": "IB PFS reflects the older 2025-10-01 cutoff; version difference, not a contradiction."},
+            {"topic_id": "typeB_sae_ib_cutoff", "finding_type": "version_difference", "field_name": "sae",
+             "document_types": ["CSR", "IB"],
+             "documents": ["Clinical_Study_Report_v1.0.pdf", "Investigator_Brochure_v3.0.pdf"],
+             "keywords": ["SAE", "20.0", "cut-off"], "expected_severity": "low",
+             "expected_status_v2": "resolved",
+             "rationale": "IB SAE rate reflects the older cutoff; version difference."},
+            {"topic_id": "typeB_data_cutoff", "finding_type": "version_difference", "field_name": "data_cutoff",
+             "document_types": ["CSR", "IB"],
+             "keywords": ["cut-off", "2025-10-01", "2026-01-15"], "expected_severity": "low",
+             "expected_status_v2": "resolved",
+             "rationale": "Two data cut-offs are present in the package (IB 2025-10-01 vs CSR 2026-01-15)."},
             {"topic_id": "typeC_orr_fas_bicr", "finding_type": "definition_difference", "field_name": "orr",
              "document_types": ["CSR"],
              "documents": ["Clinical_Study_Report_v1.0.pdf"],
@@ -1451,6 +1476,8 @@ def build_v2(package: Path) -> dict:
         fact("pfs", 7.8, "Clinical_Study_Report_v2.0.pdf",
              "median progression-free survival (PFS) was 7.8 months", unit="months", population="ITT",
              cutoff="2026-04-30", method="RECIST 1.1"),
+        fact("os", 18.2, "Clinical_Study_Report_v2.0.pdf", "median overall survival (OS) was 18.2 months",
+             unit="months", population="ITT", cutoff="2026-04-30", method="RECIST 1.1"),
         fact("sae", 19.0, "Clinical_Study_Report_v2.0.pdf",
              "Serious adverse events (SAEs) were reported in 24 patients (19.0%)", unit="%",
              population="SAFETY", cutoff="2026-04-30", category="clinical_safety"),
@@ -1506,7 +1533,8 @@ def build_v2(package: Path) -> dict:
         ],
         "lifecycle": {
             "resolved_topics": ["typeA_orr_csr_vs_ppt", "typeA_sae_csr_vs_safety",
-                                "typeB_orr_ib_cutoff", "gap_pp_population", "gap_multiplicity",
+                                "typeB_orr_ib_cutoff", "typeB_pfs_ib_cutoff", "typeB_sae_ib_cutoff",
+                                "typeB_data_cutoff", "gap_pp_population", "gap_multiplicity",
                                 "gap_subgroup_results"],
             "persisting_topics": ["typeC_orr_fas_bicr", "gap_monitoring_audit", "prompt_injection_ib"],
             "new_topics": [],

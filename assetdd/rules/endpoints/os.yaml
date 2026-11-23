@@ -1,0 +1,50 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: endpoint-os
+  name: Overall survival (OS) endpoint checklist
+  version: "1.0.0"
+  therapeutic_area: []
+  phase: [2, 3]
+  modality: []
+  description: >
+    Cross-cutting overall survival evidence expectations. In Phase 2 OS is often
+    immature, so an explicit maturity statement is itself part of the evidence.
+rules:
+  - rule_id: endpoint.os.value
+    name: OS estimate with maturity statement
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: os_value
+        label: OS estimate or survival status with confidence interval and data cut-off
+        fields: [os]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the overall survival analysis supporting {requirement},
+      including event counts, maturity and the data cut-off. Requested
+      documents: {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [CSR, SAP]
+    notes: OS claims should be qualified by maturity in early-phase studies.
+
+  - rule_id: endpoint.os.maturity
+    name: OS follow-up maturity
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: followup_duration
+        label: Follow-up duration supporting the OS analysis
+        fields: [follow_up]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the follow-up duration and event maturity supporting
+      {requirement}. Requested documents: {documents}.
+    priority: medium
+    owner: Biostatistics
+    required_documents: [CSR, SAP]
+    notes: An immature OS analysis should not be presented as a survival benefit.

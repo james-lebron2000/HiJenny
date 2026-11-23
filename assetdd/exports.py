@@ -168,6 +168,29 @@ def truncate(text: Any, limit: int = 400) -> str:
     return text[: max(0, limit - 1)].rstrip() + "…"
 
 
+_ILLEGAL_CELL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_MAX_CELL_CHARS = 32000
+
+
+def sanitize_cell(value: Any) -> Any:
+    """Make a value safe for Excel/Word (strip control chars, cap length)."""
+    if isinstance(value, str):
+        cleaned = _ILLEGAL_CELL_CHARS.sub("", value)
+        if len(cleaned) > _MAX_CELL_CHARS:
+            cleaned = cleaned[:_MAX_CELL_CHARS] + "…"
+        return cleaned
+    return value
+
+
+def sanitize_data(value: Any) -> Any:
+    """Recursively sanitise every string in a data snapshot (copy)."""
+    if isinstance(value, dict):
+        return {key: sanitize_data(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [sanitize_data(item) for item in value]
+    return sanitize_cell(value)
+
+
 def _rank(value: str | None, order: Sequence[str]) -> int:
     try:
         return list(order).index(str(value))
@@ -244,6 +267,7 @@ def collect_export_data(session, project_id: str) -> dict:
     stats = store.project_stats(session, project_id)
     runs = store.list_runs(session, project_id, limit=5)
 
+    latest_documents = [d for d in documents if d.get("is_latest", True)]
     doc_names = {d["document_id"]: d.get("filename") or "" for d in documents}
     asset_names = {a["asset_id"]: a.get("name") or "" for a in assets}
     trial_names = {t["trial_id"]: (t.get("nct_id") or t.get("internal_id") or "") for t in trials}
@@ -267,6 +291,8 @@ def collect_export_data(session, project_id: str) -> dict:
         "coverage": sort_coverage(coverage),
         "runs": runs,
         "docs_by_type": _count_by(documents, "doc_type"),
+        "latest_documents": latest_documents,
+        "pages_latest": sum(int(d.get("page_count") or 0) for d in latest_documents),
         "generated_at": _now(),
         "severity_counts": _count_by(findings, "severity", SEVERITY_ORDER),
         "priority_counts": _count_by(questions, "priority", PRIORITY_ORDER),
@@ -479,7 +505,7 @@ def _table_sheet(
                 value = "; ".join(_txt(v) for v in value if v not in (None, ""))
             if isinstance(value, (dict,)):
                 value = _joined(value)
-            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+            cell = ws.cell(row=r_idx, column=c_idx, value=sanitize_cell(value))
             cell.border = border
             cell.font = Font(size=9)
             cell.alignment = Alignment(
@@ -555,7 +581,7 @@ def _sheet_executive_summary(wb, data: dict) -> None:
         a.font = Font(bold=True, size=10, color="333333")
         a.fill = grey_fill
         a.border = border
-        b = ws.cell(row=row, column=2, value=value if value not in (None, "") else DEFAULT_DASH)
+        b = ws.cell(row=row, column=2, value=sanitize_cell(value if value not in (None, "") else DEFAULT_DASH))
         b.font = Font(size=10)
         b.border = border
         b.alignment = Alignment(vertical="top", wrap_text=True)
@@ -654,7 +680,7 @@ def _sheet_executive_summary(wb, data: dict) -> None:
             fg, font_color = SEVERITY_FILL.get(str(finding.get("severity", "")).lower(), ("F2F2F2", "000000"))
             _apply_fill(a, fg, font_color, bold=True)
             ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
-            b = ws.cell(row=row, column=2, value=_txt(finding.get("title")))
+            b = ws.cell(row=row, column=2, value=sanitize_cell(_txt(finding.get("title"))))
             b.border = border
             b.font = Font(size=10)
             b.alignment = Alignment(vertical="top", wrap_text=True)
@@ -823,6 +849,7 @@ def _sheet_coverage(wb, data: dict) -> None:
 
 def build_workbook(data: dict, out_path: str | Path | None = None) -> Path:
     """Render the six-sheet styled workbook from a data snapshot. Returns path."""
+    data = sanitize_data(data)
     Workbook, *_ = _openpyxl()
     project_id = (data.get("project") or {}).get("project_id") or "project"
     target = Path(out_path) if out_path else export_filename(project_id, "questions")
@@ -869,26 +896,30 @@ def build_questions_workbook(
     if project_id is None and project:
         project_id = project.get("project_id")
 
+    def _minimal_data() -> dict:
+        return {
+            "project": project or {"project_id": "project", "name": "Project"},
+            "stats": {},
+            "documents": [],
+            "assets": [],
+            "trials": [],
+            "evidence": [],
+            "findings": [],
+            "questions": list(rows or []),
+            "coverage": [],
+            "generated_at": _now(),
+        }
+
     if data is None:
-        if project_id:
+        rows_only = rows is not None and session is None
+        if project_id and not rows_only:
             if session is not None:
                 data = collect_export_data(session, project_id)
             else:
                 with store.session_scope() as own_session:
                     data = collect_export_data(own_session, project_id)
         else:
-            data = {
-                "project": project or {"project_id": "project", "name": "Project"},
-                "stats": {},
-                "documents": [],
-                "assets": [],
-                "trials": [],
-                "evidence": [],
-                "findings": [],
-                "questions": list(rows or []),
-                "coverage": [],
-                "generated_at": _now(),
-            }
+            data = _minimal_data()
     if rows is not None:
         data = dict(data)
         data["questions"] = sort_questions(list(rows))
@@ -965,8 +996,194 @@ def _md_cell(text: Any, limit: int = 220) -> str:
 # ---------------------------------------------------------------------------
 
 
+WHY_IT_MATTERS = {
+    "data_inconsistency": "Inconsistent reported values can misstate the asset profile and undermine valuation and deal assumptions.",
+    "version_difference": "Different versions/data cutoffs mean the most favourable number may not be the most current.",
+    "definition_difference": "Population or endpoint-definition differences make cross-document comparisons unreliable.",
+    "comparability_unclear": "Missing comparability dimensions prevent a reliable read-across between reported numbers.",
+    "evidence_gap": "The package does not support a required diligence dimension, so the associated risk stays unquantified.",
+    "incomplete_evidence": "Incomplete evidence limits the ability to verify the reported claim.",
+    "technical_concern": "The technical concern may affect the reliability of the submitted data.",
+}
+
+DECISION_DISCLAIMER = (
+    "No automated Go/No-Go recommendation is made; the brief summarises evidence "
+    "and open items for human review."
+)
+
+
+# Headline fields worth surfacing in the one-page Decision Brief, in priority order.
+HIGHLIGHT_FIELDS = [
+    "orr", "dcr", "pfs", "os", "hr", "dor", "cr", "pr", "any_ae", "grade3_ae",
+    "sae", "treatment_related_death", "discontinuation", "n_itt", "n_safety",
+    "sample_size", "age_median", "male_pct", "phase", "modality", "target",
+    "mechanism", "indication", "design",
+]
+# Metadata fields are not evidence highlights (they carry no efficacy/safety signal).
+HIGHLIGHT_SKIP = {
+    "nct_id", "data_cutoff", "response_criteria", "arms", "randomization",
+    "blinding", "sap_version", "multiplicity", "missing_data_method",
+    "subgroup_analysis", "protocol_deviation", "audit_summary", "follow_up",
+    "endpoint_def", "trial_key",
+}
+
+
+def evidence_support_highlights(data: dict, limit: int = 3) -> list[dict]:
+    """2-3 distinct, best-supported evidence items (verified first, then confidence).
+
+    Headline efficacy/safety fields are preferred; pure metadata fields (NCT id,
+    cutoff, response criteria, ...) are skipped when anything better exists.
+    """
+    evidence = list(data.get("evidence") or [])
+    if not evidence:
+        return []
+
+    def field_rank(field: str) -> int:
+        return HIGHLIGHT_FIELDS.index(field) if field in HIGHLIGHT_FIELDS else len(HIGHLIGHT_FIELDS)
+
+    def sort_key(ev: dict):
+        return (
+            1 if _txt(ev.get("field_name")) in HIGHLIGHT_SKIP else 0,
+            field_rank(_txt(ev.get("field_name"))),
+            0 if str(ev.get("verification_status")) == "verified" else 1,
+            -(float(ev.get("confidence") or 0)),
+            _txt(ev.get("field_name")),
+        )
+
+    ranked = sorted(evidence, key=sort_key)
+    picks: list[dict] = []
+    seen: set[str] = set()
+    for ev in ranked:
+        field = _txt(ev.get("field_name"))
+        if field in seen or field in HIGHLIGHT_SKIP:
+            continue
+        seen.add(field)
+        picks.append(ev)
+        if len(picks) >= limit:
+            break
+    if not picks:  # everything was metadata: fall back to distinct fields anyway
+        for ev in ranked:
+            field = _txt(ev.get("field_name"))
+            if field in seen:
+                continue
+            seen.add(field)
+            picks.append(ev)
+            if len(picks) >= limit:
+                break
+    return picks
+
+
+def open_risks(data: dict, limit: int = 5) -> list[dict]:
+    """Top open findings by severity, excluding dismissed/resolved items."""
+    findings = [
+        finding
+        for finding in data.get("findings") or []
+        if str(finding.get("status")) not in {"dismissed", "resolved"}
+    ]
+    return findings[:limit]
+
+
+def doc_version_rows(data: dict) -> list[list[str]]:
+    """Document version/history table rows (filename, type, version, state, pages)."""
+    rows = []
+    for document in data.get("documents") or []:
+        latest = bool(document.get("is_latest", True))
+        rows.append(
+            [
+                _txt(document.get("filename")),
+                _txt(document.get("doc_type")),
+                _txt(document.get("version")),
+                "latest" if latest else "superseded",
+                str(int(document.get("page_count") or 0)),
+            ]
+        )
+    return rows
+
+
+def decision_brief_data(data: dict) -> dict:
+    """Assemble the Decision Brief content from store rows (factual, no recommendation)."""
+    project = data.get("project") or {}
+    stats = data.get("stats") or {}
+    project_id = _txt(project.get("project_id"))
+    context = [
+        ["Project", _txt(project.get("name")) or DEFAULT_DASH],
+        ["Asset", _txt(project.get("asset_name")) or DEFAULT_DASH],
+        ["Indication", _txt(project.get("indication")) or DEFAULT_DASH],
+        ["Phase", _txt(project.get("phase")) or DEFAULT_DASH],
+        ["Organization", _txt(project.get("org_id")) or DEFAULT_DASH],
+        [
+            "Package",
+            f"{stats.get('documents', len(data.get('latest_documents') or data.get('documents') or []))} latest documents · "
+            f"{data.get('pages_latest') or stats.get('pages', 0)} pages · "
+            f"{stats.get('evidence', len(data.get('evidence') or []))} evidence items",
+        ],
+        ["Run date", _txt(data.get("generated_at"))],
+    ]
+    highlights = []
+    for ev in evidence_support_highlights(data):
+        field = _txt(ev.get("field_name")).replace("_", " ").upper()
+        dims = ", ".join(
+            value for value in (_txt(ev.get("population")), _txt(ev.get("arm"))) if value
+        )
+        dimensions = f" ({dims})" if dims else ""
+        highlights.append(
+            f"**{field} {value_display(ev)}**{dimensions} — supported by "
+            f"*{_txt(ev.get('document_name') or ev.get('filename'))}*, page {int(ev.get('page') or 0)} "
+            f"“{truncate(ev.get('quote'), 160)}”."
+        )
+    if not highlights:
+        highlights.append(
+            "No extracted evidence is available yet; evidence extraction has not produced "
+            "verifiable values for this package."
+        )
+
+    risks = [
+        {
+            "severity": _txt(finding.get("severity")),
+            "title": _txt(finding.get("title")),
+            "why": WHY_IT_MATTERS.get(
+                _txt(finding.get("finding_type")),
+                "Unresolved diligence item that requires seller follow-up before reliance.",
+            ),
+        }
+        for finding in open_risks(data)
+    ]
+
+    questions = [
+        {
+            "priority": _txt(question.get("priority")),
+            "owner": _txt(question.get("owner")),
+            "question": _txt(question.get("question")),
+        }
+        for question in (data.get("questions") or [])[:5]
+    ]
+
+    missing: list[str] = []
+    for item in coverage_gaps(data)[:8]:
+        missing.append(
+            f"**{_txt(item.get('dimension'))}** — {_txt(item.get('requirement'))} "
+            f"(coverage: {_txt(item.get('status'))}, priority: {_txt(item.get('priority'))})"
+        )
+    for finding in data.get("findings") or []:
+        for gap in finding.get("missing_information") or []:
+            missing.append(f"**Missing information** — {_txt(gap)}")
+    seen: set[str] = set()
+    missing = [item for item in missing if not (item in seen or seen.add(item))]
+
+    return {
+        "project_id": project_id,
+        "context": context,
+        "highlights": highlights,
+        "risks": risks,
+        "questions": questions,
+        "missing": missing,
+        "disclaimer": DECISION_DISCLAIMER,
+    }
+
+
 def render_markdown_report(data: dict) -> str:
     """Professional Markdown due-diligence report derived from store rows."""
+    data = sanitize_data(data)
     project = data.get("project") or {}
     stats = data.get("stats") or {}
     findings = data.get("findings") or []
@@ -977,6 +1194,7 @@ def render_markdown_report(data: dict) -> str:
     priority = data.get("priority_counts") or {}
     evidence_count = len(data.get("evidence") or [])
     docs = data.get("documents") or []
+    brief = decision_brief_data(data)
 
     lines: list[str] = []
     add = lines.append
@@ -989,7 +1207,7 @@ def render_markdown_report(data: dict) -> str:
     add(f"**Project:** `{_txt(project.get('project_id'))}` · **Organization:** {_txt(project.get('org_id'))}  ")
     add(
         f"**Prepared:** {data.get('generated_at')} · **Package:** "
-        f"{stats.get('documents', len(docs))} documents · {stats.get('pages', 0)} pages · "
+        f"{stats.get('documents', len(docs))} documents · {data.get('pages_latest') or stats.get('pages', 0)} pages · "
         f"{stats.get('evidence', evidence_count)} evidence items · "
         f"{stats.get('findings', len(findings))} findings · {stats.get('questions', len(questions))} questions"
     )
@@ -1003,8 +1221,67 @@ def render_markdown_report(data: dict) -> str:
     )
     add("")
 
-    # 1. Executive summary ---------------------------------------------------
-    add("## 1. Executive Summary")
+    # -- 1. Decision Brief --------------------------------------------------
+    add("## 1. Decision Brief")
+    add("")
+    add(
+        "One-page summary for BD heads and investment committee: what the package shows, "
+        "what is still open, and what the seller must answer. It summarises evidence only."
+    )
+    add("")
+    add("### Asset & transaction context")
+    add("")
+    add("| Field | Value |")
+    add("|---|---|")
+    for label, value in brief["context"]:
+        add(f"| {_md_escape(label)} | {_md_cell(value, 180)} |")
+    add("")
+    add("### What the evidence supports")
+    add("")
+    for bullet in brief["highlights"]:
+        add(f"- {bullet}")
+    add("")
+    add("### Top open risks")
+    add("")
+    if brief["risks"]:
+        add("| # | Severity | Risk | Why it matters |")
+        add("|---|---|---|---|")
+        for idx, risk in enumerate(brief["risks"], start=1):
+            add(
+                f"| {idx} | {_md_escape(risk['severity'])} | {_md_cell(risk['title'], 160)} | "
+                f"{_md_cell(risk['why'], 200)} |"
+            )
+    else:
+        add("_No open consistency or completeness risks have been generated yet._")
+    add("")
+    add("### Top seller questions")
+    add("")
+    if brief["questions"]:
+        add("| Priority | Owner | Question |")
+        add("|---|---|---|")
+        for question in brief["questions"]:
+            add(
+                f"| {_md_escape(question['priority'])} | {_md_cell(question['owner'], 60)} | "
+                f"{_md_cell(question['question'], 300)} |"
+            )
+    else:
+        add("_No seller questions have been generated yet._")
+    add("")
+    add("### Evidence still missing")
+    add("")
+    if brief["missing"]:
+        for item in brief["missing"]:
+            add(f"- {item}")
+    else:
+        add("_No outstanding coverage gaps were flagged for the supplied package._")
+    add("")
+    add("### Decision status")
+    add("")
+    add(f"**{brief['disclaimer']}**")
+    add("")
+
+    # -- 2. Executive Summary ----------------------------------------------
+    add("## 2. Executive Summary")
     add("")
     add("**Key points**")
     add("")
@@ -1012,7 +1289,7 @@ def render_markdown_report(data: dict) -> str:
     type_text = ", ".join(f"{k}: {v}" for k, v in doc_types.items()) or "no classified documents"
     add(
         f"1. **Package assembled.** {stats.get('documents', len(docs))} latest document(s), "
-        f"{stats.get('pages', 0)} parsed page(s) and {stats.get('evidence', evidence_count)} "
+        f"{data.get('pages_latest') or stats.get('pages', 0)} parsed page(s) and {stats.get('evidence', evidence_count)} "
         f"extracted evidence item(s); document mix — {type_text}."
     )
     top = key_findings(data, limit=3)
@@ -1061,8 +1338,8 @@ def render_markdown_report(data: dict) -> str:
     add(f"| **Total** | **{len(questions)}** |")
     add("")
 
-    # 2. Asset profile -------------------------------------------------------
-    add("## 2. Asset Profile")
+    # -- 3. Asset Profile ---------------------------------------------------
+    add("## 3. Asset Profile")
     add("")
     add("| Asset | Modality | Target | Mechanism | Indication | Phase | Trial | NCT | Design | Sample size | Data cutoff |")
     add("|---|---|---|---|---|---|---|---|---|---:|---|")
@@ -1093,9 +1370,22 @@ def render_markdown_report(data: dict) -> str:
                 + " |"
             )
         add("")
+    add("### Document version history")
+    add("")
+    add("Version and supersede status of every document in the package, so round-2 uploads are traceable.")
+    add("")
+    history = doc_version_rows(data)
+    if history:
+        add("| Filename | Type | Version | State | Pages |")
+        add("|---|---|---|---|---:|")
+        for row in history:
+            add("| " + " | ".join(_md_cell(value, 120) for value in row) + " |")
+    else:
+        add("_No documents registered yet._")
+    add("")
 
-    # 3. Clinical evidence matrix -------------------------------------------
-    add("## 3. Clinical Evidence Matrix")
+    # -- 4. Clinical evidence matrix ---------------------------------------
+    add("## 4. Clinical Evidence Matrix")
     add("")
     add(
         "Top efficacy and safety evidence items extracted from the package. "
@@ -1114,8 +1404,8 @@ def render_markdown_report(data: dict) -> str:
         add("_No efficacy or safety evidence has been extracted yet._")
     add("")
 
-    # 4. Findings ------------------------------------------------------------
-    add("## 4. Key Findings")
+    # -- 5. Findings --------------------------------------------------------
+    add("## 5. Key Findings")
     add("")
     if not findings:
         add("_No findings have been generated for this package yet._")
@@ -1163,8 +1453,8 @@ def render_markdown_report(data: dict) -> str:
                 add(f"**Recommended verification:** {_txt(recommended)}")
                 add("")
 
-    # 5. Evidence gaps -------------------------------------------------------
-    add("## 5. Evidence Gaps")
+    # -- 6. Evidence gaps ---------------------------------------------------
+    add("## 6. Evidence Gaps")
     add("")
     if gaps:
         add(
@@ -1192,8 +1482,8 @@ def render_markdown_report(data: dict) -> str:
         add("_No evidence gaps were flagged by the coverage analysis._")
     add("")
 
-    # 6. Seller questions ----------------------------------------------------
-    add("## 6. Seller Questions")
+    # -- 7. Seller questions ------------------------------------------------
+    add("## 7. Seller Questions")
     add("")
     if questions:
         add("| Priority | Owner | Category | Question | Rationale | Required documents | Status |")
@@ -1218,8 +1508,8 @@ def render_markdown_report(data: dict) -> str:
         add("_No seller questions have been generated yet._")
     add("")
 
-    # 7. Review + limitations ------------------------------------------------
-    add("## 7. Human Review & Limitations")
+    # -- 8. Review + limitations --------------------------------------------
+    add("## 8. Human Review & Limitations")
     add("")
     add("**Review status**")
     add("")
@@ -1309,7 +1599,7 @@ def _set_cell_text(cell, text: str, *, bold: bool = False, size: float = 8.5, co
 
     cell.text = ""
     paragraph = cell.paragraphs[0]
-    run = paragraph.add_run(_txt(text))
+    run = paragraph.add_run(_txt(sanitize_cell(text)))
     run.bold = bold
     run.font.size = _docx_imports()["Pt"](size)
     if color:
@@ -1383,6 +1673,7 @@ def _docx_footer(doc) -> None:
 
 def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     """Render the professional Word report from a data snapshot. Returns path."""
+    data = sanitize_data(data)
     imp = _docx_imports()
     Document, Pt, RGBColor, WD_ALIGN_PARAGRAPH, WD_BREAK, WD_SECTION = (
         imp["Document"],
@@ -1445,7 +1736,8 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
             (
                 "Package",
                 f"{stats.get('documents', len(data.get('documents') or []))} documents · "
-                f"{stats.get('pages', 0)} pages · {stats.get('evidence', len(data.get('evidence') or []))} evidence items",
+                f"{data.get('pages_latest') or stats.get('pages', 0)} pages · "
+                f"{stats.get('evidence', len(data.get('evidence') or []))} evidence items",
             ),
         ],
     )
@@ -1463,14 +1755,69 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     )
     doc.add_page_break()
 
-    # -- 1. Executive summary ----------------------------------------------
-    doc.add_heading("1. Executive Summary", level=1)
+    # -- 1. Decision Brief --------------------------------------------------
+    brief = decision_brief_data(data)
+    doc.add_heading("1. Decision Brief", level=1)
+    doc.add_paragraph(
+        "One-page summary for BD heads and investment committee: what the package shows, what is "
+        "still open, and what the seller must answer. It summarises evidence only."
+    )
+    doc.add_heading("Asset & transaction context", level=2)
+    _docx_table(doc, ["Field", "Value"], brief["context"], widths=(1.7, 4.6), font_size=9)
+    doc.add_heading("What the evidence supports", level=2)
+    if brief["highlights"]:
+        for bullet in brief["highlights"]:
+            paragraph = doc.add_paragraph(style="List Bullet")
+            run = paragraph.add_run(_txt(bullet).replace("**", "").replace("*", ""))
+            run.font.size = Pt(9)
+    else:  # pragma: no cover - defensive
+        doc.add_paragraph("No extracted evidence is available yet.")
+    doc.add_heading("Top open risks", level=2)
+    if brief["risks"]:
+        _docx_table(
+            doc,
+            ["#", "Severity", "Risk", "Why it matters"],
+            [[idx, risk["severity"], risk["title"], risk["why"]] for idx, risk in enumerate(brief["risks"], start=1)],
+            widths=(0.35, 0.8, 2.3, 2.85),
+            font_size=8,
+        )
+    else:
+        doc.add_paragraph("No open consistency or completeness risks have been generated yet.")
+    doc.add_heading("Top seller questions", level=2)
+    if brief["questions"]:
+        _docx_table(
+            doc,
+            ["Priority", "Owner", "Question"],
+            [[q["priority"], q["owner"], q["question"]] for q in brief["questions"]],
+            widths=(0.8, 1.4, 4.1),
+            font_size=8,
+        )
+    else:
+        doc.add_paragraph("No seller questions have been generated yet.")
+    doc.add_heading("Evidence still missing", level=2)
+    if brief["missing"]:
+        for item in brief["missing"]:
+            paragraph = doc.add_paragraph(style="List Bullet")
+            run = paragraph.add_run(_txt(item).replace("**", ""))
+            run.font.size = Pt(8.5)
+    else:
+        doc.add_paragraph("No outstanding coverage gaps were flagged for the supplied package.")
+    doc.add_heading("Decision status", level=2)
+    decision_paragraph = doc.add_paragraph()
+    run = decision_paragraph.add_run(brief["disclaimer"])
+    run.bold = True
+    run.font.size = Pt(9.5)
+    run.font.color.rgb = RGBColor.from_string("C00000")
+    doc.add_page_break()
+
+    # -- 2. Executive summary ----------------------------------------------
+    doc.add_heading("2. Executive Summary", level=1)
     top = key_findings(data, limit=3)
     doc_types = data.get("docs_by_type") or {}
     type_text = ", ".join(f"{k}: {v}" for k, v in doc_types.items()) or "no classified documents"
     doc.add_paragraph(
         f"Package assembled: {stats.get('documents', len(data.get('documents') or []))} latest "
-        f"document(s), {stats.get('pages', 0)} parsed page(s) and "
+        f"document(s), {data.get('pages_latest') or stats.get('pages', 0)} parsed page(s) and "
         f"{stats.get('evidence', len(data.get('evidence') or []))} extracted evidence item(s) "
         f"({type_text})."
     )
@@ -1504,7 +1851,7 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     _docx_table(doc, ["Priority", "Seller questions"], prio_rows, widths=(2.2, 1.2))
 
     # -- 2. Asset profile ---------------------------------------------------
-    doc.add_heading("2. Asset Profile", level=1)
+    doc.add_heading("3. Asset Profile", level=1)
     profile_rows = asset_profile_rows(data)
     if profile_rows:
         _docx_table(
@@ -1535,8 +1882,24 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
             font_size=8,
         )
 
+    doc.add_heading("Document version history", level=2)
+    doc.add_paragraph(
+        "Version and supersede status of every document in the package, so round-2 uploads are traceable."
+    )
+    history_rows = doc_version_rows(data)
+    if history_rows:
+        _docx_table(
+            doc,
+            ["Filename", "Type", "Version", "State", "Pages"],
+            history_rows,
+            widths=(2.9, 1.0, 0.9, 1.0, 0.6),
+            font_size=8,
+        )
+    else:
+        doc.add_paragraph("No documents registered yet.")
+
     # -- 3. Clinical evidence matrix ---------------------------------------
-    doc.add_heading("3. Clinical Evidence Matrix", level=1)
+    doc.add_heading("4. Clinical Evidence Matrix", level=1)
     doc.add_paragraph(
         "Top efficacy and safety evidence items. Values are comparable only when trial, arm, "
         "population, data cutoff and assessment method agree; “—” means the source did not "
@@ -1555,7 +1918,7 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
         doc.add_paragraph("No efficacy or safety evidence has been extracted yet.")
 
     # -- 4. Key findings ----------------------------------------------------
-    doc.add_heading("4. Key Findings", level=1)
+    doc.add_heading("5. Key Findings", level=1)
     if not findings:
         doc.add_paragraph("No findings have been generated for this package yet.")
     else:
@@ -1613,7 +1976,7 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
                 doc.add_paragraph("")
 
     # -- 5. Evidence gaps ---------------------------------------------------
-    doc.add_heading("5. Evidence Gaps", level=1)
+    doc.add_heading("6. Evidence Gaps", level=1)
     if gaps:
         doc.add_paragraph(
             f"{len(gaps)} of {len(coverage)} coverage requirement(s) are not sufficiently supported "
@@ -1639,7 +2002,7 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
         doc.add_paragraph("No evidence gaps were flagged by the coverage analysis.")
 
     # -- 6. Seller questions ------------------------------------------------
-    doc.add_heading("6. Seller Questions", level=1)
+    doc.add_heading("7. Seller Questions", level=1)
     if questions:
         _docx_table(
             doc,
@@ -1661,7 +2024,7 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
         doc.add_paragraph("No seller questions have been generated yet.")
 
     # -- 7. Review + limitations -------------------------------------------
-    doc.add_heading("7. Human Review & Limitations", level=1)
+    doc.add_heading("8. Human Review & Limitations", level=1)
     doc.add_heading("Review status", level=2)
     review = review_summary(data)
     if review:

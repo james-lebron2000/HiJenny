@@ -196,6 +196,42 @@ def _guess_doc_type(filename: str) -> str:
     return "OTHER"
 
 
+def _document_detail(session, project_id: str, document_id: str) -> dict:
+    document = _document_or_404(session, document_id, project_id)
+    pages = store.get_pages(session, document_id)
+    evidence = store.get_evidence(session, project_id, document_id=document_id)
+    doc = _doc_json(document)
+    doc["pages"] = [
+        {"page_no": page["page_no"], "char_count": page.get("char_count", len(page.get("text") or ""))}
+        for page in pages
+    ]
+    doc["evidence_count"] = len(evidence)
+    return {"document": doc, "project_id": project_id}
+
+
+def _page_payload(session, project_id: str, document_id: str, page: int) -> dict:
+    document = _document_or_404(session, document_id, project_id)
+    page_data = store.get_page(session, document_id, page)
+    if page_data is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Page {page} of document {document_id} is not parsed/available",
+        )
+    pages = store.get_pages(session, document_id)
+    evidence = store.get_evidence(session, project_id, document_id=document_id)
+    page_evidence = [ev for ev in evidence if int(ev.get("page") or 0) == page]
+    return {
+        "project_id": project_id,
+        "document": _doc_json(document),
+        "page": page_data,
+        "page_no": page_data["page_no"],
+        "total_pages": len(pages) or document.get("page_count") or 0,
+        "blocks": page_data.get("blocks", []),
+        "text": page_data.get("text", ""),
+        "evidence": page_evidence,
+    }
+
+
 def _outputs_info(project_id: str) -> dict:
     md = exports.export_filename(project_id, "md")
     docx = exports.export_filename(project_id, "docx")
@@ -207,8 +243,40 @@ def _outputs_info(project_id: str) -> dict:
     }
 
 
+def _progress(run: dict) -> dict:
+    """Progress summary for a run row.
+
+    ``pipeline.progress`` indexes every stage key directly, so partial stats
+    (a run between stages) would raise; normalise missing stage keys first and
+    fall back to an equivalent local calculation.
+    """
+    stats = dict(run.get("stats") or {})
+    for stage in pipeline.STAGES:
+        stats.setdefault(f"stage_{stage.lower()}", {})
+    normalized = dict(run)
+    normalized["stats"] = stats
+    try:
+        return pipeline.progress(normalized)
+    except Exception:  # noqa: BLE001 - keep the UI alive on unexpected stats shapes
+        done = sum(
+            1
+            for stage in pipeline.STAGES
+            if isinstance(stats.get(f"stage_{stage.lower()}"), dict)
+            and stats[f"stage_{stage.lower()}"].get("state") == "done"
+        )
+        return {
+            "run_id": run.get("run_id"),
+            "state": run.get("state"),
+            "status": run.get("status"),
+            "stages_done": done,
+            "stages_total": len(pipeline.STAGES),
+            "percent": round(100 * done / len(pipeline.STAGES)),
+            "error": run.get("error"),
+        }
+
+
 def _run_json(run: dict) -> dict:
-    return {"run": run, "progress": pipeline.progress(run)}
+    return {"run": run, "progress": _progress(run)}
 
 
 # ---------------------------------------------------------------------------
@@ -613,6 +681,17 @@ def create_app() -> FastAPI:
                 if not created:
                     duplicates.append(raw_name)
                     warnings.append(f"{raw_name}: identical file already registered (sha256 match)")
+                    # Do not leave an orphaned duplicate copy on disk (keep the
+                    # canonical stored file untouched).
+                    try:
+                        stored = (document.get("stored_path") or "").strip()
+                        stored_abs = Path(stored) if stored else None
+                        if stored_abs is not None and not stored_abs.is_absolute():
+                            stored_abs = _data_dir() / stored_abs
+                        if stored_abs is None or stored_abs.resolve() != target.resolve():
+                            target.unlink(missing_ok=True)
+                    except OSError:  # pragma: no cover - best-effort cleanup
+                        pass
                     registered.append(_doc_json(document))
                     continue
                 registered.append(_doc_json(document))
@@ -668,41 +747,26 @@ def create_app() -> FastAPI:
     def get_document(project_id: str, document_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
-            document = _document_or_404(session, document_id, project_id)
-            pages = store.get_pages(session, document_id)
-            evidence = store.get_evidence(session, project_id, document_id=document_id)
-        doc = _doc_json(document)
-        doc["pages"] = [
-            {"page_no": p["page_no"], "char_count": p.get("char_count", len(p.get("text") or ""))}
-            for p in pages
-        ]
-        doc["evidence_count"] = len(evidence)
-        return {"document": doc, "project_id": project_id}
+            return _document_detail(session, project_id, document_id)
 
     @app.get("/api/projects/{project_id}/documents/{document_id}/pages/{page}")
     def get_page(project_id: str, document_id: str, page: int = PathParam(..., ge=1)):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
-            document = _document_or_404(session, document_id, project_id)
-            page_data = store.get_page(session, document_id, page)
-            if page_data is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Page {page} of document {document_id} is not parsed/available",
-                )
-            pages = store.get_pages(session, document_id)
-            evidence = store.get_evidence(session, project_id, document_id=document_id)
-        page_evidence = [ev for ev in evidence if int(ev.get("page") or 0) == page]
-        return {
-            "project_id": project_id,
-            "document": _doc_json(document),
-            "page": page_data,
-            "page_no": page_data["page_no"],
-            "total_pages": len(pages) or document.get("page_count") or 0,
-            "blocks": page_data.get("blocks", []),
-            "text": page_data.get("text", ""),
-            "evidence": page_evidence,
-        }
+            return _page_payload(session, project_id, document_id, page)
+
+    # Convenience aliases (document id is globally unique).
+    @app.get("/api/documents/{document_id}")
+    def get_document_alias(document_id: str):
+        with store.session_scope() as session:
+            document = _document_or_404(session, document_id)
+            return _document_detail(session, document["project_id"], document_id)
+
+    @app.get("/api/documents/{document_id}/pages/{page}")
+    def get_page_alias(document_id: str, page: int = PathParam(..., ge=1)):
+        with store.session_scope() as session:
+            document = _document_or_404(session, document_id)
+            return _page_payload(session, document["project_id"], document_id, page)
 
     @app.post("/api/projects/{project_id}/documents/{document_id}/parse")
     def parse_document(project_id: str, document_id: str):
@@ -733,7 +797,7 @@ def create_app() -> FastAPI:
                     "run_id": runs[0]["run_id"],
                     "project_id": project_id,
                     "already_running": True,
-                    "progress": pipeline.progress(runs[0]),
+                    "progress": _progress(runs[0]),
                 }
         run_id = pipeline.start_pipeline(project_id, force=force)
         with store.session_scope() as session:
@@ -742,7 +806,7 @@ def create_app() -> FastAPI:
             "run_id": run_id,
             "project_id": project_id,
             "already_running": False,
-            "progress": pipeline.progress(run) if run else {"run_id": run_id, "percent": 0, "status": "running"},
+            "progress": _progress(run) if run else {"run_id": run_id, "percent": 0, "status": "running"},
         }
 
     @app.get("/api/runs/{run_id}")
@@ -1054,6 +1118,19 @@ def create_app() -> FastAPI:
         candidate = (data_root / file_path).resolve()
         if candidate != data_root and data_root not in candidate.parents:
             raise HTTPException(status_code=403, detail="Path traversal blocked")
+        # Only project document/export artefacts are downloadable — never the
+        # SQLite database or arbitrary data-dir files.
+        try:
+            parts = candidate.relative_to(data_root).parts
+        except ValueError:  # pragma: no cover - already covered above
+            raise HTTPException(status_code=403, detail="Path traversal blocked") from None
+        allowed = (
+            len(parts) >= 4
+            and parts[0] == "projects"
+            and parts[2] in {"documents", "exports"}
+        )
+        if not allowed:
+            raise HTTPException(status_code=404, detail="File not found")
         if not candidate.is_file():
             raise HTTPException(status_code=404, detail="File not found")
         media_type = _media_type(candidate)

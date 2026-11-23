@@ -1,0 +1,73 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: statistics-quality
+  name: Statistical quality checklist
+  version: "1.0.0"
+  therapeutic_area: []
+  phase: [2, 3]
+  modality: []
+  description: >
+    Cross-cutting statistical quality expectations for a diligence package:
+    multiplicity control, missing-data handling and versioned statistical
+    analysis planning. These determine whether reported p-values and estimates
+    are defensible.
+rules:
+  - rule_id: statistics.multiplicity
+    name: Multiplicity / alpha-control strategy
+    version: "1.0"
+    applies_to: {}
+    dimension: statistics
+    required_evidence:
+      - id: multiplicity_statement
+        label: Multiplicity / alpha-control statement for the primary and key secondary endpoints
+        fields: [multiplicity]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the multiplicity / alpha-control statement supporting
+      {requirement}, including the testing hierarchy and alpha level. Requested
+      documents: {documents}.
+    priority: high
+    owner: Biostatistics
+    required_documents: [SAP]
+    notes: Without an explicit strategy, nominally significant secondary endpoints cannot be relied on.
+
+  - rule_id: statistics.missing_data
+    name: Missing-data handling
+    version: "1.0"
+    applies_to: {}
+    dimension: statistics
+    required_evidence:
+      - id: missing_data_method
+        label: Missing-data method (imputation / non-responder counting / censoring)
+        fields: [missing_data_method]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the missing-data handling method supporting {requirement},
+      including the rationale and sensitivity analyses. Requested documents:
+      {documents}.
+    priority: high
+    owner: Biostatistics
+    required_documents: [SAP]
+    notes: Missing-data handling materially changes response and time-to-event estimates.
+
+  - rule_id: statistics.sap_version
+    name: Versioned statistical analysis plan
+    version: "1.0"
+    applies_to: {}
+    dimension: statistics
+    required_evidence:
+      - id: sap_version
+        label: SAP version and date, with any post-hoc changes documented
+        fields: [sap_version]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the versioned statistical analysis plan supporting
+      {requirement}, and confirm whether analyses changed after unblinding.
+      Requested documents: {documents}.
+    priority: medium
+    owner: Biostatistics
+    required_documents: [SAP]
+    notes: Post-hoc analysis changes are a common diligence red flag and should be traceable.

@@ -1,0 +1,51 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: endpoint-orr
+  name: Objective response rate (ORR) endpoint checklist
+  version: "1.0.0"
+  therapeutic_area: []
+  phase: [1, 2, 3]
+  modality: []
+  description: >
+    Cross-cutting ORR evidence expectations. Applies to any oncology asset;
+    ORR definitions and response criteria must be explicit for the value to be
+    comparable across documents.
+rules:
+  - rule_id: endpoint.orr.value
+    name: ORR value with explicit denominator and population
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: orr_value
+        label: ORR value with numerator, denominator and analysis population
+        fields: [orr]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the ORR value with numerator/denominator and the analysis
+      population supporting {requirement}. Requested documents: {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [CSR, SAP]
+    notes: A response rate without a denominator cannot be verified.
+
+  - rule_id: endpoint.orr.criteria
+    name: Response criteria and assessor documented
+    version: "1.0"
+    applies_to: {}
+    dimension: efficacy
+    required_evidence:
+      - id: response_criteria
+        label: Response criteria (e.g. RECIST 1.1) and assessor (investigator / BICR)
+        fields: [response_criteria]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please confirm the response criteria and assessor used for the response
+      analyses supporting {requirement}, and whether independent central review
+      was performed. Requested documents: {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [SAP, CSR]
+    notes: Investigator-assessed and BICR-assessed response rates are not directly comparable.

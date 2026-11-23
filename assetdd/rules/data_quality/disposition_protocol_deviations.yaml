@@ -1,0 +1,92 @@
+schema_version: rule-pack-1.0
+pack:
+  pack_id: data-quality-disposition
+  name: Disposition, protocol deviations and monitoring checklist
+  version: "1.0.0"
+  therapeutic_area: []
+  phase: [2, 3]
+  modality: []
+  description: >
+    Data-quality evidence expectations: patient disposition, protocol
+    deviations and monitoring/audit oversight. These determine how much reliance
+    can be placed on the reported clinical data.
+rules:
+  - rule_id: quality.disposition
+    name: Patient disposition and treatment discontinuations
+    version: "1.0"
+    applies_to: {}
+    dimension: quality
+    required_evidence:
+      - id: disposition_values
+        label: Patient disposition summary (enrolled, ongoing, discontinued) and treatment discontinuations
+        fields: [discontinuation]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the patient disposition and discontinuation summary
+      supporting {requirement}, with reasons for discontinuation. Requested
+      documents: {documents}.
+    priority: high
+    owner: Clinical Development
+    required_documents: [DISPOSITION, CSR]
+    notes: Disposition reconciles the denominators used throughout the package.
+
+  - rule_id: quality.protocol_deviations
+    name: Protocol deviations log and summary
+    version: "1.0"
+    applies_to: {}
+    dimension: quality
+    required_evidence:
+      - id: deviation_summary
+        label: Major protocol deviations by category, with the impact on the primary endpoint
+        fields: [protocol_deviation]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the protocol deviations log supporting {requirement},
+      including major/minor classification and impact on the primary endpoint
+      analysis. Requested documents: {documents}.
+    priority: high
+    owner: Regulatory Affairs
+    required_documents: [CSR, PROTOCOL]
+    notes: Deviations affecting the primary endpoint should be reflected in the per-protocol analysis.
+
+  - rule_id: quality.audit
+    name: Independent monitoring / audit summary
+    version: "1.0"
+    applies_to: {}
+    dimension: quality
+    required_evidence:
+      - id: audit_summary
+        label: Independent monitoring or audit summary, including significant findings
+        fields: [audit_summary]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please provide the independent monitoring / audit summary supporting
+      {requirement}, including any significant findings and corrective actions.
+      Requested documents: {documents}.
+    priority: medium
+    owner: Regulatory Affairs
+    required_documents: [CSR, PROTOCOL]
+    notes: Absence of a monitoring/audit summary limits confidence in data integrity.
+
+  - rule_id: quality.data_cutoff
+    name: Consistent data cut-off across documents
+    version: "1.0"
+    applies_to: {}
+    dimension: quality
+    required_evidence:
+      - id: cutoff_value
+        label: Explicit data cut-off date for each analysis set
+        fields: [data_cutoff]
+        min_documents: 1
+        min_records: 1
+    question_template: >-
+      Please confirm the data cut-off date supporting {requirement}, and
+      identify any documents that use an earlier cut-off. Requested documents:
+      {documents}.
+    priority: high
+    owner: Biostatistics
+    required_documents: [CSR, SAP]
+    notes: Differing cut-offs across documents are a version-control issue, not necessarily a contradiction.
