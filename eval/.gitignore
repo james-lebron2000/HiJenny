@@ -1,0 +1,3 @@
+# Generated evaluation scorecards are build artifacts: never commit them.
+reports/
+__pycache__/

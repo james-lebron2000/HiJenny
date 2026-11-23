@@ -84,6 +84,7 @@ class FieldName(StrEnum):
     N_ITT = "n_itt"
     N_SAFETY = "n_safety"
     N_PP = "n_pp"
+    N_FAS = "n_fas"
     AGE_MEDIAN = "age_median"
     MALE_PCT = "male_pct"
     # efficacy
@@ -143,6 +144,7 @@ TIME_FIELDS: set[str] = {
 }
 COUNT_FIELDS: set[str] = {
     FieldName.SAMPLE_SIZE, FieldName.N_ITT, FieldName.N_SAFETY, FieldName.N_PP,
+    FieldName.N_FAS,
 }
 
 # Fields the consistency agent is allowed to reconcile, grouped by rule.

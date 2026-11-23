@@ -562,6 +562,13 @@ def get_document(session: Session, document_id: str) -> dict | None:
     return _doc_dict(row) if row else None
 
 
+def get_document_by_sha(session: Session, project_id: str, sha256: str) -> dict | None:
+    row = session.scalars(
+        select(Document).where(Document.project_id == project_id, Document.sha256 == sha256).limit(1)
+    ).first()
+    return _doc_dict(row) if row else None
+
+
 def list_documents(session: Session, project_id: str, latest_only: bool = False) -> list[dict]:
     stmt = select(Document).where(Document.project_id == project_id).order_by(Document.uploaded_at)
     rows = session.scalars(stmt).all()
@@ -598,6 +605,12 @@ def delete_document(session: Session, document_id: str) -> bool:
     session.delete(row)
     session.flush()
     return True
+
+
+def delete_pages_for_document(session: Session, document_id: str) -> int:
+    result = session.execute(delete(DocumentPage).where(DocumentPage.document_id == document_id))
+    session.flush()
+    return int(result.rowcount or 0)
 
 
 def add_pages(session: Session, document_id: str, pages: Sequence[dict]) -> int:
