@@ -178,9 +178,21 @@ def _snapshot(project_id: str) -> dict:
 
 
 def _enrich_findings(
-    findings: list[dict], evidence_by_id: dict[str, dict]
+    findings: list[dict],
+    evidence_by_id: dict[str, dict],
+    documents: list[dict] | None = None,
 ) -> list[dict]:
-    """Attach evidence-derived documents/fields so topic matching has signals."""
+    """Attach evidence-/document-derived documents/fields for topic matching."""
+    filename_types: dict[str, str] = {}
+    filename_versions: dict[str, str] = {}
+    for document in documents or []:
+        filename = str(document.get("filename") or "")
+        if not filename:
+            continue
+        if document.get("doc_type"):
+            filename_types[filename.lower()] = str(document["doc_type"])
+        if document.get("version"):
+            filename_versions[filename.lower()] = str(document["version"])
     enriched: list[dict] = []
     for finding in findings:
         documents: set[str] = set()
@@ -189,7 +201,7 @@ def _enrich_findings(
             evidence = evidence_by_id.get(evidence_id)
             if not evidence:
                 continue
-            for key in ("filename", "doc_type", "document_id"):
+            for key in ("filename", "doc_type", "document_type", "document_id"):
                 if evidence.get(key):
                     documents.add(str(evidence[key]))
             if evidence.get("field_name"):
@@ -203,6 +215,23 @@ def _enrich_findings(
                     for key in ("filename", "document_type", "doc_type", "document_id"):
                         if item.get(key):
                             documents.add(str(item[key]))
+            for item in detail.get("source_documents") or []:
+                if item:
+                    documents.add(str(item))
+            for key in ("field", "field_name", "fields", "missing_field", "missing_fields", "requirement_id"):
+                value = detail.get(key)
+                if value is None:
+                    continue
+                for item in value if isinstance(value, (list, tuple, set)) else [value]:
+                    if item:
+                        fields.add(str(item))
+        # Resolve document filenames to document types (a topic may be declared
+        # by doc type only, e.g. "IB", while findings cite filenames).
+        documents.update(
+            filename_types[document.lower()]
+            for document in list(documents)
+            if document.lower() in filename_types
+        )
         row = dict(finding)
         row["_documents"] = sorted(documents)
         if fields:
@@ -251,7 +280,11 @@ def _build_scorecard(
     extra_limitations: list[str] | None = None,
 ) -> dict:
     evidence = snapshot["evidence"]
-    findings = _enrich_findings(snapshot["findings"], {e["evidence_id"]: e for e in evidence})
+    findings_all = _enrich_findings(
+        snapshot["findings"],
+        {e["evidence_id"]: e for e in evidence},
+        snapshot["documents"],
+    )
     questions = snapshot["questions"]
     doc_map = _doc_map(snapshot)
     evidence_by_id = {e["evidence_id"]: e for e in evidence}
@@ -269,28 +302,63 @@ def _build_scorecard(
             [e for e in evidence if e.get("document_id") in latest_doc_ids],
             ignore_documents=ground_truth.get("ignore_documents"),
             ignore_fields=ground_truth.get("ignore_fields"),
-            collapse_duplicates=bool(ground_truth.get("collapse_duplicates")),
+            collapse_duplicates=False,  # duplicates collapse only for FP counting
         )
         prediction_scope = prepared["scope"]
         prediction_scope["latest_documents_only"] = True
         prediction_scope["non_latest_document_predictions"] = non_latest_predictions
         scoring_predictions = prepared["predictions"]
+        gt_fields = sorted(
+            {
+                str(fact.get("field_name") or fact.get("field"))
+                for fact in facts
+                if fact.get("field_name") or fact.get("field")
+            }
+        )
+        collapse = bool(ground_truth.get("collapse_duplicates"))
+        field_accuracy = metrics.extraction_field_accuracy(
+            scoring_predictions,
+            facts,
+            doc_map=doc_map,
+            numeric_tolerance=numeric_tolerance,
+        )
+        in_scope_prf = metrics.extraction_prf(
+            scoring_predictions,
+            facts,
+            doc_map=doc_map,
+            numeric_tolerance=numeric_tolerance,
+            field_scope=gt_fields,
+            collapse_duplicates=collapse,
+        )
+        strict_prf = metrics.extraction_prf(
+            scoring_predictions,
+            facts,
+            doc_map=doc_map,
+            numeric_tolerance=numeric_tolerance,
+            field_scope=None,
+            collapse_duplicates=collapse,
+        )
+        in_scope_prf["scope_note"] = (
+            "Precision denominator restricted to fields that appear in the curated "
+            "fact set; evidence from other (uncurated) fields is excluded from FP."
+        )
+        document_level_prf = metrics.extraction_prf(
+            scoring_predictions,
+            facts,
+            doc_map=doc_map,
+            numeric_tolerance=numeric_tolerance,
+            page_slack=10_000,
+            field_scope=gt_fields,
+            collapse_duplicates=True,
+        )
         extraction = {
             "scored": True,
             "ground_truth_facts": len(facts),
             "prediction_scope": prediction_scope,
-            "field_accuracy": metrics.extraction_field_accuracy(
-                scoring_predictions,
-                facts,
-                doc_map=doc_map,
-                numeric_tolerance=numeric_tolerance,
-            ),
-            "prf": metrics.extraction_prf(
-                scoring_predictions,
-                facts,
-                doc_map=doc_map,
-                numeric_tolerance=numeric_tolerance,
-            ),
+            "field_accuracy": field_accuracy,
+            "prf": in_scope_prf,
+            "prf_all_fields": strict_prf,
+            "prf_document_level": document_level_prf,
         }
     else:
         extraction = {
@@ -324,11 +392,77 @@ def _build_scorecard(
             }
 
     # --- findings ---------------------------------------------------------
+    # Only findings that are still active are part of the current deliverable;
+    # resolved/dismissed findings are history and must not count as FP.
+    inactive_statuses = {"resolved", "dismissed"}
+    findings = [
+        finding
+        for finding in findings_all
+        if str(finding.get("status") or "open") not in inactive_statuses
+    ]
+    inactive_findings = len(findings_all) - len(findings)
     topics = ground_truth.get("finding_topics") or []
     findings_block = metrics.finding_prf(findings, topics, doc_map=doc_map)
+    findings_block["excluded_inactive_findings"] = inactive_findings
+    findings_block["active_findings"] = len(findings)
+    findings_block["all_findings"] = len(findings_all)
     findings_block["scored"] = bool(topics) or bool(ground_truth.get("expect_no_findings"))
     findings_block["counts_by_type"] = _count_by(snapshot["findings"], "finding_type")
     findings_block["counts_by_severity"] = _count_by(snapshot["findings"], "severity")
+    # Sensitivity analyses (clearly labelled; the strict metric above is primary).
+    duplicate_groups: dict[tuple, list[dict]] = {}
+    for finding in findings:
+        signature = metrics.finding_signature(finding)
+        key = (signature["finding_type"], tuple(signature["fields"]))
+        duplicate_groups.setdefault(key, []).append(
+            {"finding_id": finding.get("finding_id"), "title": finding.get("title")}
+        )
+    duplicate_rows = [
+        {
+            "finding_type": key[0],
+            "fields": list(key[1]),
+            "count": len(rows),
+            "finding_ids": [row["finding_id"] for row in rows],
+        }
+        for key, rows in duplicate_groups.items()
+        if len(rows) > 1
+    ]
+    deduped_findings: list[dict] = []
+    seen_signatures: set[tuple] = set()
+    for finding in findings:
+        signature = metrics.finding_signature(finding)
+        key = (signature["finding_type"], tuple(signature["fields"]))
+        if key in seen_signatures:
+            continue
+        seen_signatures.add(key)
+        deduped_findings.append(finding)
+    topic_types = {str(topic.get("finding_type") or "") for topic in topics}
+    info_types = {"comparability_unclear"} - topic_types
+    findings_sensitivity = {
+        "duplicate_groups": duplicate_rows,
+        "duplicate_finding_count": sum(row["count"] - 1 for row in duplicate_rows),
+        "duplicate_collapsed": {
+            key: metrics.finding_prf(deduped_findings, topics, doc_map=doc_map)[key]
+            for key in ("tp", "fp", "fn", "precision", "recall", "f1")
+        },
+        "excluding_info_only_types": {
+            "excluded_types": sorted(info_types),
+            **{
+                key: metrics.finding_prf(
+                    [f for f in findings if str(f.get("finding_type")) not in info_types],
+                    topics,
+                    doc_map=doc_map,
+                )[key]
+                for key in ("tp", "fp", "fn", "precision", "recall", "f1")
+            },
+        },
+        "note": (
+            "Strict metric is primary (unmatched findings are FP). Sensitivity "
+            "rows show the effect of merging duplicate findings and of excluding "
+            "informational-only finding types."
+        ),
+    }
+    findings_block["sensitivity"] = findings_sensitivity
 
     # --- citations --------------------------------------------------------
     citations = metrics.citation_accuracy(
@@ -337,6 +471,26 @@ def _build_scorecard(
         evidence_by_id,
         snapshot["page_texts"],
     )
+    # Audit of *all* entities (including resolved findings) — historical rows may
+    # legitimately reference evidence that no longer exists after a version upload.
+    citations_all = metrics.citation_accuracy(
+        findings_all,
+        questions,
+        evidence_by_id,
+        snapshot["page_texts"],
+    )
+    citations["all_entities_audit"] = {
+        "refs": citations_all["refs"],
+        "verified": citations_all["verified"],
+        "failed": citations_all["failed"],
+        "accuracy": citations_all["accuracy"],
+        "failure_reasons": citations_all.get("failure_reasons"),
+        "note": (
+            "Audit over all findings including resolved/dismissed history; "
+            "failures here are usually stale evidence ids after a version upload, "
+            "not invalid citations in the active deliverable."
+        ),
+    }
 
     # --- questions --------------------------------------------------------
     question_topics = ground_truth.get("question_topics") or None
@@ -359,9 +513,31 @@ def _build_scorecard(
     )
     expected_injection = ground_truth.get("injection") or {}
     adversarial_block["expected_injection"] = expected_injection
-    if expected_injection.get("document"):
+    if expected_injection.get("anchor"):
+        from assetdd.schemas import normalize_ws  # noqa: PLC0415 - tiny helper
+
+        anchor = normalize_ws(str(expected_injection["anchor"])).lower()
+        anchor_pages: list[dict] = []
+        for document_id, pages in snapshot["page_texts"].items():
+            for page_no, page_text in pages.items():
+                if anchor and anchor in normalize_ws(page_text).lower():
+                    anchor_pages.append(
+                        {
+                            "document_id": document_id,
+                            "filename": doc_map.get(document_id, {}).get("filename"),
+                            "page": page_no,
+                        }
+                    )
+        adversarial_block["expected_anchor_pages"] = anchor_pages
+        expected_document = str(expected_injection.get("document") or "")
         adversarial_block["expected_document_found"] = any(
-            expected_injection["document"] in str(page.get("document_id"))
+            expected_document
+            and expected_document in str(page.get("filename") or page.get("document_id"))
+            for page in anchor_pages
+        )
+    elif expected_injection.get("document"):
+        adversarial_block["expected_document_found"] = any(
+            str(expected_injection["document"]) in str(page.get("document_id"))
             for page in adversarial_block["injection_pages"]
         )
 
@@ -620,8 +796,9 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
                 f"({scope.get('non_latest_document_predictions', 0)} superseded-document "
                 f"predictions excluded); ignored documents "
                 f"{len(scope.get('ignore_documents') or [])}, ignored fields "
-                f"{len(scope.get('ignore_fields') or [])}, duplicate predictions "
-                f"collapsed {scope.get('collapsed_duplicates', 0)}."
+                f"{len(scope.get('ignore_fields') or [])}; duplicate predictions "
+                f"collapsed for FP counting: {prf.get('duplicate_predictions', 0)}; "
+                f"field-scoped precision: {len(prf.get('field_scope') or [])} fields."
             )
             lines.append("")
         lines.append(_heading(heading_level + 2, "Per-field accuracy"))
@@ -678,9 +855,38 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
             )
         )
         lines.append("")
+        strict = extraction.get("prf_all_fields") or {}
+        doc_level = extraction.get("prf_document_level") or {}
+        sensitivity_rows = []
+        if strict and strict.get("precision") is not None:
+            sensitivity_rows.append(
+                [
+                    "All extracted fields counted as FP (strict)",
+                    _pct(strict.get("precision")),
+                    _pct(strict.get("recall")),
+                    _num(strict.get("f1")),
+                ]
+            )
+        if doc_level and doc_level.get("precision") is not None:
+            sensitivity_rows.append(
+                [
+                    "Document-level match (page ignored, duplicates collapsed)",
+                    _pct(doc_level.get("precision")),
+                    _pct(doc_level.get("recall")),
+                    _num(doc_level.get("f1")),
+                ]
+            )
+        if sensitivity_rows:
+            lines.extend(
+                _table(["Sensitivity", "Precision", "Recall", "F1"], sensitivity_rows)
+            )
+            lines.append("")
         lines.append(
-            f"Duplicate predictions: {prf.get('duplicate_predictions', 0)}. "
-            "Precision is conservative: evidence outside the curated fact set is counted as FP."
+            "Primary precision above is **field-scoped**: it only counts evidence "
+            "in fields covered by the curated fact set, so extracting additional "
+            "uncurated fields is not punished. The strict row shows the harsher "
+            "all-fields view. Duplicate predictions are collapsed for FP counting "
+            "per the corpus eval_notes."
         )
         lines.append("")
         if prf.get("missing_facts"):
@@ -698,6 +904,24 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
                         ]
                         for m in prf["missing_facts"]
                     ],
+                )
+            )
+            lines.append("")
+        fp_rows = sorted(
+            (
+                (field, row.get("fp", 0), row.get("tp", 0))
+                for field, row in (prf.get("per_field") or {}).items()
+                if row.get("fp")
+            ),
+            key=lambda item: (-item[1], item[0]),
+        )[:10]
+        if fp_rows:
+            lines.append("**False positives by field (top 10)**")
+            lines.append("")
+            lines.extend(
+                _table(
+                    ["Field", "FP", "TP"],
+                    [[field, fp, tp] for field, fp, tp in fp_rows],
                 )
             )
             lines.append("")
@@ -732,9 +956,10 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
     lines.append(_heading(heading_level + 1, "3. Findings vs adjudicated topics"))
     lines.append("")
     lines.append(
-        f"Adjudicated topics: **{findings['expected_topics']}** — findings raised: "
-        f"**{findings['predicted_findings']}** — TP **{findings['tp']}**, FP "
-        f"**{findings['fp']}**, FN **{findings['fn']}**."
+        f"Adjudicated topics: **{findings['expected_topics']}** — active findings: "
+        f"**{findings['predicted_findings']}** (of {findings.get('all_findings', findings['predicted_findings'])} "
+        f"total; {findings.get('excluded_inactive_findings', 0)} resolved/dismissed excluded) — "
+        f"TP **{findings['tp']}**, FP **{findings['fp']}**, FN **{findings['fn']}**."
     )
     lines.append("")
     lines.extend(
@@ -779,6 +1004,66 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
             f"Severity agreement (advisory): {severity['correct']}/{severity['checked']} "
             f"({_pct(severity['accuracy'])})."
         )
+        lines.append("")
+    sensitivity = findings.get("sensitivity") or {}
+    if sensitivity.get("duplicate_groups") or sensitivity.get("excluding_info_only_types"):
+        lines.append("**Sensitivity analyses (the strict metric above is primary)**")
+        lines.append("")
+        rows = [
+            [
+                "Strict (primary)",
+                findings["tp"],
+                findings["fp"],
+                findings["fn"],
+                _pct(findings["precision"]),
+                _pct(findings["recall"]),
+                _num(findings["f1"]),
+            ]
+        ]
+        deduped = sensitivity.get("duplicate_collapsed") or {}
+        if deduped:
+            rows.append(
+                [
+                    "Duplicate findings collapsed",
+                    deduped.get("tp"),
+                    deduped.get("fp"),
+                    deduped.get("fn"),
+                    _pct(deduped.get("precision")),
+                    _pct(deduped.get("recall")),
+                    _num(deduped.get("f1")),
+                ]
+            )
+        info = sensitivity.get("excluding_info_only_types") or {}
+        excluded = info.get("excluded_types") or []
+        if info and excluded:
+            rows.append(
+                [
+                    "Excluding informational types: " + ", ".join(excluded),
+                    info.get("tp"),
+                    info.get("fp"),
+                    info.get("fn"),
+                    _pct(info.get("precision")),
+                    _pct(info.get("recall")),
+                    _num(info.get("f1")),
+                ]
+            )
+        lines.extend(
+            _table(
+                ["View", "TP", "FP", "FN", "Precision", "Recall", "F1"],
+                rows,
+            )
+        )
+        lines.append("")
+        if sensitivity.get("duplicate_groups"):
+            lines.append(
+                "Duplicate finding groups (same type + field): "
+                + "; ".join(
+                    f"{row['finding_type']} {row['fields']} x{row['count']}"
+                    for row in sensitivity["duplicate_groups"][:10]
+                )
+            )
+            lines.append("")
+        lines.append(str(sensitivity.get("note") or ""))
         lines.append("")
     if findings.get("matched"):
         lines.append(_heading(heading_level + 2, "Matched adjudicated topics"))
@@ -843,8 +1128,11 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
         f"Evidence references checked: **{citations['refs']}** — verbatim: "
         f"**{citations['verified']}** — failed: **{citations['failed']}** — accuracy "
         f"**{_pct(citations['accuracy'])}** (Wilson CI {_ci(citations['accuracy_ci'])}). "
-        f"Entities without any evidence reference: {citations['entities_without_evidence']} "
-        f"of {citations['entities']}."
+        f"Entity grounding: {citations['entities_with_evidence']}/{citations['entities']} "
+        f"findings/questions carry an evidence reference "
+        f"({_pct(citations['entity_grounding_share'])}, Wilson CI "
+        f"{_ci(citations['entity_grounding_ci'])}); "
+        f"{citations['entities_without_evidence']} carry none."
     )
     lines.append("")
     if citations["failed"]:
@@ -862,6 +1150,17 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
                     for f in citations["failures"][:10]
                 ],
             )
+        )
+        lines.append("")
+    audit = citations.get("all_entities_audit") or {}
+    if audit:
+        lines.append(
+            "Historical audit (all findings incl. resolved/dismissed, "
+            f"{audit.get('refs', 0)} refs): accuracy "
+            f"{_pct(audit.get('accuracy'))}, failed {audit.get('failed', 0)} "
+            f"({', '.join(f'{k}={v}' for k, v in (audit.get('failure_reasons') or {}).items()) or 'no failures'}). "
+            "Stale evidence ids in resolved history are a data-hygiene signal, not "
+            "an invalid citation in the active deliverable."
         )
         lines.append("")
 
@@ -937,12 +1236,33 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
         )
         lines.append("")
         if coverage.get("missed"):
+            lines.append("**Coverage items not found in the pipeline output**")
+            lines.append("")
             lines.extend(
                 _table(
                     ["Dimension", "Requirement", "Expected status"],
                     [
                         [m.get("dimension"), m.get("requirement"), m.get("expected_status")]
                         for m in coverage["missed"]
+                    ],
+                )
+            )
+            lines.append("")
+        wrong_status = [m for m in (coverage.get("matches") or []) if not m.get("status_ok")]
+        if wrong_status:
+            lines.append("**Coverage status mismatches**")
+            lines.append("")
+            lines.extend(
+                _table(
+                    ["Rule", "Dimension", "Expected status", "Pipeline status"],
+                    [
+                        [
+                            m.get("rule_id"),
+                            m.get("dimension"),
+                            m.get("expected_status"),
+                            m.get("predicted_status"),
+                        ]
+                        for m in wrong_status
                     ],
                 )
             )
@@ -954,6 +1274,8 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
     lines.append("")
     lines.append(
         f"Injection pages found: **{len(adversarial_block['injection_pages'])}** — "
+        f"expected injection page/document located: "
+        f"**{'yes' if adversarial_block.get('expected_document_found') else 'no'}** — "
         f"injected conclusion adopted: **{'YES' if adversarial_block['injected_value_leaked'] else 'no'}** — "
         f"directive phrase echoed as own conclusion: **{'YES' if adversarial_block['directive_phrase_leaked'] else 'no'}** — "
         f"flagged as technical concern: **{'yes' if adversarial_block['flagged_as_technical_concern'] else 'no'}**."
@@ -1075,7 +1397,13 @@ def _run_duration(run: dict | None) -> float:
 def _topic_presence(
     topics: list[dict], findings: list[dict], doc_map: dict[str, dict]
 ) -> dict[str, dict]:
-    assignment = metrics.match_finding_topics(findings, topics, doc_map=doc_map)
+    # Active findings first: a still-open v2 finding must win over a resolved
+    # historical finding on the same topic.
+    inactive = {"resolved", "dismissed"}
+    ordered = [f for f in findings if str(f.get("status") or "open") not in inactive] + [
+        f for f in findings if str(f.get("status") or "open") in inactive
+    ]
+    assignment = metrics.match_finding_topics(ordered, topics, doc_map=doc_map)
     presence: dict[str, dict] = {}
     for ti, topic in enumerate(topics):
         tid = str(topic.get("topic_id") or topic.get("id") or f"topic_{ti}")
@@ -1145,7 +1473,13 @@ def _lifecycle_analysis(
         is_correct = None
         if expected is not None:
             scored += 1
-            is_correct = observed == expected
+            if expected == "resolved":
+                # Not persisting in v2 is the lifecycle outcome that matters; a
+                # topic that was never raised in v1 cannot be "resolved" but it is
+                # also not a lifecycle regression (v1 recall is scored separately).
+                is_correct = observed in {"resolved", "absent"}
+            else:
+                is_correct = observed == expected
             correct += int(is_correct)
         per_topic.append(
             {

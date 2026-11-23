@@ -248,7 +248,11 @@ def _gap_finding(
             for record in records
         }
     )
-    evidence_ids = [str(record.get("evidence_id")) for record in records if record.get("evidence_id")]
+    all_evidence_ids = [
+        str(record.get("evidence_id")) for record in records if record.get("evidence_id")
+    ]
+    # Cap the linked evidence for readability; the full list is kept in detail.
+    evidence_ids = all_evidence_ids[:6]
     fields = list(requirement.fields)
     required_documents = list(rule.required_documents) or ["Relevant source documentation"]
     if status == CoverageStatus.NOT_FOUND:
@@ -306,6 +310,8 @@ def _gap_finding(
             "missing_fields": list(missing_fields),
             "record_count": len(records),
             "documents": documents,
+            "evidence_all": all_evidence_ids,
+            "evidence_total": len(all_evidence_ids),
             "source_documents": list(rule.required_documents),
             "priority": rule.priority,
             "owner": rule.owner,

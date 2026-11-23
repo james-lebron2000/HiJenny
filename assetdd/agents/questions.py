@@ -242,6 +242,7 @@ class _Candidate:
     evidence_ids: list[str] = field(default_factory=list)
     finding_ids: list[str] = field(default_factory=list)
     finding_type: str | None = None
+    field: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -375,6 +376,7 @@ def _consistency_candidate(finding: Mapping[str, Any]) -> _Candidate:
         evidence_ids=_finding_evidence_ids(finding),
         finding_ids=[str(finding.get("finding_id"))],
         finding_type=finding_type,
+        field=str(detail.get("field") or "") or None,
     )
 
 
@@ -569,6 +571,7 @@ def _technical_candidate(finding: Mapping[str, Any]) -> _Candidate:
         evidence_ids=_finding_evidence_ids(finding),
         finding_ids=[str(finding.get("finding_id"))],
         finding_type=finding_type,
+        field=str(detail.get("field") or "") or None,
     )
 
 
@@ -659,6 +662,76 @@ def _single_question(candidate: _Candidate) -> QuestionDraft:
     )
 
 
+_CONSISTENCY_FINDING_TYPES = {
+    str(FindingType.DATA_INCONSISTENCY),
+    str(FindingType.VERSION_DIFFERENCE),
+    str(FindingType.DEFINITION_DIFFERENCE),
+    str(FindingType.COMPARABILITY_UNCLEAR),
+}
+_MAX_QUESTION_EVIDENCE = 12
+
+
+def _merge_field_cluster(field: str, group: Sequence[_Candidate]) -> QuestionDraft:
+    """One question per (field, finding class) cluster across documents.
+
+    A field can produce a Type A reconciliation ask, a Type B cut-off ask and a
+    Type C definition ask at once.  The seller should receive a single request
+    with numbered points (priority = the most severe member), not three separate
+    questions with different priorities.
+    """
+    ordered = sorted(
+        group,
+        key=lambda candidate: (_PRIORITY_RANK.get(candidate.priority, 9), candidate.dedup_key),
+    )
+    category = ordered[0].category
+    owner = ordered[0].owner
+    priority = min(
+        (candidate.priority for candidate in ordered),
+        key=lambda value: _PRIORITY_RANK.get(value, 9),
+    )
+    finding_type = ordered[0].finding_type
+    field_label = str(ordered[0].context).split(" reports ", 1)[-1].split(" as ", 1)[0]
+    documents = _dedupe_list([doc for candidate in ordered for doc in candidate.required_documents])
+    evidence_ids = _dedupe_list(
+        [eid for candidate in ordered for eid in candidate.evidence_ids]
+    )[:_MAX_QUESTION_EVIDENCE]
+    finding_ids = _dedupe_list([fid for candidate in ordered for fid in candidate.finding_ids])
+    if len(ordered) == 1:
+        question = f"{ordered[0].context} {ordered[0].ask}"
+    else:
+        points = " ".join(
+            f"({index}) {candidate.context} {candidate.ask}"
+            for index, candidate in enumerate(ordered, start=1)
+        )
+        question = (
+            f"Please provide the following clarifications and supporting documents for "
+            f"{field_label} ({category}): {points}"
+        )
+    rationale_parts = [
+        "This consolidated request covers the related reconciliation / definition points "
+        "for one reported metric."
+    ]
+    for candidate in ordered:
+        if candidate.rationale and candidate.rationale not in rationale_parts:
+            rationale_parts.append(candidate.rationale)
+    rationale = "\n".join(rationale_parts)
+    if documents:
+        rationale += "\nRequested documents: " + "; ".join(documents) + "."
+    return QuestionDraft(
+        question=question,
+        rationale=rationale,
+        category=category,
+        priority=Priority(priority),
+        owner=Owner(owner),
+        required_documents=documents,
+        evidence_ids=evidence_ids,
+        finding_ids=finding_ids,
+        dedup_key=_hash_key(f"qmerge|field|{field}"),
+        finding_type=finding_type,
+        source="auto",
+    )
+
+
 def _build_question_drafts(
     candidates: Sequence[_Candidate],
 ) -> tuple[list[QuestionDraft], int]:
@@ -673,13 +746,26 @@ def _build_question_drafts(
             _merge_candidates(existing, candidate)
             merged += 1
 
-    groups: dict[tuple, list[_Candidate]] = {}
+    consistency_fields: dict[str, list[_Candidate]] = {}
+    others: list[_Candidate] = []
     for candidate in deduped.values():
+        if candidate.field and candidate.finding_type in _CONSISTENCY_FINDING_TYPES:
+            consistency_fields.setdefault(candidate.field, []).append(candidate)
+        else:
+            others.append(candidate)
+
+    drafts: list[QuestionDraft] = []
+    for field in sorted(consistency_fields):
+        group = consistency_fields[field]
+        if len(group) > 1:
+            merged += len(group) - 1
+        drafts.append(_merge_field_cluster(field, group))
+
+    groups: dict[tuple, list[_Candidate]] = {}
+    for candidate in others:
         signature = tuple(sorted(_dedupe_list(candidate.required_documents)))
         group_key = (candidate.owner, candidate.category, candidate.finding_type, signature)
         groups.setdefault(group_key, []).append(candidate)
-
-    drafts: list[QuestionDraft] = []
     for group in groups.values():
         if len(group) == 1:
             drafts.append(_single_question(group[0]))
@@ -731,9 +817,36 @@ def run(session, project_id: str, force: bool = False) -> dict:
     drafts, merged = _build_question_drafts(candidates)
     saved = store.save_questions(session, project_id, drafts)
 
+    # Close auto-generated, unreviewed draft questions that no longer correspond
+    # to any current finding/coverage item (e.g. a round-2 upload resolves the
+    # underlying issue).  Locked, human-edited, approved or sent questions are
+    # never touched.
+    closed = 0
+    current_keys = {draft.dedup_key for draft in drafts if draft.dedup_key}
+    if findings or coverage:
+        for question in store.list_questions(session, project_id):
+            if str(question.get("status")) != "draft":
+                continue
+            if str(question.get("review_status")) != "pending" or question.get("locked"):
+                continue
+            if str(question.get("source")) != "auto":
+                continue
+            key = str(question.get("dedup_key") or "")
+            if not key or key in current_keys:
+                continue
+            updated = store.update_question(
+                session,
+                question["question_id"],
+                actor="system:questions",
+                status="closed",
+            )
+            if updated is not None:
+                closed += 1
+
     return {
         "questions_created": saved["created"],
         "questions_updated": saved["updated"],
+        "questions_closed": closed,
         "skipped_locked": saved["skipped_locked"],
         "merged": merged,
         "findings_considered": len(findings),

@@ -47,6 +47,7 @@ The entry point is :func:`run(session, project_id, force=False) -> stats`.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import defaultdict
 from itertools import combinations
 from typing import Any, Iterable, Mapping, Sequence
@@ -101,6 +102,21 @@ CHECK_FIELDS: tuple[str, ...] = (
 )
 
 TEXT_FIELDS: frozenset[str] = frozenset({"primary_endpoint"})
+
+# Free-text endpoint definitions are compared after expanding common
+# abbreviations, so "objective response rate" and "ORR per RECIST 1.1" are
+# recognised as the same definition rather than a contradiction.
+_ENDPOINT_TEXT_ALIASES: tuple[tuple[str, str], ...] = (
+    ("objective response rate", "orr"),
+    ("overall response rate", "orr"),
+    ("disease control rate", "dcr"),
+    ("progression-free survival", "pfs"),
+    ("progression free survival", "pfs"),
+    ("overall survival", "os"),
+    ("serious adverse event", "sae"),
+    ("treatment-related death", "treatment related death"),
+    ("duration of response", "dor"),
+)
 EFFICACY_FIELDS: frozenset[str] = frozenset({"orr", "dcr", "pfs", "os", "hr"})
 SIZE_FIELDS: frozenset[str] = frozenset(
     {"sample_size", "n_itt", "n_safety", "n_fas", "n_pp"}
@@ -146,6 +162,10 @@ FIELD_DOMAINS: dict[str, str] = {
     "primary_endpoint": "endpoints",
     "data_cutoff": "data_maturity",
 }
+
+# UI/report readability: keep at most this many evidence rows on a finding; the
+# full list stays available in ``detail["evidence_all"]`` for auditing.
+MAX_FINDING_EVIDENCE = 6
 
 DIMENSION_LABELS: dict[str, str] = {
     "trial_key": "trial",
@@ -219,12 +239,30 @@ def _normalized_text(field: str, evidence: Mapping[str, Any]) -> str:
     normalized = normalize_ws(str(text)).lower()
     if field == "data_cutoff":
         return normalize_date(str(text)) or normalized
+    if field in TEXT_FIELDS:
+        for alias, canonical in _ENDPOINT_TEXT_ALIASES:
+            normalized = normalized.replace(alias, canonical)
+        # "objective response rate (ORR)" expands to "orr (orr)"; collapse the
+        # duplicated parenthetical so it matches the plain "ORR" definition.
+        normalized = re.sub(r"\b([a-z0-9]+)\s*\(\1\)", r"\1", normalized)
+        normalized = normalize_ws(normalized)
     return normalized
 
 
 def _values_differ(field: str, left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     """True when the two evidence values disagree beyond the field tolerance."""
-    if field in TEXT_FIELDS or field == "data_cutoff":
+    if field in TEXT_FIELDS:
+        left_text = _normalized_text(field, left)
+        right_text = _normalized_text(field, right)
+        if left_text == right_text:
+            return False
+        # Free-text definitions are frequently abbreviated in one source
+        # ("ORR" vs "ORR per RECIST 1.1").  Containment means the shorter form
+        # does not contradict the fuller one; only genuinely different wording
+        # is escalated (and the assessment-method dimension still catches a
+        # different response criteria).
+        return not (left_text in right_text or right_text in left_text)
+    if field == "data_cutoff":
         return _normalized_text(field, left) != _normalized_text(field, right)
     left_num = _numeric_value(left)
     right_num = _numeric_value(right)
@@ -440,6 +478,45 @@ def _date_ordinal(iso_date: str) -> int:
     return parsed.toordinal()
 
 
+def _select_finding_evidence(
+    field: str, evidence: Sequence[Mapping[str, Any]]
+) -> tuple[list[Mapping[str, Any]], list[str]]:
+    """Pick the most relevant records for display; return (selected, all_ids).
+
+    Selection order: value extremes (for numeric consistency checks), then one
+    representative per document, then remaining records in deterministic order.
+    """
+    ordered = sorted(evidence, key=_sort_key)
+    selected: dict[str, Mapping[str, Any]] = {}
+    if field not in TEXT_FIELDS and field != "data_cutoff":
+        numeric = [
+            (value, record)
+            for record in ordered
+            if (value := _numeric_value(record)) is not None
+        ]
+        if numeric:
+            low = min(numeric, key=lambda pair: (pair[0], _sort_key(pair[1])))[1]
+            high = max(numeric, key=lambda pair: (pair[0], _sort_key(pair[1])))[1]
+            selected[str(low.get("evidence_id"))] = low
+            if len(selected) < MAX_FINDING_EVIDENCE:
+                selected[str(high.get("evidence_id"))] = high
+    seen_documents: set[str] = set()
+    for record in ordered:
+        if len(selected) >= MAX_FINDING_EVIDENCE:
+            break
+        document_id = str(record.get("document_id") or "")
+        if document_id in seen_documents:
+            continue
+        seen_documents.add(document_id)
+        selected.setdefault(str(record.get("evidence_id")), record)
+    for record in ordered:
+        if len(selected) >= MAX_FINDING_EVIDENCE:
+            break
+        selected.setdefault(str(record.get("evidence_id")), record)
+    chosen = [record for record in ordered if str(record.get("evidence_id")) in selected]
+    return chosen[:MAX_FINDING_EVIDENCE], [str(record.get("evidence_id")) for record in ordered]
+
+
 def _documents_detail(evidence: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     seen: dict[str, dict[str, Any]] = {}
     for record in evidence:
@@ -498,7 +575,8 @@ def _build_finding(
     signature: tuple[str, ...] = (),
 ) -> FindingDraft:
     label = FIELD_LABELS.get(field, field)
-    values = sorted(evidence, key=_sort_key)
+    all_values = sorted(evidence, key=_sort_key)
+    values, evidence_all = _select_finding_evidence(field, all_values)
     value_labels = "; ".join(
         f"{_fmt_value(field, record)} in {record.get('filename') or record.get('document_id')} "
         f"(page {record.get('page')})"
@@ -521,6 +599,8 @@ def _build_finding(
         },
         "missing_dimensions": list(signature) if comparison_class == "U" else [],
         "definition_dimensions": list(signature) if comparison_class == "C" else [],
+        "evidence_all": evidence_all,
+        "evidence_total": len(evidence_all),
     }
     evidence_ids = [str(record.get("evidence_id")) for record in values]
 

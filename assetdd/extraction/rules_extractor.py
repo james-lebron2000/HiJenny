@@ -98,6 +98,12 @@ class MetricSpec:
 
 
 _RESPONSE_CONTEXT = re.compile(r"response|rate|tumou?r|disease|evaluat|recist|progress", re.IGNORECASE)
+_RATE_CONTEXT_FIELDS = {FieldName.ANY_AE, FieldName.GRADE3_AE, FieldName.SAE, FieldName.TREATMENT_RELATED_AE}
+_SAFETY_RATE_PHRASE_RE = re.compile(
+    r"\b(?:reported\s+in|occurred\s+in|observed\s+in|rate\s+(?:was|of)|"
+    r"in\s+\d+\s+(?:patients|subjects)|of\s+(?:patients|subjects))\b",
+    re.IGNORECASE,
+)
 
 METRIC_SPECS: tuple[MetricSpec, ...] = (
     # -- efficacy ---------------------------------------------------------
@@ -367,7 +373,7 @@ def iter_metric_hits(text: str, *, safety_allowed: bool = True) -> list[MetricHi
                 next_start = occurrence.start
                 break
         tail = text[hit.value_end : next_start]
-        if hit.unit == "%" and len(PCT_RE.findall(tail)) >= 2:
+        if hit.unit == "%" and _non_ci_percent_count(tail) >= 2:
             continue
         filtered.append(hit)
     return filtered
@@ -391,6 +397,15 @@ _SAFETY_FIELDS = {
 _NCT_RE = re.compile(r"\bNCT\s*0*\d{4,8}\b", re.IGNORECASE)
 _PHASE_RE = re.compile(r"\b(?:phase|ph\.?)\s*(1/2|2/3|1b/2|1b|2a|2b|IV|III|II|I|4|3|2|1)\b", re.IGNORECASE)
 _ROMAN = {"I": "1", "II": "2", "III": "3", "IV": "4"}
+
+_METHOD_PATTERNS_LOCAL: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\birecist\b", re.I), "iRECIST"),
+    (re.compile(r"\brecist\s*(?:v(?:ersion)?\.?\s*)?1\.1\b", re.I), "RECIST 1.1"),
+    (re.compile(r"\brecist\s*(?:v(?:ersion)?\.?\s*)?1\.0\b", re.I), "RECIST 1.0"),
+    (re.compile(r"\blugano\b", re.I), "Lugano"),
+    (re.compile(r"\bchoi\b", re.I), "Choi"),
+    (re.compile(r"\brano\b", re.I), "RANO"),
+)
 
 _INDICATION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bindication(?:s)?\s*[:=]\s*([A-Za-z][^.;|]{3,90})", re.I),
@@ -509,12 +524,15 @@ _MISSING_DATA_RE = re.compile(
     re.I,
 )
 _MULTIPLICITY_RE = re.compile(
-    r"\b(multiplicity\s+(?:adjustment|control)\s+(?:was|were|is|will\s+be)\s+(?:applied|used|performed)|"
-    r"hierarchical\s+(?:testing|test\s+procedure)|alpha[-\s]spending|gatekeeping|"
-    r"Bonferroni|Hochberg|graphical\s+approach|fixed[-\s]sequence\s+testing)\b",
+    r"\b(multiplicity(?:\s+(?:adjustment|control))?|hierarchical\s+(?:testing|test\s+procedure)|"
+    r"alpha[-\s]spending|gatekeeping|Bonferroni|Hochberg|graphical\s+approach|"
+    r"fixed[-\s]sequence\s+testing|type\s+I\s+error)\b",
     re.I,
 )
-_MULTIPLICITY_NEGATION_RE = re.compile(r"\b(?:no|not|without)\b[^.;]{0,30}$", re.I)
+_MULTIPLICITY_NEGATED_RE = re.compile(r"\b(?:no|not|without)\b[^.;]{0,40}?(?:multiplicity|adjustment)", re.I)
+_ALPHA_RE = re.compile(
+    r"((?:one|two)[-\s]sided\s+alpha)[^.;]{0,20}?(0?\.\d+)", re.IGNORECASE
+)
 _SUBGROUP_RE = re.compile(r"\bsubgroup\s+analys[ie]s\b\s+(?:are|were|is|was)\s+([^.;]{3,170})", re.I)
 _DEVIATION_RE = re.compile(r"\b(?:a\s+)?total\s+of\s+(\d{1,5})\s+(major\s+)?protocol\s+(?:deviations?|violations?)\b", re.I)
 _DEVIATION_ALT_RE = re.compile(r"\b(\d{1,5})\s+(major\s+)?protocol\s+(?:deviations?|violations?)\s+(?:were|was)\s+(?:reported|identified)", re.I)
@@ -686,6 +704,10 @@ class RulesExtractor:
     ) -> None:
         hits = iter_metric_hits(segment.text, safety_allowed=safety_allowed)
         for hit in hits:
+            if hit.field_name in _RATE_CONTEXT_FIELDS and not _SAFETY_RATE_PHRASE_RE.search(segment.text):
+                # "serious adverse events were pneumonia (4.0%)" is a per-term
+                # list, not an overall rate: require explicit rate phrasing.
+                continue
             category = (
                 "safety" if hit.field_name in _SAFETY_FIELDS else "efficacy"
             )
@@ -823,7 +845,7 @@ class RulesExtractor:
                 )
             break
 
-        design_span = _design_span(text)
+        design_span = None if _DESIGN_HYPOTHETICAL_RE.search(text) else _design_span(text)
         if design_span:
             design_text = normalize_ws(text[design_span[0] : design_span[1]])
             if design_text:
@@ -884,17 +906,15 @@ class RulesExtractor:
             match = pattern.search(text)
             if not match:
                 continue
-            capture = match.group(1)
-            method = detect_method(capture) or detect_method(text)
-            canonical = canonical_endpoint_phrase(capture, method)
-            value_text = canonical or normalize_ws(capture)[:160]
+            span = _endpoint_phrase_span(text, match.start(1), match.end(1))
+            value_text = normalize_ws(text[span[0] : span[1]]).strip(" .,;:") or None
             self._emit(
                 page,
                 segment_index,
                 segment,
                 FieldName.PRIMARY_ENDPOINT,
                 value_text=value_text,
-                span=(0, len(text)),
+                span=span,
                 confidence=0.85,
             )
             break
@@ -903,17 +923,15 @@ class RulesExtractor:
             match = pattern.search(text)
             if not match:
                 continue
-            capture = match.group(1)
-            method = detect_method(capture) or detect_method(text)
-            canonical = canonical_endpoint_phrase(capture, method)
-            value_text = canonical or normalize_ws(capture)[:200]
+            span = _endpoint_phrase_span(text, match.start(1), match.end(1), include_all_tokens=True)
+            value_text = normalize_ws(text[span[0] : span[1]]).strip(" .,;:") or None
             self._emit(
                 page,
                 segment_index,
                 segment,
                 FieldName.SECONDARY_ENDPOINTS,
                 value_text=value_text,
-                span=(0, len(text)),
+                span=span,
                 confidence=0.78,
             )
             break
@@ -1047,11 +1065,13 @@ class RulesExtractor:
         if methods:
             method = detect_method(text) or next(iter(methods))
             assessor_match = _RESPONSE_CRITERIA_ASSESSOR_RE.search(text)
-            value_text = method
-            if assessor_match:
-                assessor = normalize_ws(assessor_match.group(1))
-                if assessor.upper() in {"BICR", "INV"} or assessor.lower().startswith("blinded"):
-                    value_text = f"{assessor.upper() if assessor.upper() in {'BICR', 'INV'} else assessor} per {method}"
+            method_span = _method_span(text)
+            if assessor_match and method_span is not None:
+                value_text = normalize_ws(text[assessor_match.start() : method_span[1]])
+            elif method_span is not None:
+                value_text = normalize_ws(text[method_span[0] : method_span[1]])
+            else:
+                value_text = method
             self._emit(
                 page,
                 segment_index,
@@ -1089,17 +1109,21 @@ class RulesExtractor:
             _ = clause
 
         multiplicity_match = _MULTIPLICITY_RE.search(text)
-        if multiplicity_match and _MULTIPLICITY_NEGATION_RE.search(
-            text[max(0, multiplicity_match.start() - 40) : multiplicity_match.start()]
-        ):
-            multiplicity_match = None
         if multiplicity_match:
+            value_text = normalize_ws(multiplicity_match.group(1))
+            if _MULTIPLICITY_NEGATED_RE.search(text) or re.search(
+                r"\bno\s+multiplicity", text[max(0, multiplicity_match.start() - 25) : multiplicity_match.end() + 30], re.I
+            ):
+                value_text = "no multiplicity adjustment"
+                alpha = _alpha_phrase_near(page, segment_index)
+                if alpha:
+                    value_text = f"{value_text}; {alpha}"
             self._emit(
                 page,
                 segment_index,
                 segment,
                 FieldName.MULTIPLICITY,
-                value_text=normalize_ws(multiplicity_match.group(1)),
+                value_text=value_text,
                 span=(multiplicity_match.start(), multiplicity_match.end()),
                 confidence=0.8,
             )
@@ -1138,6 +1162,79 @@ class RulesExtractor:
                 )
 
 
+_CI_AFTER_RE = re.compile(r"\s*(?:ci|confidence)\b", re.IGNORECASE)
+_CI_BEFORE_RE = re.compile(r"(?:ci|confidence\s+interval)\s*[:=]?\s*[\d.\s]*$", re.IGNORECASE)
+
+
+def _non_ci_percent_count(tail: str) -> int:
+    """Percent tokens in *tail* excluding the "95% CI" marker and CI bounds."""
+    count = 0
+    for match in PCT_RE.finditer(tail):
+        if _CI_AFTER_RE.match(tail[match.end() : match.end() + 16]):
+            continue
+        if _CI_BEFORE_RE.search(tail[max(0, match.start() - 24) : match.start()]):
+            continue
+        count += 1
+    return count
+
+
+def _endpoint_phrase_span(
+    text: str, capture_start: int, capture_end: int, *, include_all_tokens: bool = False
+) -> tuple[int, int]:
+    """Verbatim span from the endpoint token(s) to the assessment method (if any).
+
+    The capture regex stops at the decimal point of version numbers ("RECIST 1.1"),
+    so the method search window is allowed to extend a few characters past the
+    captured span.
+    """
+    token_spans: list[tuple[int, int]] = []
+    for pattern, _token in _ENDPOINT_ALIASES:
+        for match in pattern.finditer(text, capture_start, capture_end):
+            token_spans.append((match.start(), match.end()))
+            break
+    method_window_end = min(len(text), capture_end + 16)
+    method_span = _method_span(text[capture_start:method_window_end])
+    if method_span is not None:
+        token_spans.append((capture_start + method_span[0], capture_start + method_span[1]))
+    if not token_spans:
+        return (capture_start, capture_end)
+    token_spans.sort(key=lambda span: span[0])
+    if include_all_tokens:
+        start = min(span[0] for span in token_spans)
+        end = max(span[1] for span in token_spans)
+    else:
+        first = token_spans[0]
+        start, end = first[0], first[1]
+        for span in token_spans[1:]:
+            if span[0] <= end + 25:
+                end = max(end, span[1])
+    return (start, min(end, len(text)))
+
+
+def _method_span(text: str) -> tuple[int, int] | None:
+    """Span of the first assessment-method mention (matched, not synthesised)."""
+    best: tuple[int, int] | None = None
+    for pattern, _canonical in _METHOD_PATTERNS_LOCAL:
+        match = pattern.search(text)
+        if match and (best is None or match.start() < best[0]):
+            best = (match.start(), match.end())
+    return best
+
+
+def _alpha_phrase_near(page: PageContext, segment_index: int) -> str | None:
+    """Canonical 'one-sided alpha 0.05' phrase from the local sentence window."""
+    for index in range(max(0, segment_index - 2), min(len(page.segments), segment_index + 4)):
+        match = _ALPHA_RE.search(page.segments[index].text)
+        if match:
+            try:
+                number = float(match.group(2))
+            except ValueError:
+                continue
+            side = "one-sided" if "one" in match.group(1).lower() else "two-sided"
+            return f"{side} alpha {number:g}"
+    return None
+
+
 def _owner_before(hits: Sequence[MetricHit], position: int) -> MetricHit | None:
     owner: MetricHit | None = None
     for hit in hits:
@@ -1146,6 +1243,9 @@ def _owner_before(hits: Sequence[MetricHit], position: int) -> MetricHit | None:
     return owner
 
 
+_DESIGN_HYPOTHETICAL_RE = re.compile(
+    r"\b(?:recommended|advised|would\s+be\s+required|required\s+for|should|could|may\s+support)\b", re.I
+)
 _STRONG_SINGLE_DESIGN = {"single-arm", "open-label", "double-blind", "single-blind", "placebo-controlled", "first-in-human"}
 
 

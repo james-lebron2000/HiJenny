@@ -499,6 +499,77 @@ def test_data_cutoff_field_version_difference() -> None:
         assert findings[0]["severity"] == str(Severity.LOW)
 
 
+def test_primary_endpoint_text_abbreviation_is_not_a_contradiction() -> None:
+    with store.session_scope() as session:
+        project = make_project(session)
+        csr = make_document(session, project, "CSR_v1.pdf", str(DocType.CSR))
+        sap = make_document(session, project, "SAP_v1.pdf", str(DocType.SAP))
+        save_evidence(
+            session, project, csr,
+            [make_evidence("primary_endpoint", "objective response rate (ORR) per RECIST 1.1")],
+        )
+        save_evidence(session, project, sap, [make_evidence("primary_endpoint", "objective response rate")])
+        ib = make_document(session, project, "IB_v3.pdf", str(DocType.IB))
+        save_evidence(session, project, ib, [make_evidence("primary_endpoint", "ORR per RECIST 1.1")])
+        consistency.run(session, project["project_id"])
+        assert findings_of(session, project, str(FindingType.DATA_INCONSISTENCY)) == []
+
+
+def test_finding_evidence_ids_are_capped_with_full_audit_list() -> None:
+    with store.session_scope() as session:
+        project = make_project(session)
+        document_types = [
+            str(DocType.CSR), str(DocType.IB), str(DocType.SAP), str(DocType.SAFETY),
+            str(DocType.PROTOCOL), str(DocType.DISPOSITION), str(DocType.REGULATORY),
+            str(DocType.CMC),
+        ]
+        dims = dict(population="ITT", trial_key="NCT05712345", data_cutoff="2026-01-15",
+                    assessment_method="RECIST 1.1")
+        for index, doc_type in enumerate(document_types):
+            document = make_document(session, project, f"src_{index}.pdf", doc_type)
+            save_evidence(session, project, document, [make_evidence("orr", 42.0 + index, **dims)])
+        consistency.run(session, project["project_id"])
+        findings = findings_of(session, project, str(FindingType.DATA_INCONSISTENCY))
+        assert len(findings) == 1
+        assert len(findings[0]["evidence_ids"]) <= 6
+        assert findings[0]["detail"]["evidence_total"] > 6
+        assert len(findings[0]["detail"]["evidence_all"]) == findings[0]["detail"]["evidence_total"]
+
+
+def test_stale_auto_questions_are_closed_after_resolution() -> None:
+    with store.session_scope() as session:
+        project = _seed_questions_project(session)
+        consistency.run(session, project["project_id"])
+        gap.run(session, project["project_id"])
+        questions.run(session, project["project_id"])
+        before = store.list_questions(session, project["project_id"])
+        assert before
+
+        # Simulate the issue being resolved (e.g. round-2 upload) by dismissing
+        # the underlying auto findings; the corresponding draft question is
+        # stale and should be closed, but human-reviewed rows are not touched.
+        for finding in store.list_findings(session, project["project_id"], status="open"):
+            if finding["finding_type"] == str(FindingType.DATA_INCONSISTENCY):
+                store.update_finding(session, finding["finding_id"], actor="tester", status="dismissed")
+        reviewed = store.update_question(
+            session,
+            next(
+                question
+                for question in before
+                if question["finding_type"] == str(FindingType.TECHNICAL_CONCERN)
+            )["question_id"],
+            actor="tester",
+            status="reviewed",
+        )
+        stats = questions.run(session, project["project_id"])
+        assert stats["questions_closed"] >= 1
+        closed = [
+            q for q in store.list_questions(session, project["project_id"]) if q["status"] == "closed"
+        ]
+        assert closed
+        assert store.get_question(session, reviewed["question_id"])["status"] == "reviewed"
+
+
 # ---------------------------------------------------------------------------
 # Gap / coverage
 # ---------------------------------------------------------------------------

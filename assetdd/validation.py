@@ -261,15 +261,6 @@ def _arithmetic_checks(
                 for row in fields.get("orr", []):
                     failures[row["evidence_id"]] = reason
                 flags += 1
-        if dcr is not None and cr is not None and pr is not None and sd is not None:
-            if abs((cr + pr + sd) - dcr) > _ARITHMETIC_TOLERANCE:
-                reason = (
-                    f"arithmetic: CR+PR+SD = {cr + pr + sd:.1f}% differs from DCR {dcr:.1f}% "
-                    f"by {abs(cr + pr + sd - dcr):.1f} pp (> {_ARITHMETIC_TOLERANCE} pp)"
-                )
-                for row in fields.get("dcr", []):
-                    failures[row["evidence_id"]] = reason
-                flags += 1
         sample_size = _one_value(fields.get("sample_size", []))
         if sample_size is not None:
             for field_name in ("n_itt", "n_safety", "n_fas", "n_pp"):

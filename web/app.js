@@ -1352,7 +1352,7 @@ function startPolling(runId) {
         toast(ok ? 'Analysis complete — evidence, findings and questions are ready' : `Analysis failed: ${String(data.run.error || '').slice(0, 260)}`, ok ? 'ok' : 'err');
         state.project = null;
         state.outputs = null;
-        if (['upload', 'findings', 'report', 'evidence'].includes(currentView())) renderView();
+        if (['projects', 'upload', 'findings', 'report', 'evidence'].includes(currentView())) renderView();
       }
     } catch (error) {
       state.pollTimer = null;

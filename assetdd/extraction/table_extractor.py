@@ -176,7 +176,11 @@ def tables_from_blocks(page_no: int, blocks: Sequence) -> list[RecoveredTable]:
             continue
         if caption_index is not None:
             prefix = lines[:caption_index]
-            if prefix and rows and len(prefix) >= 2 and any(any(ch.isdigit() for ch in cell) for cell in prefix):
+            if not rows:
+                # Caption sits above its table: remember it for the next rows.
+                pending_caption = lines[caption_index][:300]
+                continue
+            if prefix and len(prefix) >= 2 and any(any(ch.isdigit() for ch in cell) for cell in prefix):
                 # A trailing data row was merged into the caption paragraph.
                 rows.append(prefix)
             flush(lines[caption_index][:300])
@@ -423,6 +427,20 @@ class TableExtractor:
             allow_bare_percent = bool(
                 re.search(r"\b(?:value|percent|rate|%)", header_text)
             ) or len(header) == 1
+        # Subgroup results tables: "Subgroup | n | ORR" rows carry subgroup ORR
+        # percentages, which are emitted as SUBGROUP_ANALYSIS evidence.
+        header_cells = list(header or (table.rows[0] if table.rows else []))
+        if any("subgroup" in str(cell).lower() for cell in header_cells) or re.search(
+            r"\bsubgroup", table.caption or "", re.I
+        ):
+            if header is None and table.rows and any(
+                "subgroup" in str(cell).lower() for cell in table.rows[0]
+            ):
+                header = list(table.rows[0])
+                header_index = 0
+                start_row = 1
+            self._extract_subgroup_table(page, table, header or [], header_index)
+            return
         start_row = (header_index + 1) if header_index is not None else 0
         data_rows = table.rows[start_row:]
         if not data_rows:
@@ -550,6 +568,86 @@ class TableExtractor:
                     lower, upper = float(ci_match.group(1)), float(ci_match.group(2))
                     if 0.0 <= lower < upper <= 1000.0:
                         self._emit_ci(page, table, field_name, lower, upper, value_cell, dims_cells, hint)
+
+    # -- subgroup results tables -------------------------------------------
+    def _extract_subgroup_table(
+        self, page, table: RecoveredTable, header: Sequence[str], header_index: int | None
+    ) -> None:
+        rows = table.rows[(header_index + 1) if header_index is not None else 0 :]
+        if not rows:
+            return
+        label_col = 0
+        value_col: int | None = None
+        lowered_header = [str(cell).lower() for cell in header]
+        for index, cell in enumerate(lowered_header):
+            if "subgroup" in cell:
+                label_col = index
+            if value_col is None and re.search(r"\b(?:orr|response|rate|%|value)\b", cell):
+                value_col = index
+        hint = 0
+        for row in rows:
+            if len(row) < 2:
+                continue
+            label = normalize_ws(row[label_col]) if label_col < len(row) else ""
+            if not label:
+                continue
+            percent_cell = ""
+            if value_col is not None and value_col < len(row) and _PCT_CELL_RE.search(row[value_col]):
+                percent_cell = row[value_col]
+            if not percent_cell:
+                for index, cell in enumerate(row):
+                    if index != label_col and _PCT_CELL_RE.search(cell):
+                        percent_cell = cell
+                        break
+            match = _PCT_CELL_RE.search(percent_cell or "")
+            if not match:
+                continue
+            value = float(match.group(1))
+            if not (0.0 <= value <= 100.0):
+                continue
+            quote, hint = _quote_for_cells(
+                page.norm, primary_cell=label, required_cells=[percent_cell], hint=hint
+            )
+            if quote is None:
+                continue
+            draft = make_draft(
+                FieldName.SUBGROUP_ANALYSIS,
+                page=page.page_no,
+                quote=quote,
+                value_num=value,
+                value_text=f"{label}: {normalize_ws(percent_cell)}",
+                table=table.label,
+                confidence=0.85,
+                extractor="table",
+            )
+            self.collector.add(draft)
+        # Document-level canonical marker that subgroup *results* are present.
+        anchor = None
+        for needle in ("Results are presented below", "subgroup results", table.caption or ""):
+            if not needle:
+                continue
+            position = page.norm.find(normalize_ws(needle))
+            if position >= 0:
+                anchor = position
+                break
+        if anchor is None:
+            return
+        lo = max(0, anchor - 500)
+        hi = min(len(page.norm), anchor + len(normalize_ws(table.caption or "")) + 120)
+        quote = page.norm[lo:hi].strip()
+        if not quote:
+            return
+        self.collector.add(
+            make_draft(
+                FieldName.SUBGROUP_ANALYSIS,
+                page=page.page_no,
+                quote=quote,
+                value_text="subgroup results reported",
+                table=table.label,
+                confidence=0.8,
+                extractor="table",
+            )
+        )
 
     # -- emitters -----------------------------------------------------------
     def _emit_row(

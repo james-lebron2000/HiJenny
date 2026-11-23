@@ -167,6 +167,14 @@ def seed_project(*, with_findings: bool = True) -> dict:
                     quote="Serious adverse events occurred in 19.8% of patients.",
                     confidence=0.8,
                 ),
+                EvidenceDraft(
+                    field_name=FieldName.NCT_ID,
+                    category=EvidenceCategory.STUDY_DESIGN,
+                    value_text="NCT01234567",
+                    page=1,
+                    quote="NCT01234567",
+                    confidence=0.99,
+                ),
             ],
         )
         for ev in evidence:
@@ -303,7 +311,7 @@ def test_workbook_structure_and_styling(env):
     headers = [cell.value for cell in evidence_ws[1]]
     assert headers[:4] == ["Field", "Category", "Value", "Unit"]
     assert "Quote" in headers and "Page" in headers and "Verification" in headers
-    assert evidence_ws.max_row == 1 + 2  # two evidence rows
+    assert evidence_ws.max_row == 1 + 3  # ORR, SAE + NCT identifier metadata
     values = [evidence_ws.cell(row=row, column=3).value for row in (2, 3)]
     assert "42%" in values or "42" in values
 
@@ -388,7 +396,7 @@ def test_generate_project_outputs_markdown_docx_xlsx(env):
         path = Path(stats[key])
         assert path.is_file(), f"{key} missing: {path}"
         assert path.parent == export_dir, (key, path.parent, export_dir)
-    assert stats["evidence"] == 2
+    assert stats["evidence"] == 3
     assert stats["findings"] == 2
     assert stats["questions"] == 2
     assert stats["generated_at"]
@@ -405,9 +413,15 @@ def test_generate_project_outputs_markdown_docx_xlsx(env):
     assert "What the evidence supports" in markdown
     assert "Top open risks" in markdown
     assert "Evidence still missing" in markdown
-    # Evidence highlights carry citations.
+    # Evidence highlights: clinical importance order, citated, metadata skipped.
     assert "ORR 42%" in markdown
     assert "page 42" in markdown
+    assert markdown.index("**ORR 42%**") < markdown.index("**SAE 19.8%**")
+    assert "- **NCT ID" not in markdown and "- **NCT_ID" not in markdown
+    # Missing evidence is grouped, not a flat duplicated list.
+    assert "Package-level gaps (coverage)" in markdown
+    assert "Finding-specific clarification needs" in markdown
+    assert "reconciliation memo" in markdown
     # Findings are quoted verbatim with document/page citations.
     assert "ORR discrepancy between CSR and commercial deck" in markdown
     assert "ORR was 42.0% in the ITT population." in markdown
@@ -487,6 +501,7 @@ def test_generate_outputs_for_empty_project(env):
     assert "## 1. Decision Brief" in markdown
     assert "No open consistency or completeness risks have been generated yet." in markdown
     assert "No extracted evidence is available yet" in markdown
+    assert "No outstanding coverage gaps or finding-specific clarification needs" in markdown
     assert Path(stats["report_docx"]).is_file()
     workbook = load_workbook(stats["questions_xlsx"])
     assert workbook.sheetnames == EXPECTED_SHEETS

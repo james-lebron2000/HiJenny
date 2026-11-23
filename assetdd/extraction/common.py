@@ -762,15 +762,25 @@ class DocumentContext:
         population = nearest_population(segment.text, span)
         if population:
             population = normalize_population(population)
-        elif category == EvidenceCategory.CLINICAL_SAFETY:
-            if self.safety_population:
-                population = self.safety_population
-                provenance["population"] = {"fallback": "doc_level", "dim": "population", "source_page": 1,
-                                            "basis": "document declares a safety population"}
-        elif category in (EvidenceCategory.CLINICAL_EFFICACY, EvidenceCategory.PATIENT_BASELINE):
-            population, note = self.population_at(page_no, segment_index)
-            if population and note:
-                provenance["population"] = note
+        if category == EvidenceCategory.CLINICAL_SAFETY and population not in (None, "SAFETY"):
+            # AE/SAE rates are reported for the treated (safety) population; a
+            # stray efficacy-population mention in a flattened synopsis row must
+            # not relabel a safety denominator.
+            population = self.safety_population or None
+        if not population:
+            if category == EvidenceCategory.CLINICAL_SAFETY:
+                if self.safety_population:
+                    population = self.safety_population
+                    provenance["population"] = {
+                        "fallback": "doc_level",
+                        "dim": "population",
+                        "source_page": 1,
+                        "basis": "document declares a safety population",
+                    }
+            elif category in (EvidenceCategory.CLINICAL_EFFICACY, EvidenceCategory.PATIENT_BASELINE):
+                population, note = self.population_at(page_no, segment_index)
+                if population and note:
+                    provenance["population"] = note
 
         if design_like:
             population = None
@@ -793,7 +803,11 @@ class DocumentContext:
                 "basis": "unique data cutoff in document",
             }
 
-        method = None if design_like else detect_method(segment.text)
+        method = (
+            detect_method(segment.text)
+            if category == EvidenceCategory.CLINICAL_EFFICACY
+            else None
+        )
         if method:
             method = normalize_method(method) or method
         elif category == EvidenceCategory.CLINICAL_EFFICACY and self.method_default:

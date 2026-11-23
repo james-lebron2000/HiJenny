@@ -702,3 +702,141 @@ def test_sample_package_accessible_when_present():
     assert len(gt["finding_topics"]) >= 5
     check = verify_ground_truth_facts(SAMPLE_PACKAGE, gt["facts"])
     assert check["ok"], check["issues"][:3]
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for scoring-fairness fixes
+# ---------------------------------------------------------------------------
+
+
+def test_extraction_page_specific_facts_still_match_with_repeated_values():
+    """Repeated (field, document, value) on multiple pages must not collapse recall."""
+    facts = [
+        {"field_name": "data_cutoff", "document": "csr.pdf", "page": 1, "value_text": "2026-01-15"},
+        {"field_name": "data_cutoff", "document": "csr.pdf", "page": 9, "value_text": "2026-01-15"},
+        {"field_name": "orr", "document": "csr.pdf", "page": 11, "value_num": 42.0},
+    ]
+    predictions = [
+        _evidence("data_cutoff", "csr.pdf", 1, value_text="2026-01-15"),
+        _evidence("data_cutoff", "csr.pdf", 2, value_text="2026-01-15"),
+        _evidence("data_cutoff", "csr.pdf", 9, value_text="2026-01-15"),
+        _evidence("orr", "csr.pdf", 2, 42.0),
+        _evidence("orr", "csr.pdf", 11, 42.0),
+    ]
+    accuracy = metrics.extraction_field_accuracy(predictions, facts)
+    assert accuracy["matched"] == 3
+    assert accuracy["accuracy"] == 1.0
+
+
+def test_extraction_prf_field_scope_and_duplicate_collapse():
+    facts = [{"field_name": "orr", "document": "csr.pdf", "page": 11, "value_num": 42.0}]
+    predictions = [
+        _evidence("orr", "csr.pdf", 11, 42.0),
+        _evidence("orr", "csr.pdf", 11, 42.0),          # duplicate occurrence
+        _evidence("ci_lower", "csr.pdf", 11, 33.4),     # uncurated field
+        _evidence("sae", "csr.pdf", 16, 19.8),          # in curated field, uncurated fact
+    ]
+    strict = metrics.extraction_prf(predictions, facts)
+    assert strict["fp"] == 3
+    scoped = metrics.extraction_prf(
+        predictions, facts, field_scope=["orr"], collapse_duplicates=True
+    )
+    assert scoped["tp"] == 1
+    assert scoped["fp"] == 0  # duplicate collapsed, ci_lower out of scope
+    assert scoped["duplicate_predictions"] == 1
+
+
+def test_text_field_value_is_not_misparsed_as_number():
+    facts = [
+        {"field_name": "primary_endpoint", "document": "csr.pdf", "page": 4,
+         "value_text": "ORR per RECIST 1.1"}
+    ]
+    truncated = [
+        _evidence("primary_endpoint", "csr.pdf", 4, value_text="ORR per RECIST 1")
+    ]
+    result = metrics.extraction_field_accuracy(truncated, facts)
+    assert result["matched"] == 0  # truncated "RECIST 1" is a real extraction defect
+    assert result["value_mismatches"]
+
+
+def test_question_topic_hyphen_insensitive_and_consolidation_allowed():
+    questions = [
+        {
+            "question": "Please reconcile the ORR discrepancy and confirm the data cut-off date.",
+            "rationale": "x" * 60,
+            "owner": "Biostatistics",
+            "required_documents": ["CSR"],
+            "evidence_ids": ["e1"],
+            "dedup_key": "a",
+            "status": "draft",
+        }
+    ]
+    topics = [
+        {"topic_id": "q_orr", "keywords": ["ORR", "reconcile", "data cutoff", "analysis population"]},
+        {"topic_id": "q_ib", "keywords": ["cutoff", "updated", "latest data"]},
+    ]
+    result = metrics.question_quality(questions, topics)
+    coverage = result["topic_coverage"]
+    # "cut-off" must match keyword "cutoff"; one consolidated question may cover
+    # both topics (many-to-one is legitimate).
+    assert coverage["matched"] == 2
+    assert coverage["coverage"] == 1.0
+
+
+def test_coverage_best_match_prefers_exact_requirement_over_not_applicable():
+    predicted = [
+        {"dimension": "statistics", "rule_id": "x.not_applicable",
+         "requirement": "Multiplicity strategy / alpha control for primary endpoints",
+         "status": "not_applicable"},
+        {"dimension": "statistics", "rule_id": "statistics.multiplicity",
+         "requirement": "Multiplicity / alpha-control statement for the primary endpoints",
+         "status": "not_found"},
+    ]
+    expected = [
+        {"dimension": "statistics", "requirement": "multiplicity / alpha control",
+         "expected_status": "not_found"}
+    ]
+    result = metrics.coverage_accuracy(predicted, expected)
+    assert result["matched"] == 1
+    assert result["status_matches"] == 1
+    assert result["matches"][0]["rule_id"] == "statistics.multiplicity"
+
+
+def test_lifecycle_resolved_topic_never_raised_counts_as_correct():
+    # A topic expected "resolved" that was absent in v1 and absent in v2 is not a
+    # lifecycle regression (v1 recall is scored by the v1 scorecard separately).
+    gt_v1 = {
+        "finding_topics": [
+            {"topic_id": "t_never_raised", "finding_type": "evidence_gap", "keywords": ["alpha"]},
+        ],
+        "lifecycle": {"resolved_topics": ["t_never_raised"], "persisting_topics": [], "new_topics": []},
+    }
+    gt_v2 = {"finding_topics": [], "lifecycle": gt_v1["lifecycle"]}
+    documents = [{"document_id": "d1", "filename": "csr.pdf", "doc_type": "CSR"}]
+    empty = {"documents": documents, "findings": [], "questions": []}
+    lifecycle = _lifecycle_analysis(gt_v1, gt_v2, empty, empty)
+    row = lifecycle["per_topic"][0]
+    assert row["observed_transition"] == "absent"
+    assert row["correct"] is True
+    assert lifecycle["accuracy"] == 1.0
+
+
+def test_finding_field_mismatch_not_overridden_by_wording():
+    # A primary-endpoint finding mentions ORR in its explanation; it must not
+    # satisfy the ORR data-inconsistency topic (field comparison is authoritative
+    # when the finding exposes a field).
+    topics = [
+        {"topic_id": "t_orr", "finding_type": "data_inconsistency", "field_name": "orr"},
+    ]
+    findings = [
+        {
+            "finding_id": "f1",
+            "finding_type": "data_inconsistency",
+            "title": "Data inconsistency: primary endpoint definition differs across documents",
+            "explanation": "The primary endpoint is ORR per RECIST 1.1 in one source and ORR in another.",
+            "detail": {"field": "primary_endpoint"},
+            "status": "open",
+        }
+    ]
+    prf = metrics.finding_prf(findings, topics)
+    assert (prf["tp"], prf["fp"], prf["fn"]) == (0, 1, 1)

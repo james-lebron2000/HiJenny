@@ -173,8 +173,16 @@ def _detect_target_modality_mechanism(views: Sequence[DocumentView]) -> tuple[st
                     match = _MECHANISM_RE.search(norm)
                     if match:
                         mechanism = normalize_ws(match.group(1))
-                        # Drop modality prefixes that leaked into the phrase.
-                        mechanism = re.sub(r"^(?:oral|intravenous|subcutaneous)[,\s]+", "", mechanism, flags=re.I)
+                        # Drop verb/modality prefixes that leaked into the phrase.
+                        mechanism = re.sub(
+                            r"^(?:is|are|was|were)\s+(?:an?\s+)?", "", mechanism, flags=re.I
+                        )
+                        mechanism = re.sub(
+                            r"^(?:oral|intravenous|subcutaneous|potent|novel)[,\s]+",
+                            "",
+                            mechanism,
+                            flags=re.I,
+                        )
             if modality is None:
                 for pattern, canonical in _MODALITY_PATTERNS:
                     if pattern.search(norm):
@@ -402,9 +410,15 @@ def _trial_fields(entries: Iterable[tuple[dict, EvidenceDraft]]) -> dict:
         iso = normalize_date(cutoff.value_text) if cutoff.value_text else None
         if iso:
             out["data_cutoff"] = iso
-    primary = best(FieldName.PRIMARY_ENDPOINT)
-    if primary and primary.value_text:
-        out["primary_endpoint"] = primary.value_text
+    primary_candidates = by_field.get(FieldName.PRIMARY_ENDPOINT) or []
+    if primary_candidates:
+        primary_candidates = sorted(
+            primary_candidates,
+            key=lambda item: (item[0], 0 if " per " in (item[2].value_text or "") else 1, -(len(item[2].value_text or ""))),
+        )
+        chosen = primary_candidates[0][2]
+        if chosen.value_text:
+            out["primary_endpoint"] = chosen.value_text
     comparator = best(FieldName.COMPARATOR)
     if comparator and comparator.value_text:
         out["comparator"] = comparator.value_text

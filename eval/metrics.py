@@ -32,7 +32,7 @@ import random
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
-from assetdd.schemas import normalize_date, normalize_ws
+from assetdd.schemas import NUMERIC_FIELDS, normalize_date, normalize_ws
 
 METRIC_VERSION = "eval-1.0.0"
 DEFAULT_NUMERIC_TOLERANCE = 0.01
@@ -207,7 +207,13 @@ def _doc_tokens(record: Mapping[str, Any], doc_map: Mapping[str, Mapping[str, An
 
     for key in ("document", "filename", "document_type", "doc_type", "document_id"):
         add(record.get(key))
-    docs = record.get("documents") or record.get("_documents") or []
+    docs = (
+        record.get("documents")
+        or record.get("_documents")
+        or record.get("source_documents")
+        or record.get("_source_documents")
+        or []
+    )
     if isinstance(docs, (str, Mapping)):
         docs = [docs]
     for doc in docs:
@@ -269,8 +275,13 @@ def _value_matches(
     pred_num = predicted.get("value_num")
     exp_text = expected.get("value_text")
     pred_text = predicted.get("value_text")
-    exp_float = _to_float(exp_num, exp_text)
-    pred_float = _to_float(pred_num, pred_text)
+    numeric_field = (
+        _norm_text(expected.get("field_name") or predicted.get("field_name")) in NUMERIC_FIELDS
+        or exp_num is not None
+        or pred_num is not None
+    )
+    exp_float = _to_float(exp_num, exp_text) if numeric_field else None
+    pred_float = _to_float(pred_num, pred_text) if numeric_field else None
     detail: dict[str, Any] = {
         "expected": exp_float if exp_float is not None else exp_text,
         "predicted": pred_float if pred_float is not None else pred_text,
@@ -296,11 +307,19 @@ def _value_matches(
     # field are already matched, so containment / high token recall is safe and
     # avoids punishing wording differences in e.g. study design text.
     if len(exp_norm) >= 8 and len(pred_norm) >= 8:
-        if exp_norm in pred_norm or pred_norm in exp_norm:
-            detail["text_match"] = "containment"
-            return True, detail
         exp_tokens = set(_WORD_RE.findall(exp_norm))
         pred_tokens = set(_WORD_RE.findall(pred_norm))
+        # Token-set containment tolerates abbrev/extra words ("single-arm" vs
+        # "single-arm study") but not numeric truncation ("RECIST 1" vs
+        # "RECIST 1.1"), because 1 and 1.1 are different tokens.
+        if exp_tokens and pred_tokens:
+            shorter, longer = (
+                (exp_tokens, pred_tokens) if len(exp_tokens) <= len(pred_tokens)
+                else (pred_tokens, exp_tokens)
+            )
+            if shorter.issubset(longer):
+                detail["text_match"] = "token_subset"
+                return True, detail
         if exp_tokens and len(exp_tokens & pred_tokens) / len(exp_tokens) >= 0.8:
             detail["text_match"] = "token_recall>=0.8"
             return True, detail
@@ -547,6 +566,19 @@ def extraction_field_accuracy(
 # ---------------------------------------------------------------------------
 
 
+def _prediction_group_key(prediction: Mapping[str, Any]) -> tuple:
+    return (
+        _norm_text(prediction.get("field_name")),
+        _norm_doc_token(
+            prediction.get("document_id")
+            or prediction.get("filename")
+            or prediction.get("document_type")
+            or ""
+        ),
+        _value_key(prediction),
+    )
+
+
 def extraction_prf(
     predictions: Sequence[Mapping[str, Any]],
     expected_facts: Sequence[Mapping[str, Any]],
@@ -554,14 +586,28 @@ def extraction_prf(
     numeric_tolerance: float = DEFAULT_NUMERIC_TOLERANCE,
     field_tolerances: Mapping[str, float] | None = None,
     page_slack: int = DEFAULT_PAGE_SLACK,
+    field_scope: Iterable[str] | None = None,
+    collapse_duplicates: bool = False,
     example_limit: int = 10,
 ) -> dict:
     """Evidence-level precision / recall / F1 versus curated facts.
 
-    TP = expected fact matched by an evidence row; FP = evidence row not
-    matched (including duplicates of a matched row); FN = expected fact not
-    found. Also reports a per-field breakdown and duplicate-prediction count.
+    Matching is one-to-one on (field_name, document, page, value).  TP = expected
+    fact matched by an evidence row; FN = expected fact not found; FP = evidence
+    not matched to any fact.
+
+    Two package-level scoping options keep the metric fair without hiding errors:
+
+    * ``field_scope``: only predictions whose field appears in the curated fact
+      set can be FP.  Extraction of additional, uncurated fields is not
+      penalised (it is still reported via ``strict_precision`` when computed by
+      the caller).
+    * ``collapse_duplicates``: identical (field, document, value) predictions
+      count once and extra copies are not FP — used when the ground truth's
+      ``eval_notes`` says so.  Matching itself still uses every prediction so
+      page-specific facts can match.
     """
+    scope = {_norm_text(field) for field in (field_scope or []) if field}
     matched = _match_facts(
         expected_facts,
         predictions,
@@ -573,10 +619,41 @@ def extraction_prf(
     tp = len(matched["matches"])
     fn = len(matched["missed"])
     unmatched = matched["unmatched_predictions"]
-    fp = len(unmatched)
+    matched_indices = {match["predicted_index"] for match in matched["matches"]}
 
-    # Per-field accounting (single-pass; unmatched predictions are attributed
-    # to their own field).
+    def in_scope(index: int) -> bool:
+        if not scope:
+            return True
+        field = _norm_text(predictions[index].get("field_name") or predictions[index].get("field"))
+        return field in scope
+
+    duplicate_predictions = 0
+    if collapse_duplicates:
+        groups: dict[tuple, list[int]] = {}
+        for index, prediction in enumerate(predictions):
+            groups.setdefault(_prediction_group_key(prediction), []).append(index)
+        duplicate_predictions = len(predictions) - len(groups)
+        # A duplicate group is one prediction unit; it is FP only when no member
+        # matched a fact and its field is in scope.
+        fp = 0
+        for indices in groups.values():
+            if any(index in matched_indices for index in indices):
+                continue
+            if any(in_scope(index) for index in indices):
+                fp += 1
+    else:
+        unmatched_in_scope = [index for index in unmatched if in_scope(index)]
+        fp = len(unmatched_in_scope)
+        seen_dup: set[tuple] = set()
+        for index in unmatched_in_scope:
+            key = _prediction_group_key(predictions[index])
+            if key in seen_dup:
+                duplicate_predictions += 1
+            else:
+                seen_dup.add(key)
+
+    # Per-field accounting: matched/expected per field, FP from the scoped
+    # prediction units above (approximate attribution by field).
     field_stats: dict[str, dict] = {}
 
     def bucket(field: str) -> dict:
@@ -586,8 +663,16 @@ def extraction_prf(
         bucket(match["field_name"])["tp"] += 1
     for miss in matched["missed"]:
         bucket(miss["field_name"])["fn"] += 1
-    for j in unmatched:
-        field = str(predictions[j].get("field_name") or predictions[j].get("field") or "").lower()
+    counted_units: set[tuple] = set()
+    for index in unmatched:
+        if not in_scope(index):
+            continue
+        field = _norm_text(predictions[index].get("field_name") or predictions[index].get("field"))
+        if collapse_duplicates:
+            key = _prediction_group_key(predictions[index])
+            if key in counted_units:
+                continue
+            counted_units.add(key)
         bucket(field)["fp"] += 1
     per_field = {}
     for field in sorted(field_stats):
@@ -602,28 +687,14 @@ def extraction_prf(
             "f1": prf["f1"],
         }
 
-    # Count exact duplicates among predictions (same field/doc/page/value).
-    seen: set[tuple] = set()
-    duplicates = 0
-    for pred in predictions:
-        key = (
-            str(pred.get("field_name") or ""),
-            str(pred.get("document_id") or pred.get("filename") or ""),
-            str(pred.get("page")),
-            _round(_to_float(pred.get("value_num"), pred.get("value_text")) or 0.0, 6),
-        )
-        if key in seen:
-            duplicates += 1
-        else:
-            seen.add(key)
-
     result = _prf(tp, fp, fn)
     result.update(
         {
             "expected": len(expected_facts),
             "predictions": len(predictions),
+            "field_scope": sorted(scope) if scope else None,
             "per_field": per_field,
-            "duplicate_predictions": duplicates,
+            "duplicate_predictions": duplicate_predictions,
             "missing_facts": matched["missed"][:example_limit],
             "false_positive_examples": [
                 {
@@ -634,12 +705,15 @@ def extraction_prf(
                     if predictions[j].get("value_num") is not None
                     else predictions[j].get("value_text"),
                 }
-                for j in unmatched[:example_limit]
-            ],
+                for j in unmatched
+                if in_scope(j)
+            ][:example_limit],
             "config": {
                 "numeric_tolerance": numeric_tolerance,
                 "field_tolerances": dict(field_tolerances or {}),
                 "page_slack": page_slack,
+                "collapse_duplicates": bool(collapse_duplicates),
+                "field_scope_applied": bool(scope),
             },
         }
     )
@@ -651,13 +725,28 @@ def extraction_prf(
 # ---------------------------------------------------------------------------
 
 
+_SEP_RE = re.compile(r"[-_/\s]+")
+
+
+def _compact(text: str) -> str:
+    """Remove hyphens/underscores/slashes/spaces: 'cut-off' -> 'cutoff'."""
+    return _SEP_RE.sub("", text)
+
+
 def _keyword_hits(keywords: Iterable[str], text: str, fields: set[str]) -> list[str]:
     hits: list[str] = []
+    compact_text = _compact(text)
+    compact_fields = {_compact(field) for field in fields}
     for raw in keywords or []:
         kw = _norm_text(raw)
         if not kw:
             continue
         if kw in text or kw in fields:
+            hits.append(str(raw))
+            continue
+        # Separator-insensitive substring ("cut-off" vs "cutoff").
+        compact_kw = _compact(kw)
+        if compact_kw and (compact_kw in compact_text or compact_kw in compact_fields):
             hits.append(str(raw))
             continue
         # token-level tolerance (e.g. "ORR" vs "overall response rate")
@@ -680,11 +769,33 @@ def _finding_fields(finding: Mapping[str, Any]) -> set[str]:
         elif value is not None:
             values.add(_norm_text(value))
 
-    for key in ("field_name", "field", "fields", "field_names", "dimension", "rule_id", "rule"):
+    for key in (
+        "field_name",
+        "field",
+        "fields",
+        "field_names",
+        "dimension",
+        "rule_id",
+        "rule",
+        "_evidence_fields",
+        "missing_field",
+        "missing_fields",
+    ):
         add(finding.get(key))
     detail = finding.get("detail") or {}
     if isinstance(detail, Mapping):
-        for key in ("field", "field_name", "fields", "field_names", "dimension", "rule_id", "rule"):
+        for key in (
+            "field",
+            "field_name",
+            "fields",
+            "field_names",
+            "dimension",
+            "rule_id",
+            "rule",
+            "requirement_id",
+            "missing_field",
+            "missing_fields",
+        ):
             add(detail.get(key))
         add(detail.get("values"))
     return {v for v in values if v}
@@ -763,11 +874,12 @@ def _topic_matches_finding(
     if hits:
         reasons["keyword_hits"] = hits
 
+    field_in_text: list[str] = []
     if structured:
         reasons["field_match"] = structured
     elif topic_fields and any(tok in text for tok in topic_fields):
-        structured = sorted(tok for tok in topic_fields if tok in text)
-        reasons["field_in_text"] = structured
+        field_in_text = sorted(tok for tok in topic_fields if tok in text)
+        reasons["field_in_text"] = field_in_text
 
     # Document-pair check: only enforced when both sides expose documents.
     topic_docs = _topic_document_tokens(topic)
@@ -789,9 +901,19 @@ def _topic_matches_finding(
         return False, {**reasons, "reason": "document_mismatch"}
 
     if topic_fields:
-        matched = bool(structured) or bool(hits)
-        if not matched:
-            return False, {**reasons, "reason": "subject_mismatch"}
+        field_match = bool(structured) or (not finding_fields and bool(field_in_text))
+        if not field_match and finding_fields:
+            # A finding that exposes structured fields but on a *different*
+            # subject must not be merged into this topic just because the topic
+            # wording appears in the explanation (e.g. a primary-endpoint finding
+            # mentioning ORR must not satisfy the ORR data-inconsistency topic).
+            return False, {**reasons, "reason": "field_mismatch"}
+        if not field_match:
+            # Finding has no structured field metadata: wording is the only
+            # signal available, so accept a keyword hit.
+            if not hits:
+                return False, {**reasons, "reason": "subject_mismatch"}
+            reasons["keyword_fallback"] = True
         return True, reasons
 
     if len(hits) >= max(1, int(keyword_min_matches)):
@@ -845,6 +967,15 @@ def match_finding_topics(
         "matches": matches,
         "unmatched_topics": unmatched_topics,
         "unmatched_finding_indices": [i for i in range(len(predicted_findings)) if i not in used],
+    }
+
+
+def finding_signature(finding: Mapping[str, Any]) -> dict:
+    """Stable comparison signature used to detect duplicate findings."""
+    return {
+        "finding_type": str(finding.get("finding_type") or ""),
+        "fields": sorted(_finding_fields(finding)),
+        "documents": sorted(_doc_tokens(finding)),
     }
 
 
@@ -1068,6 +1199,7 @@ def citation_accuracy(
         check("questions", question)
 
     total_refs = verified + len(failures)
+    entities_with_evidence = entities - entities_without_evidence
     return {
         "refs": total_refs,
         "verified": verified,
@@ -1076,6 +1208,9 @@ def citation_accuracy(
         "accuracy_ci": wilson_ci(verified, total_refs),
         "entities": entities,
         "entities_without_evidence": entities_without_evidence,
+        "entities_with_evidence": entities_with_evidence,
+        "entity_grounding_share": _ratio(entities_with_evidence, entities),
+        "entity_grounding_ci": wilson_ci(entities_with_evidence, entities),
         "entities_with_failed_citation": entity_failures,
         "entity_accuracy": _ratio(entities - entity_failures, entities),
         "by_entity": by_entity,
@@ -1142,22 +1277,44 @@ def question_quality(
 
     topic_results: dict | None = None
     if expected_topics is not None:
-        matched: list[dict] = []
-        missed: list[dict] = []
+        # Consolidated questions are legitimate, so one question may cover
+        # several related topics.  A topic must still match enough of its
+        # keywords to avoid a generic word ("reconcile", "population") covering
+        # everything: topics with >=4 keywords need 2 hits, otherwise 1.
         texts = norm_texts
+        matched: list[dict] = []
         for ti, topic in enumerate(expected_topics):
             topic_id = topic.get("topic_id") or topic.get("id") or f"question_topic_{ti}"
             keywords = [str(k) for k in (topic.get("keywords") or [])]
-            hit_question = None
-            for qi, q in enumerate(questions):
-                hits = _keyword_hits(keywords, texts[qi], _finding_fields(q))
-                if hits or not keywords:
-                    hit_question = {"question_index": qi, "keyword_hits": hits}
-                    break
-            if hit_question:
-                matched.append({"topic_id": topic_id, **hit_question})
-            else:
-                missed.append({"topic_id": topic_id, "keywords": keywords})
+            min_hits = 2 if len(keywords) >= 4 else 1
+            best: tuple[float, int, list[str]] | None = None
+            for qi, question in enumerate(questions):
+                hits = _keyword_hits(keywords, texts[qi], _finding_fields(question))
+                if len(hits) < min_hits:
+                    continue
+                score = len(hits) / max(1, len(keywords))
+                if best is None or score > best[0]:
+                    best = (score, qi, hits)
+            if best is not None:
+                _, qi, hits = best
+                matched.append(
+                    {
+                        "topic_id": topic_id,
+                        "question_index": qi,
+                        "question": str(questions[qi].get("question") or "")[:200],
+                        "keyword_hits": hits,
+                        "min_keyword_hits": min_hits,
+                    }
+                )
+        matched_ids = {m["topic_id"] for m in matched}
+        missed = [
+            {
+                "topic_id": topic.get("topic_id") or topic.get("id") or f"question_topic_{ti}",
+                "keywords": [str(k) for k in (topic.get("keywords") or [])],
+            }
+            for ti, topic in enumerate(expected_topics)
+            if (topic.get("topic_id") or topic.get("id") or f"question_topic_{ti}") not in matched_ids
+        ]
         topic_results = {
             "expected_topics": len(expected_topics),
             "matched": len(matched),
@@ -1165,6 +1322,11 @@ def question_quality(
             "coverage_ci": wilson_ci(len(matched), len(expected_topics)),
             "matched_topics": matched,
             "missed_topics": missed,
+            "questions_referenced": sorted({m["question_index"] for m in matched}),
+            "note": (
+                "Many-to-one allowed: one consolidated question may cover several "
+                "related topics. Topics with >=4 keywords require >=2 keyword hits."
+            ),
         }
 
     return {
@@ -1205,8 +1367,12 @@ _STOPWORDS = {
 }
 
 
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
 def _tokens(text: Any) -> set[str]:
-    return {t for t in _WORD_RE.findall(_norm_text(text)) if t not in _STOPWORDS}
+    # Split hyphens/underscores so "alpha-control" and "alpha control" compare equal.
+    return {t for t in _TOKEN_RE.findall(_norm_text(text)) if t not in _STOPWORDS}
 
 
 def _requirement_overlap(expected: str, predicted: str) -> float:
@@ -1237,6 +1403,7 @@ def coverage_accuracy(
         exp_dim = _norm_text(expected.get("dimension"))
         exp_req = str(expected.get("requirement") or "")
         exp_status = _norm_text(expected.get("status") or expected.get("expected_status"))
+        candidates: list[tuple[float, int, dict]] = []
         for pi, predicted in enumerate(predicted_coverage):
             if pi in used:
                 continue
@@ -1247,21 +1414,30 @@ def coverage_accuracy(
             overlap = _requirement_overlap(exp_req, pred_req)
             if exp_req and overlap < requirement_overlap:
                 continue
-            status_ok = (not exp_status) or _norm_text(predicted.get("status")) == exp_status
-            used.add(pi)
-            matches.append(
-                {
-                    "expected_index": ei,
-                    "predicted_index": pi,
-                    "rule_id": predicted.get("rule_id"),
-                    "dimension": predicted.get("dimension"),
-                    "requirement_overlap": _round(overlap),
-                    "expected_status": exp_status or None,
-                    "predicted_status": predicted.get("status"),
-                    "status_ok": status_ok,
-                }
-            )
-            break
+            # Prefer the best textual match; on a tie, prefer a concrete status
+            # over not_applicable (a not_applicable item can never be the answer
+            # to a requirement the package was expected to contain).
+            tie = 0 if _norm_text(predicted.get("status")) == "not_applicable" else 1
+            candidates.append((overlap, tie, pi, predicted))
+        if not candidates:
+            continue
+        candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        _, _, pi, predicted = candidates[0]
+        overlap = candidates[0][0]
+        status_ok = (not exp_status) or _norm_text(predicted.get("status")) == exp_status
+        used.add(pi)
+        matches.append(
+            {
+                "expected_index": ei,
+                "predicted_index": pi,
+                "rule_id": predicted.get("rule_id"),
+                "dimension": predicted.get("dimension"),
+                "requirement_overlap": _round(overlap),
+                "expected_status": exp_status or None,
+                "predicted_status": predicted.get("status"),
+                "status_ok": status_ok,
+            }
+        )
     matched = len(matches)
     status_ok = sum(1 for m in matches if m["status_ok"])
     missed = [
@@ -1297,6 +1473,7 @@ def coverage_accuracy(
         "expected": len(expected_coverage),
         "predicted": len(predicted_coverage),
         "matched": matched,
+        "matches": matches,
         "status_matches": status_ok,
         "accuracy": _ratio(status_ok, len(expected_coverage)),
         "accuracy_ci": wilson_ci(status_ok, len(expected_coverage)),
@@ -1370,6 +1547,7 @@ __all__ = [
     "extraction_field_accuracy",
     "extraction_prf",
     "finding_prf",
+    "finding_signature",
     "match_finding_topics",
     "prepare_extraction_predictions",
     "question_quality",

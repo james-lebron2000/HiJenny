@@ -44,6 +44,56 @@ def extract_document(context: DocumentContext) -> list[EvidenceDraft]:
     return drafts.drafts()
 
 
+def _dim_score(draft: EvidenceDraft) -> int:
+    return sum(
+        1
+        for value in (
+            draft.population,
+            draft.arm,
+            draft.data_cutoff,
+            draft.endpoint_def,
+            draft.assessment_method,
+        )
+        if value
+    )
+
+
+def _dedupe_same_page(drafts: Sequence[EvidenceDraft]) -> list[EvidenceDraft]:
+    """One row per (field, page, value): keep the richest provenance variant.
+
+    The synopsis page can surface the same fact twice (prose sentence and a
+    flattened table row); the variant with more non-null dimensions wins.
+    Distinct arms are never collapsed.
+    """
+    groups: dict[tuple, list[EvidenceDraft]] = {}
+    order: list[tuple] = []
+    for draft in drafts:
+        number = None if draft.value_num is None else round(float(draft.value_num), 6)
+        key = (
+            str(draft.field_name),
+            draft.page,
+            number,
+            normalize_ws(draft.value_text or "").lower(),
+        )
+        if key not in groups:
+            groups[key] = [draft]
+            order.append(key)
+        else:
+            groups[key].append(draft)
+    out: list[EvidenceDraft] = []
+    for key in order:
+        group = groups[key]
+        if len(group) == 1:
+            out.append(group[0])
+            continue
+        arms = {draft.arm for draft in group if draft.arm}
+        if len(arms) > 1:
+            out.extend(group)
+            continue
+        out.append(max(group, key=lambda draft: (_dim_score(draft), draft.extractor == "table", draft.confidence)))
+    return out
+
+
 def _combine(*draft_lists: Sequence[EvidenceDraft]) -> list[EvidenceDraft]:
     collector = DraftCollector()
     for drafts in draft_lists:
@@ -145,6 +195,7 @@ def extract_project(session: Session, project_id: str, force: bool = False) -> d
                 stats["llm_errors"] += 1
                 stats["llm_fallback"] = True
 
+        drafts = _dedupe_same_page(drafts)
         page_norm = {page.page_no: page.norm for page in context.pages}
         valid: list[EvidenceDraft] = []
         for draft in drafts:

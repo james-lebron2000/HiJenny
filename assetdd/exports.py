@@ -1012,23 +1012,27 @@ DECISION_DISCLAIMER = (
 )
 
 
-# Headline fields worth surfacing in the one-page Decision Brief, in priority order.
+# Clinical importance ordering for the one-page Decision Brief, per product spec:
+# ORR > DCR > PFS > OS > DoR > sample size > grade>=3 AE > SAE > any-AE.
 HIGHLIGHT_FIELDS = [
-    "orr", "dcr", "pfs", "os", "hr", "dor", "cr", "pr", "any_ae", "grade3_ae",
-    "sae", "treatment_related_death", "discontinuation", "n_itt", "n_safety",
-    "sample_size", "age_median", "male_pct", "phase", "modality", "target",
-    "mechanism", "indication", "design",
+    "orr", "dcr", "pfs", "os", "dor",
+    "n_itt", "sample_size", "n_safety",
+    "grade3_ae", "sae", "any_ae",
+    # secondary clinical read-outs (only when nothing above is available)
+    "hr", "cr", "pr", "treatment_related_death", "discontinuation",
+    "age_median", "male_pct",
 ]
-# Metadata fields are not evidence highlights (they carry no efficacy/safety signal).
+# Identifier / design / statistics metadata: never used as evidence highlights.
 HIGHLIGHT_SKIP = {
-    "nct_id", "data_cutoff", "response_criteria", "arms", "randomization",
-    "blinding", "sap_version", "multiplicity", "missing_data_method",
-    "subgroup_analysis", "protocol_deviation", "audit_summary", "follow_up",
-    "endpoint_def", "trial_key",
+    "nct_id", "trial_key", "phase", "indication", "asset_name", "design",
+    "arms", "randomization", "blinding", "modality", "target", "mechanism",
+    "data_cutoff", "response_criteria", "endpoint_def", "sap_version",
+    "multiplicity", "missing_data_method", "subgroup_analysis",
+    "protocol_deviation", "audit_summary", "follow_up",
 }
 
 
-def evidence_support_highlights(data: dict, limit: int = 3) -> list[dict]:
+def evidence_support_highlights(data: dict, limit: int = 4) -> list[dict]:
     """2-3 distinct, best-supported evidence items (verified first, then confidence).
 
     Headline efficacy/safety fields are preferred; pure metadata fields (NCT id,
@@ -1158,17 +1162,47 @@ def decision_brief_data(data: dict) -> dict:
         for question in (data.get("questions") or [])[:5]
     ]
 
-    missing: list[str] = []
-    for item in coverage_gaps(data)[:8]:
-        missing.append(
-            f"**{_txt(item.get('dimension'))}** — {_txt(item.get('requirement'))} "
+    # Package-level gaps (from coverage analysis) vs finding-specific
+    # clarification needs; identical strings are de-duplicated.
+    missing_coverage: list[str] = []
+    seen_coverage: set[str] = set()
+    for item in coverage_gaps(data)[:10]:
+        dimension = _txt(item.get("dimension")) or "General"
+        requirement = _txt(item.get("requirement"))
+        key = f"{dimension}|{requirement}".lower()
+        if key in seen_coverage:
+            continue
+        seen_coverage.add(key)
+        missing_coverage.append(
+            f"**{dimension}** — {requirement} "
             f"(coverage: {_txt(item.get('status'))}, priority: {_txt(item.get('priority'))})"
         )
+
+    missing_findings: list[dict] = []
+    seen_missing: set[str] = set()
     for finding in data.get("findings") or []:
-        for gap in finding.get("missing_information") or []:
-            missing.append(f"**Missing information** — {_txt(gap)}")
-    seen: set[str] = set()
-    missing = [item for item in missing if not (item in seen or seen.add(item))]
+        items: list[str] = []
+        for raw in finding.get("missing_information") or []:
+            text = _txt(raw).strip()
+            if not text:
+                continue
+            key = text.lower()
+            if key in seen_missing:
+                continue
+            seen_missing.add(key)
+            items.append(text)
+            if len(items) >= 3:
+                break
+        if items:
+            missing_findings.append(
+                {
+                    "title": _txt(finding.get("title")),
+                    "severity": _txt(finding.get("severity")),
+                    "items": items,
+                }
+            )
+        if len(missing_findings) >= 6:
+            break
 
     return {
         "project_id": project_id,
@@ -1176,7 +1210,8 @@ def decision_brief_data(data: dict) -> dict:
         "highlights": highlights,
         "risks": risks,
         "questions": questions,
-        "missing": missing,
+        "missing_coverage": missing_coverage,
+        "missing_findings": missing_findings,
         "disclaimer": DECISION_DISCLAIMER,
     }
 
@@ -1269,12 +1304,26 @@ def render_markdown_report(data: dict) -> str:
     add("")
     add("### Evidence still missing")
     add("")
-    if brief["missing"]:
-        for item in brief["missing"]:
-            add(f"- {item}")
+    if brief["missing_coverage"] or brief["missing_findings"]:
+        if brief["missing_coverage"]:
+            add("**Package-level gaps (coverage)**")
+            add("")
+            for item in brief["missing_coverage"]:
+                add(f"- {item}")
+            add("")
+        if brief["missing_findings"]:
+            add("**Finding-specific clarification needs**")
+            add("")
+            for group in brief["missing_findings"]:
+                add(
+                    f"- **{_md_escape(group['title'])}** "
+                    f"({_md_escape(group['severity'])} severity) — "
+                    + "; ".join(_md_escape(item) for item in group["items"])
+                )
+            add("")
     else:
-        add("_No outstanding coverage gaps were flagged for the supplied package._")
-    add("")
+        add("_No outstanding coverage gaps or finding-specific clarification needs were flagged for the supplied package._")
+        add("")
     add("### Decision status")
     add("")
     add(f"**{brief['disclaimer']}**")
@@ -1795,13 +1844,32 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     else:
         doc.add_paragraph("No seller questions have been generated yet.")
     doc.add_heading("Evidence still missing", level=2)
-    if brief["missing"]:
-        for item in brief["missing"]:
-            paragraph = doc.add_paragraph(style="List Bullet")
-            run = paragraph.add_run(_txt(item).replace("**", ""))
-            run.font.size = Pt(8.5)
+    if brief["missing_coverage"] or brief["missing_findings"]:
+        if brief["missing_coverage"]:
+            lead_paragraph = doc.add_paragraph()
+            run = lead_paragraph.add_run("Package-level gaps (coverage)")
+            run.bold = True
+            run.font.size = Pt(9)
+            for item in brief["missing_coverage"]:
+                paragraph = doc.add_paragraph(style="List Bullet")
+                run = paragraph.add_run(_txt(item).replace("**", ""))
+                run.font.size = Pt(8.5)
+        if brief["missing_findings"]:
+            lead_paragraph = doc.add_paragraph()
+            run = lead_paragraph.add_run("Finding-specific clarification needs")
+            run.bold = True
+            run.font.size = Pt(9)
+            for group in brief["missing_findings"]:
+                paragraph = doc.add_paragraph(style="List Bullet")
+                run = paragraph.add_run(
+                    f"{group['title']} ({group['severity']} severity): " + "; ".join(group["items"])
+                )
+                run.font.size = Pt(8.5)
     else:
-        doc.add_paragraph("No outstanding coverage gaps were flagged for the supplied package.")
+        doc.add_paragraph(
+            "No outstanding coverage gaps or finding-specific clarification needs were flagged "
+            "for the supplied package."
+        )
     doc.add_heading("Decision status", level=2)
     decision_paragraph = doc.add_paragraph()
     run = decision_paragraph.add_run(brief["disclaimer"])
