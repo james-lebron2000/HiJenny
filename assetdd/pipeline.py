@@ -170,12 +170,12 @@ def wait_for_run(run_id: str, timeout: float = 600.0) -> dict | None:
 
 def progress(run: dict) -> dict:
     """UI-friendly progress summary for a run row."""
-    done = sum(
-        1
-        for stage in STAGES
-        if isinstance(run.get("stats", {}).get(f"stage_{stage.lower()}", {}), dict)
-        and run["stats"][f"stage_{stage.lower()}"].get("state") == "done"
-    )
+    done = 0
+    stats = run.get("stats") or {}
+    for stage in STAGES:
+        info = stats.get(f"stage_{stage.lower()}") or {}
+        if isinstance(info, dict) and info.get("state") == "done":
+            done += 1
     return {
         "run_id": run["run_id"],
         "state": run["state"],

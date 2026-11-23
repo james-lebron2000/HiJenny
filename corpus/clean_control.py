@@ -196,6 +196,7 @@ def build_clean_package(dest_dir: str | Path) -> dict:
         "lifecycle": {},
         "injection": {},
         "expect_no_findings": True,
+        "expected_completeness_findings": True,
         "eval_notes": {
             "duplicates": "Identical (field_name, document, value) predictions count once.",
             "ignore_documents_for_fact_scoring": ["Injection_Fixture_IB.pdf"],

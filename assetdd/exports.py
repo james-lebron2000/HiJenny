@@ -27,6 +27,22 @@ SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
 PRIORITY_ORDER = ["critical", "high", "medium", "low"]
 COVERAGE_ORDER = ["not_found", "partial", "not_reviewed", "sufficient", "not_applicable"]
 
+# Within one severity tier, order risks by category importance (Decision Brief).
+FINDING_TYPE_PRIORITY = [
+    "data_inconsistency",
+    "technical_concern",
+    "evidence_gap",
+    "incomplete_evidence",
+    "definition_difference",
+    "comparability_unclear",
+    "version_difference",
+]
+
+# Findings that count towards the current risk profile.  Resolved/dismissed rows
+# are audit history and must never inflate headline counts or "open risks".
+ACTIVE_FINDING_STATUSES = {"open", "confirmed", "needs_review"}
+INACTIVE_FINDING_STATUSES = {"resolved", "dismissed"}
+
 CATEGORY_ORDER = [
     "study_design",
     "clinical_efficacy",
@@ -161,6 +177,18 @@ def _joined(value: Any, sep: str = "; ") -> str:
     return _txt(value)
 
 
+def align_row(row: Iterable[Any] | None, count: int, missing: str = DEFAULT_DASH) -> list[str]:
+    """Return exactly ``count`` non-empty string cells, padding/truncating as needed.
+
+    Keeps table headers and data rows aligned (Asset Profile regression guard) and
+    renders missing values as an em dash.
+    """
+    values = [_txt(value) for value in list(row or [])[:count]]
+    while len(values) < count:
+        values.append(missing)
+    return [value if value not in ("", None) else missing for value in values]
+
+
 def truncate(text: Any, limit: int = 400) -> str:
     text = _txt(text).replace("\n", " ").strip()
     if len(text) <= limit:
@@ -198,11 +226,60 @@ def _rank(value: str | None, order: Sequence[str]) -> int:
         return len(order)
 
 
+def is_active_finding(finding: dict) -> bool:
+    """True unless the finding is resolved or dismissed (history rows)."""
+    return _txt(finding.get("status") or "open").lower() not in INACTIVE_FINDING_STATUSES
+
+
+def split_findings(rows: Iterable[dict]) -> tuple[list[dict], list[dict]]:
+    """Split findings into (active, history) lists."""
+    active: list[dict] = []
+    history: list[dict] = []
+    for finding in rows:
+        (active if is_active_finding(finding) else history).append(finding)
+    return active, history
+
+
+def finding_counts(data: dict) -> dict[str, int]:
+    """Counts used in every headline number: active findings vs history."""
+    active = data.get("findings") or []
+    history = data.get("findings_history") or []
+    resolved = sum(1 for f in history if _txt(f.get("status")) == "resolved")
+    dismissed = sum(1 for f in history if _txt(f.get("status")) == "dismissed")
+    return {
+        "active": len(active),
+        "history": len(history),
+        "resolved": resolved,
+        "dismissed": dismissed,
+        "critical": sum(1 for f in active if _txt(f.get("severity")) == "critical"),
+        "high": sum(1 for f in active if _txt(f.get("severity")) == "high"),
+    }
+
+
+def _plural(count: int, singular: str, plural_form: str | None = None) -> str:
+    return singular if count == 1 else (plural_form or singular + "s")
+
+
+def findings_count_text(data: dict) -> str:
+    """e.g. ``11 active findings (5 resolved)`` — never includes history in the headline."""
+    counts = finding_counts(data)
+    text = f"{counts['active']} active {_plural(counts['active'], 'finding')}"
+    history_bits = []
+    if counts["resolved"]:
+        history_bits.append(f"{counts['resolved']} resolved")
+    if counts["dismissed"]:
+        history_bits.append(f"{counts['dismissed']} dismissed")
+    if history_bits:
+        text += " (" + ", ".join(history_bits) + ")"
+    return text
+
+
 def sort_findings(rows: Iterable[dict]) -> list[dict]:
     return sorted(
         rows,
         key=lambda r: (
             _rank(r.get("severity"), SEVERITY_ORDER),
+            _rank(r.get("finding_type"), FINDING_TYPE_PRIORITY),
             _txt(r.get("created_at")),
             _txt(r.get("finding_id")),
         ),
@@ -261,7 +338,8 @@ def collect_export_data(session, project_id: str) -> dict:
     assets = store.list_assets(session, project_id)
     trials = store.list_trials(session, project_id)
     evidence = store.get_evidence(session, project_id, limit=10000)
-    findings = store.list_findings(session, project_id)
+    findings_all = store.list_findings(session, project_id)
+    findings, findings_history = split_findings(findings_all)
     questions = store.list_questions(session, project_id)
     coverage = store.list_coverage(session, project_id)
     stats = store.project_stats(session, project_id)
@@ -287,6 +365,7 @@ def collect_export_data(session, project_id: str) -> dict:
         "trials": trials,
         "evidence": sort_evidence(evidence),
         "findings": sort_findings(findings),
+        "findings_history": sort_findings(findings_history),
         "questions": sort_questions(questions),
         "coverage": sort_coverage(coverage),
         "runs": runs,
@@ -298,6 +377,12 @@ def collect_export_data(session, project_id: str) -> dict:
         "priority_counts": _count_by(questions, "priority", PRIORITY_ORDER),
         "coverage_counts": _count_by(coverage, "status", COVERAGE_ORDER),
         "finding_type_counts": _count_by(findings, "finding_type"),
+        "finding_counts": {
+            "active": len(findings),
+            "history": len(findings_history),
+            "resolved": sum(1 for f in findings_history if _txt(f.get("status")) == "resolved"),
+            "dismissed": sum(1 for f in findings_history if _txt(f.get("status")) == "dismissed"),
+        },
     }
 
 
@@ -559,6 +644,8 @@ def _sheet_executive_summary(wb, data: dict) -> None:
     docs = data.get("documents") or []
     evidence = data.get("evidence") or []
     findings = data.get("findings") or []
+    findings_history = data.get("findings_history") or []
+    counts = finding_counts(data)
     questions = data.get("questions") or []
 
     navy_fill = PatternFill("solid", fgColor=NAVY)
@@ -619,7 +706,8 @@ def _sheet_executive_summary(wb, data: dict) -> None:
         ("Documents (all versions)", stats.get("documents_all", len(docs))),
         ("Pages parsed", stats.get("pages", 0)),
         ("Evidence items", stats.get("evidence", len(evidence))),
-        ("Findings", stats.get("findings", len(findings))),
+        ("Active findings", counts["active"]),
+        ("Resolved findings (history)", counts["history"]),
         ("Questions", stats.get("questions", len(questions))),
         ("Coverage checks", stats.get("coverage", 0)),
         ("Assets", len(data.get("assets") or [])),
@@ -686,7 +774,18 @@ def _sheet_executive_summary(wb, data: dict) -> None:
             b.alignment = Alignment(vertical="top", wrap_text=True)
             row += 1
     else:
-        row = kv(row, "Findings", "No findings generated yet")
+        row = kv(row, "Findings", "No active findings")
+
+    row += 1
+    row = title_row(row, "RESOLVED FINDINGS (HISTORY)")
+    row = kv(row, "History rows (not in risk counts)", counts["history"])
+    if findings_history:
+        for finding in findings_history[:10]:
+            status = _txt(finding.get("status"))
+            label = f"{_txt(finding.get('severity')).upper()} · {status}"
+            row = kv(row, label, _txt(finding.get("title")))
+    else:
+        row = kv(row, "History", "No resolved or dismissed findings")
 
     row += 1
     row = title_row(row, "DOCUMENT INVENTORY")
@@ -704,11 +803,12 @@ def _sheet_executive_summary(wb, data: dict) -> None:
 def _sheet_asset_profile(wb, data: dict) -> None:
     widths = {1: 24, 2: 16, 3: 18, 4: 32, 5: 22, 6: 10, 7: 30, 8: 14, 9: 28,
               10: 18, 11: 30, 12: 12, 13: 14, 14: 28}
+    rows = [align_row(row, len(ASSET_PROFILE_HEADERS)) for row in asset_profile_rows(data)]
     _table_sheet(
         wb,
         "Asset Profile",
         ASSET_PROFILE_HEADERS,
-        asset_profile_rows(data),
+        rows,
         widths,
         tab_color="2E75B6",
         wrap_cols=(4, 7, 9, 11, 14),
@@ -905,6 +1005,7 @@ def build_questions_workbook(
             "trials": [],
             "evidence": [],
             "findings": [],
+            "findings_history": [],
             "questions": list(rows or []),
             "coverage": [],
             "generated_at": _now(),
@@ -1032,6 +1133,25 @@ HIGHLIGHT_SKIP = {
 }
 
 
+# Narrative sources beat data listings/tables for Decision Brief citations.
+SOURCE_TYPE_PRIORITY = {
+    "CSR": 0, "SAP": 1, "IB": 2, "SAFETY": 3, "PROTOCOL": 4, "DISPOSITION": 5,
+    "REGULATORY": 6, "PRECLINICAL": 7, "CMC": 8, "PATENT": 9, "COMMERCIAL": 10,
+    "OTHER": 11,
+}
+
+
+def source_document_rank(ev: dict) -> int:
+    """Rank candidate citation sources: CSR > SAP > IB > SAFETY > PROTOCOL > XLSX/PPTX."""
+    filename = _txt(ev.get("filename")).lower()
+    if filename.endswith((".xlsx", ".xls", ".csv")):
+        return 20
+    if filename.endswith((".pptx", ".ppt")):
+        return 21
+    doc_type = _txt(ev.get("document_type") or "").upper()
+    return SOURCE_TYPE_PRIORITY.get(doc_type, 15)
+
+
 def evidence_support_highlights(data: dict, limit: int = 4) -> list[dict]:
     """2-3 distinct, best-supported evidence items (verified first, then confidence).
 
@@ -1041,6 +1161,10 @@ def evidence_support_highlights(data: dict, limit: int = 4) -> list[dict]:
     evidence = list(data.get("evidence") or [])
     if not evidence:
         return []
+    latest_documents = data.get("latest_documents")
+    if latest_documents is None:
+        latest_documents = [d for d in data.get("documents") or [] if d.get("is_latest", True)]
+    latest_ids = {d.get("document_id") for d in latest_documents}
 
     def field_rank(field: str) -> int:
         return HIGHLIGHT_FIELDS.index(field) if field in HIGHLIGHT_FIELDS else len(HIGHLIGHT_FIELDS)
@@ -1049,9 +1173,14 @@ def evidence_support_highlights(data: dict, limit: int = 4) -> list[dict]:
         return (
             1 if _txt(ev.get("field_name")) in HIGHLIGHT_SKIP else 0,
             field_rank(_txt(ev.get("field_name"))),
+            # Current package first: never quote a superseded document in the brief
+            # when the same field is available from a latest version.
+            0 if ev.get("document_id") in latest_ids else 1,
+            # Prefer the narrative source over a data listing/table for citations.
+            source_document_rank(ev),
             0 if str(ev.get("verification_status")) == "verified" else 1,
             -(float(ev.get("confidence") or 0)),
-            _txt(ev.get("field_name")),
+            _txt(ev.get("filename")),
         )
 
     ranked = sorted(evidence, key=sort_key)
@@ -1078,12 +1207,20 @@ def evidence_support_highlights(data: dict, limit: int = 4) -> list[dict]:
 
 
 def open_risks(data: dict, limit: int = 5) -> list[dict]:
-    """Top open findings by severity, excluding dismissed/resolved items."""
+    """Top open findings ordered by severity then finding category importance."""
     findings = [
         finding
         for finding in data.get("findings") or []
         if str(finding.get("status")) not in {"dismissed", "resolved"}
     ]
+    findings.sort(
+        key=lambda finding: (
+            _rank(finding.get("severity"), SEVERITY_ORDER),
+            _rank(finding.get("finding_type"), FINDING_TYPE_PRIORITY),
+            _txt(finding.get("created_at")),
+            _txt(finding.get("finding_id")),
+        )
+    )
     return findings[:limit]
 
 
@@ -1244,7 +1381,7 @@ def render_markdown_report(data: dict) -> str:
         f"**Prepared:** {data.get('generated_at')} · **Package:** "
         f"{stats.get('documents', len(docs))} documents · {data.get('pages_latest') or stats.get('pages', 0)} pages · "
         f"{stats.get('evidence', evidence_count)} evidence items · "
-        f"{stats.get('findings', len(findings))} findings · {stats.get('questions', len(questions))} questions"
+        f"{findings_count_text(data)} · {stats.get('questions', len(questions))} questions"
     )
     add("")
     add(
@@ -1342,10 +1479,12 @@ def render_markdown_report(data: dict) -> str:
         f"extracted evidence item(s); document mix — {type_text}."
     )
     top = key_findings(data, limit=3)
+    counts = finding_counts(data)
+    active_summary = findings_count_text(data)
     if top:
         add(
             "2. **Principal risks.** "
-            + f"{len(findings)} finding(s) in total"
+            + active_summary
             + (
                 f", including {severity.get('critical', 0)} critical and {severity.get('high', 0)} high-severity item(s). "
                 if findings
@@ -1356,7 +1495,10 @@ def render_markdown_report(data: dict) -> str:
             + "."
         )
     else:
-        add("2. **Principal risks.** No consistency or completeness findings were generated for this package yet.")
+        add(
+            f"2. **Principal risks.** {active_summary}. No active consistency or completeness "
+            "findings were generated for this package."
+        )
     if gaps:
         add(
             f"3. **Evidence gaps.** {len(gaps)} of {len(coverage)} coverage requirement(s) are not "
@@ -1377,8 +1519,14 @@ def render_markdown_report(data: dict) -> str:
     for sev in SEVERITY_ORDER:
         if sev in severity:
             add(f"| {sev.capitalize()} | {severity[sev]} |")
-    add(f"| **Total** | **{len(findings)}** |")
+    add(f"| **Total** | **{counts['active']}** |")
     add("")
+    if counts["history"]:
+        add(
+            f"_Resolved/dismissed history: {counts['history']} finding(s) are excluded from these "
+            "counts and listed in Section 5._"
+        )
+        add("")
     add("| Priority | Seller questions |")
     add("|---|---:|")
     for prio in PRIORITY_ORDER:
@@ -1390,14 +1538,14 @@ def render_markdown_report(data: dict) -> str:
     # -- 3. Asset Profile ---------------------------------------------------
     add("## 3. Asset Profile")
     add("")
-    add("| Asset | Modality | Target | Mechanism | Indication | Phase | Trial | NCT | Design | Sample size | Data cutoff |")
-    add("|---|---|---|---|---|---|---|---|---|---:|---|")
-    profile_rows = asset_profile_rows(data)
+    add("| " + " | ".join(ASSET_PROFILE_HEADERS) + " |")
+    add("|" + "|".join(["---"] * len(ASSET_PROFILE_HEADERS)) + "|")
+    profile_rows = [align_row(row, len(ASSET_PROFILE_HEADERS)) for row in asset_profile_rows(data)]
     if profile_rows:
         for row in profile_rows:
-            add("| " + " | ".join(_md_cell(v, 100) for v in row[:13]) + " |")
+            add("| " + " | ".join(_md_cell(v, 100) for v in row) + " |")
     else:
-        add("| (no asset profile extracted) | — | — | — | — | — | — | — | — | — | — |")
+        add("| " + " | ".join([DEFAULT_DASH] * len(ASSET_PROFILE_HEADERS)) + " |")
     add("")
     if data.get("trials"):
         add("**Clinical trials**")
@@ -1501,6 +1649,19 @@ def render_markdown_report(data: dict) -> str:
                 )
                 add(f"**Recommended verification:** {_txt(recommended)}")
                 add("")
+
+    history_findings = data.get("findings_history") or []
+    if history_findings:
+        add(f"### Resolved findings (history) — {len(history_findings)}")
+        add("")
+        add("Not included in the active risk counts above; retained for auditability.")
+        add("")
+        for finding in history_findings:
+            add(
+                f"- **{_txt(finding.get('title'))}** — {_txt(finding.get('severity'))} severity, "
+                f"{_txt(finding.get('finding_type'))}, status `{_txt(finding.get('status'))}`"
+            )
+        add("")
 
     # -- 6. Evidence gaps ---------------------------------------------------
     add("## 6. Evidence Gaps")
@@ -1736,6 +1897,8 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     project = data.get("project") or {}
     stats = data.get("stats") or {}
     findings = data.get("findings") or []
+    findings_history = data.get("findings_history") or []
+    counts = finding_counts(data)
     questions = data.get("questions") or []
     coverage = data.get("coverage") or []
     gaps = coverage_gaps(data)
@@ -1889,15 +2052,19 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
         f"{stats.get('evidence', len(data.get('evidence') or []))} extracted evidence item(s) "
         f"({type_text})."
     )
+    active_summary = findings_count_text(data)
     if top:
         doc.add_paragraph(
-            f"Principal risks: {len(findings)} finding(s) in total, including "
+            f"Principal risks: {active_summary}, including "
             f"{severity.get('critical', 0)} critical and {severity.get('high', 0)} high-severity "
             "item(s)."
         )
         _docx_bullets(doc, [f"{_txt(f.get('title'))} — {_txt(f.get('severity'))}" for f in top])
     else:
-        doc.add_paragraph("Principal risks: no consistency or completeness findings were generated yet.")
+        doc.add_paragraph(
+            f"Principal risks: {active_summary}. No active consistency or completeness "
+            "findings were generated yet."
+        )
     if gaps:
         doc.add_paragraph(
             f"Evidence gaps: {len(gaps)} of {len(coverage)} coverage requirement(s) are not "
@@ -1917,6 +2084,11 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     prio_rows = [[p.capitalize(), priority.get(p, 0)] for p in PRIORITY_ORDER if p in priority]
     prio_rows.append(["Total", len(questions)])
     _docx_table(doc, ["Priority", "Seller questions"], prio_rows, widths=(2.2, 1.2))
+    if counts["history"]:
+        doc.add_paragraph(
+            f"Resolved/dismissed history: {counts['history']} finding(s) are excluded from the "
+            "counts above and listed in Section 5."
+        )
 
     # -- 2. Asset profile ---------------------------------------------------
     doc.add_heading("3. Asset Profile", level=1)
@@ -1924,8 +2096,8 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     if profile_rows:
         _docx_table(
             doc,
-            ["Asset", "Modality", "Target", "Mechanism", "Indication", "Phase", "Trial", "NCT", "Design"],
-            [row[:9] for row in profile_rows],
+            ["Asset", "Modality", "Target", "Mechanism", "Indication", "Phase", "Trial", "NCT ID", "Design"],
+            [align_row(row, 9) for row in profile_rows],
             widths=(1.0, 0.8, 0.9, 1.1, 0.9, 0.7, 0.8, 0.8, 1.2),
             font_size=8,
         )
@@ -2042,6 +2214,20 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
                 run.italic = True
                 run.font.size = Pt(9)
                 doc.add_paragraph("")
+
+    if findings_history:
+        doc.add_heading(f"Resolved findings (history) ({len(findings_history)})", level=2)
+        history_lead = doc.add_paragraph(
+            "Not included in the active risk counts above; retained for auditability."
+        )
+        history_lead.italic = True
+        for finding in findings_history:
+            paragraph = doc.add_paragraph(style="List Bullet")
+            run = paragraph.add_run(
+                f"{_txt(finding.get('title'))} — {_txt(finding.get('severity'))} severity, "
+                f"{_txt(finding.get('finding_type'))}, status {_txt(finding.get('status'))}"
+            )
+            run.font.size = Pt(9)
 
     # -- 5. Evidence gaps ---------------------------------------------------
     doc.add_heading("6. Evidence Gaps", level=1)

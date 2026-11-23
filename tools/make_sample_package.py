@@ -1421,14 +1421,12 @@ def build_v1(package: Path, filler: int) -> dict:
              "keywords": ["FAS", "BICR", "sensitivity", "population"]},
             {"topic_id": "q_pp_population", "finding_topic_id": "gap_pp_population",
              "keywords": ["per-protocol", "PP population", "size"]},
-            {"topic_id": "q_multiplicity", "finding_topic_id": "gap_multiplicity",
-             "keywords": ["multiplicity", "alpha"]},
         ],
         "coverage": [
             {"dimension": "population", "requirement": "per-protocol population definition and size",
              "expected_status": "partial"},
             {"dimension": "efficacy", "requirement": "subgroup analyses results",
-             "expected_status": "not_found"},
+             "expected_status": "partial"},
             {"dimension": "quality", "requirement": "monitoring / audit summary",
              "expected_status": "not_found"},
             {"dimension": "quality", "requirement": "protocol deviations",
@@ -1510,6 +1508,10 @@ def build_v2(package: Path) -> dict:
             {"topic_id": "prompt_injection_ib", "finding_type": "technical_concern",
              "document_types": ["IB"], "keywords": ["injection", "ignore all previous instructions"],
              "expected_severity": "high", "expected_status_v2": "persisting"},
+            {"topic_id": "typeB_data_cutoff", "finding_type": "version_difference", "field_name": "data_cutoff",
+             "document_types": ["CSR", "SAFETY"], "keywords": ["cutoff", "2026-04-30", "2026-01-15"],
+             "expected_severity": "low", "expected_status_v2": "persisting",
+             "rationale": "Single-version documents (disposition/deviations) still state the earlier cutoff while updated v2 documents state 2026-04-30."},
         ],
         "question_topics": [
             {"topic_id": "q_fas_bicr", "finding_topic_id": "typeC_orr_fas_bicr",
@@ -1528,8 +1530,9 @@ def build_v2(package: Path) -> dict:
         "lifecycle": {
             "resolved_topics": ["typeA_orr_csr_vs_ppt", "typeA_sae_csr_vs_safety",
                                 "typeB_orr_ib_cutoff", "typeB_pfs_ib_cutoff", "typeB_sae_ib_cutoff",
-                                "typeB_data_cutoff", "gap_pp_population", "gap_subgroup_results"],
-            "persisting_topics": ["typeC_orr_fas_bicr", "gap_monitoring_audit", "prompt_injection_ib"],
+                                "gap_pp_population", "gap_subgroup_results"],
+            "persisting_topics": ["typeC_orr_fas_bicr", "gap_monitoring_audit", "prompt_injection_ib",
+                                  "typeB_data_cutoff"],
             "new_topics": [],
         },
         "eval_notes": {

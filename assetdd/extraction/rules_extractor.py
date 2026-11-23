@@ -536,6 +536,21 @@ _ALPHA_RE = re.compile(
 _SUBGROUP_RE = re.compile(r"\bsubgroup\s+analys[ie]s\b\s+(?:are|were|is|was)\s+([^.;]{3,170})", re.I)
 _DEVIATION_RE = re.compile(r"\b(?:a\s+)?total\s+of\s+(\d{1,5})\s+(major\s+)?protocol\s+(?:deviations?|violations?)\b", re.I)
 _DEVIATION_ALT_RE = re.compile(r"\b(\d{1,5})\s+(major\s+)?protocol\s+(?:deviations?|violations?)\s+(?:were|was)\s+(?:reported|identified)", re.I)
+_AESI_TEXT_RE = re.compile(
+    r"\badverse\s+events?\s+of\s+special\s+interest\b(?:\s*\(\s*AESIs?\s*\))?\s*"
+    r"(?:included|include[sd]?|were|was|occurred\s+in|observed\s+in|reported\s+in|:)\s*"
+    r"([^.;]{3,220})",
+    re.IGNORECASE,
+)
+_AESI_ABBREV_RE = re.compile(
+    r"\bAESIs?\b\s*(?:included|include[sd]?|were|was|occurred\s+in|observed\s+in|reported\s+in|:)\s*"
+    r"([^.;]{3,220})",
+    re.IGNORECASE,
+)
+_AESI_HEADING_RE = re.compile(
+    r"^(?:\d+\.?\s*)?adverse\s+events?\s+of\s+special\s+interest\s*[:.]?$",
+    re.IGNORECASE,
+)
 _RESPONSE_CRITERIA_ASSESSOR_RE = re.compile(
     r"\b(BICR|blinded\s+independent\s+central\s+review|INV|investigator(?:-assessed)?)\b", re.I
 )
@@ -694,6 +709,7 @@ class RulesExtractor:
         safety_allowed = not _looks_like_ae_table_dump(text)
         if not _ASSUMPTION_RE.search(text):
             self._extract_metrics(page, segment_index, segment, safety_allowed=safety_allowed)
+        self._extract_aesi(page, segment_index, segment)
         self._extract_study_design(page, segment_index, segment)
         self._extract_sizes(page, segment_index, segment)
         self._extract_statistics(page, segment_index, segment)
@@ -787,6 +803,63 @@ class RulesExtractor:
                 endpoint_token=owner.endpoint_token,
                 confidence=0.8,
             )
+
+    # -- adverse events of special interest (text statement) ---------------
+    def _extract_aesi(self, page: PageContext, segment_index: int, segment: Segment) -> None:
+        """Emit the AESI list/statement (one row per document/section, no per-term explosion)."""
+        text = segment.text
+        match = _AESI_TEXT_RE.search(text) or _AESI_ABBREV_RE.search(text)
+        if match:
+            listed = normalize_ws(match.group(1)).strip(" .,;:")
+            if listed:
+                self._emit(
+                    page,
+                    segment_index,
+                    segment,
+                    FieldName.AESI,
+                    value_text=listed,
+                    unit=None,
+                    span=(0, len(text)),
+                    endpoint_token="AESI",
+                    confidence=0.85,
+                )
+            return
+        # Heading-only layout: "Adverse events of special interest" followed by a list line.
+        if not _AESI_HEADING_RE.match(text):
+            return
+        if segment_index + 1 >= len(page.segments):
+            return
+        next_segment = page.segments[segment_index + 1]
+        listed = normalize_ws(next_segment.text).strip(" .,;:")
+        if not listed or len(listed) > 300 or _AESI_HEADING_RE.match(next_segment.text):
+            return
+        quote = page.norm[segment.start : next_segment.end].strip()
+        if not quote:
+            return
+        dims = self.context.resolve(
+            page_no=page.page_no,
+            segment_index=segment_index,
+            segment=segment,
+            field_name=FieldName.AESI,
+            span=(0, len(text)),
+            endpoint_token="AESI",
+        )
+        self.collector.add(
+            make_draft(
+                FieldName.AESI,
+                page=page.page_no,
+                quote=quote,
+                value_text=listed,
+                population=dims.get("population"),
+                arm=dims.get("arm"),
+                trial_key=dims.get("trial_key"),
+                data_cutoff=dims.get("data_cutoff"),
+                endpoint_def=dims.get("endpoint_def"),
+                assessment_method=dims.get("assessment_method"),
+                confidence=0.8,
+                notes=dims.get("notes"),
+            )
+        )
 
     # -- study design ------------------------------------------------------
     def _extract_study_design(self, page: PageContext, segment_index: int, segment: Segment) -> None:

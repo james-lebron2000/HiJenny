@@ -64,6 +64,8 @@ def generate_project_outputs(session, project_id: str, force: bool = False) -> d
     _atomic_write(docx_path, lambda p: exports.build_report_docx(data, p))
     _atomic_write(xlsx_path, lambda p: exports.build_workbook(data, p))
 
+    history = data.get("findings_history") or []
+    counts = exports.finding_counts(data)
     stats = {
         "report_path": str(md_path),
         "report_md": str(md_path),
@@ -72,7 +74,12 @@ def generate_project_outputs(session, project_id: str, force: bool = False) -> d
         "documents": len(data["documents"]),
         "pages": int((data.get("stats") or {}).get("pages") or 0),
         "evidence": len(data["evidence"]),
-        "findings": len(data["findings"]),
+        # Active findings only; resolved/dismissed history is reported separately.
+        "findings": counts["active"],
+        "findings_active": counts["active"],
+        "findings_history": counts["history"],
+        "findings_resolved": counts["resolved"],
+        "findings_dismissed": counts["dismissed"],
         "questions": len(data["questions"]),
         "coverage": len(data["coverage"]),
         "assets": len(data["assets"]),

@@ -532,3 +532,361 @@ def test_markdown_citations_only_from_store_data(env):
             assert ev["quote"] in markdown
     assert "42" in markdown
     assert "19.8%" in markdown
+
+
+# ---------------------------------------------------------------------------
+# Report defect regressions (Asset Profile alignment, brief ranking)
+# ---------------------------------------------------------------------------
+
+
+def md_table_blocks(text: str) -> list[list[str]]:
+    """Return contiguous markdown table blocks (each a list of raw '|' lines)."""
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in text.splitlines():
+        if line.strip().startswith("|"):
+            current.append(line)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def md_cells(line: str) -> list[str]:
+    stripped = line.strip()
+    assert stripped.startswith("|") and stripped.endswith("|"), line
+    inner = stripped[1:-1]
+    cells = re.split(r"(?<!\\)\|", inner)
+    return [cell.strip().replace("\\|", "|") for cell in cells]
+
+
+def test_asset_profile_headers_and_rows_are_aligned(env):
+    """Regression: the Asset Profile table used to have 11 headers and 13 cells."""
+    seeded = seed_project()
+    project_id = seeded["project_id"]
+    with store.session_scope() as session:
+        stats = reporting.generate_project_outputs(session, project_id)
+
+    markdown = Path(stats["report_md"]).read_text(encoding="utf-8")
+    section = markdown.split("## 3. Asset Profile")[1].split("### Document version history")[0]
+    blocks = md_table_blocks(section)
+    assert blocks, "Asset Profile markdown table is missing"
+
+    header = md_cells(blocks[0][0])
+    assert header == exports.ASSET_PROFILE_HEADERS
+    assert len(header) == 14
+    for raw in blocks[0][1:]:
+        assert len(md_cells(raw)) == len(header), f"misaligned Asset Profile row: {raw}"
+    data_row = md_cells(blocks[0][2])
+    column = {name: idx for idx, name in enumerate(header)}
+    assert data_row[column["Sample Size"]] == "312"
+    assert data_row[column["Data Cutoff"]] == "2026-01-15"
+    assert data_row[column["Primary Endpoint"]] == "ORR per RECIST 1.1"
+    assert data_row[column["NCT ID"]] == "NCT01234567"
+    assert data_row[column["Asset"]] == "ABC-101"
+
+    # XLSX sheet: same header/row widths and aligned values.
+    workbook = load_workbook(stats["questions_xlsx"])
+    sheet = workbook["Asset Profile"]
+    sheet_header = [cell.value for cell in sheet[1]]
+    assert sheet_header == exports.ASSET_PROFILE_HEADERS
+    assert sheet.max_column == len(sheet_header)
+    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
+        assert len(row) == len(sheet_header)
+    assert sheet.cell(row=2, column=column["Sample Size"] + 1).value == "312"
+    assert sheet.cell(row=2, column=column["Data Cutoff"] + 1).value == "2026-01-15"
+
+    # DOCX Asset Profile table: every row has the same number of cells as the header.
+    docx = Document(stats["report_docx"])
+    asset_tables = [
+        table for table in docx.tables
+        if table.rows and table.rows[0].cells and table.rows[0].cells[0].text.strip() == "Asset"
+    ]
+    assert asset_tables, "Asset Profile DOCX table is missing"
+    table = asset_tables[0]
+    columns = len(table.rows[0].cells)
+    assert columns >= 9
+    for row in table.rows:
+        assert len(row.cells) == columns
+
+    # Empty project: fallback row must also align and use em dashes for missing values.
+    with store.session_scope() as session:
+        empty_project = store.create_project(session, name="No asset data project")
+        empty_pid = empty_project["project_id"]
+        empty_stats = reporting.generate_project_outputs(session, empty_pid)
+    empty_md = Path(empty_stats["report_md"]).read_text(encoding="utf-8")
+    empty_section = empty_md.split("## 3. Asset Profile")[1].split("### Document version history")[0]
+    empty_blocks = md_table_blocks(empty_section)
+    empty_header = md_cells(empty_blocks[0][0])
+    empty_row = md_cells(empty_blocks[0][2])
+    assert len(empty_row) == len(empty_header)
+    assert "—" in empty_row
+    empty_workbook = load_workbook(empty_stats["questions_xlsx"])
+    empty_sheet = empty_workbook["Asset Profile"]
+    assert empty_sheet.max_column == len(exports.ASSET_PROFILE_HEADERS)
+    assert len([cell.value for cell in empty_sheet[2] if cell.value == "—"]) >= 1
+
+
+def test_decision_brief_highlights_prefer_narrative_source(env):
+    """Same field/value in CSR and a data listing -> cite the narrative CSR."""
+    with store.session_scope() as session:
+        project = store.create_project(session, name="Narrative source project")
+        project_id = project["project_id"]
+        csr = store.create_document(
+            session,
+            project_id,
+            filename="Clinical_Study_Report.pdf",
+            sha256="c" * 64,
+            stored_path=f"projects/{project_id}/documents/Clinical_Study_Report.pdf",
+            doc_type="CSR",
+            page_count=40,
+            status="parsed",
+        )[0]
+        listing = store.create_document(
+            session,
+            project_id,
+            filename="Clinical_Data_Listing.xlsx",
+            sha256="d" * 64,
+            stored_path=f"projects/{project_id}/documents/Clinical_Data_Listing.xlsx",
+            doc_type="OTHER",
+            page_count=2,
+            status="parsed",
+        )[0]
+        store.save_evidence_batch(
+            session,
+            project_id,
+            csr,
+            [
+                EvidenceDraft(
+                    field_name=FieldName.PFS,
+                    category=EvidenceCategory.CLINICAL_EFFICACY,
+                    value_num=7.1,
+                    unit="months",
+                    population="ITT",
+                    page=4,
+                    quote="Median PFS was 7.1 months in the ITT population.",
+                    confidence=0.5,
+                )
+            ],
+        )
+        store.save_evidence_batch(
+            session,
+            project_id,
+            listing,
+            [
+                EvidenceDraft(
+                    field_name=FieldName.PFS,
+                    category=EvidenceCategory.CLINICAL_EFFICACY,
+                    value_num=7.1,
+                    unit="months",
+                    population="ITT",
+                    page=1,
+                    quote="Median PFS (months) 7.1 ITT",
+                    confidence=0.99,
+                )
+            ],
+        )
+        store.save_evidence_batch(
+            session,
+            project_id,
+            csr,
+            [
+                EvidenceDraft(
+                    field_name=FieldName.ORR,
+                    category=EvidenceCategory.CLINICAL_EFFICACY,
+                    value_num=42.0,
+                    unit="%",
+                    population="ITT",
+                    page=5,
+                    quote="ORR was 42.0% in the ITT population.",
+                )
+            ],
+        )
+
+    with store.session_scope() as session:
+        stats = reporting.generate_project_outputs(session, project_id)
+    markdown = Path(stats["report_md"]).read_text(encoding="utf-8")
+    brief = markdown.split("## 1. Decision Brief")[1].split("## 2. Executive Summary")[0]
+    highlight_lines = [
+        line for line in brief.splitlines() if line.startswith("- ") and "supported by" in line
+    ]
+    assert highlight_lines
+    pfs_line = next(line for line in highlight_lines if "PFS" in line.upper())
+    assert "Clinical_Study_Report.pdf" in pfs_line
+    assert "Clinical_Data_Listing.xlsx" not in pfs_line
+    assert "page 4" in pfs_line
+    assert "Median PFS was 7.1 months" in pfs_line
+
+
+def test_decision_brief_open_risks_ordered_by_category(env):
+    """Within the same severity, risk order follows category importance."""
+    with store.session_scope() as session:
+        project = store.create_project(session, name="Risk ordering project")
+        project_id = project["project_id"]
+        store.save_findings(
+            session,
+            project_id,
+            [
+                FindingDraft(
+                    finding_type=FindingType.VERSION_DIFFERENCE,
+                    domain="clinical",
+                    title="Version difference item",
+                    explanation="Version/cutoff difference.",
+                    severity=Severity.HIGH,
+                    dedup_key="risk.version",
+                ),
+                FindingDraft(
+                    finding_type=FindingType.EVIDENCE_GAP,
+                    domain="clinical",
+                    title="Evidence gap item",
+                    explanation="Missing package item.",
+                    severity=Severity.HIGH,
+                    dedup_key="risk.gap",
+                ),
+                FindingDraft(
+                    finding_type=FindingType.TECHNICAL_CONCERN,
+                    domain="clinical",
+                    title="Technical concern item",
+                    explanation="Technical concern.",
+                    severity=Severity.HIGH,
+                    dedup_key="risk.tech",
+                ),
+                FindingDraft(
+                    finding_type=FindingType.DATA_INCONSISTENCY,
+                    domain="clinical",
+                    title="Data inconsistency item",
+                    explanation="Direct contradiction.",
+                    severity=Severity.HIGH,
+                    dedup_key="risk.data",
+                ),
+                FindingDraft(
+                    finding_type=FindingType.COMPARABILITY_UNCLEAR,
+                    domain="clinical",
+                    title="Comparability item",
+                    explanation="Dimensions missing.",
+                    severity=Severity.HIGH,
+                    dedup_key="risk.comp",
+                ),
+            ],
+        )
+    with store.session_scope() as session:
+        stats = reporting.generate_project_outputs(session, project_id)
+
+    markdown = Path(stats["report_md"]).read_text(encoding="utf-8")
+    section = markdown.split("### Top open risks")[1].split("### Top seller questions")[0]
+    blocks = md_table_blocks(section)
+    assert blocks
+    rows = blocks[0][2:]
+    titles = [md_cells(raw)[2] for raw in rows]
+    assert titles == [
+        "Data inconsistency item",
+        "Technical concern item",
+        "Evidence gap item",
+        "Comparability item",
+        "Version difference item",
+    ]
+    assert [md_cells(raw)[1] for raw in rows] == ["high"] * 5
+
+
+def test_report_counts_only_active_findings(env):
+    """Headline counts, open-risk lists and the Findings sheet must exclude resolved history."""
+    with store.session_scope() as session:
+        project = store.create_project(session, name="Active counts project")
+        project_id = project["project_id"]
+        result = store.save_findings(
+            session,
+            project_id,
+            [
+                FindingDraft(
+                    finding_type=FindingType.DATA_INCONSISTENCY,
+                    domain="clinical",
+                    title="Open inconsistency",
+                    explanation="Still an active issue for the deal team.",
+                    severity=Severity.HIGH,
+                    dedup_key="counts.open",
+                ),
+                FindingDraft(
+                    finding_type=FindingType.DATA_INCONSISTENCY,
+                    domain="clinical",
+                    title="Resolved historical issue",
+                    explanation="Reconciled after the seller response.",
+                    severity=Severity.CRITICAL,
+                    dedup_key="counts.resolved",
+                ),
+            ],
+        )
+        resolved_id = next(
+            finding["finding_id"]
+            for finding in result["findings"]
+            if finding["title"] == "Resolved historical issue"
+        )
+        store.update_finding(session, resolved_id, status="resolved", actor="tester")
+
+    with store.session_scope() as session:
+        stats = reporting.generate_project_outputs(session, project_id)
+
+    # Stage stats: active only, history reported separately.
+    assert stats["findings"] == 1
+    assert stats["findings_active"] == 1
+    assert stats["findings_history"] == 1
+    assert stats["findings_resolved"] == 1
+    assert stats["findings_dismissed"] == 0
+
+    markdown = Path(stats["report_md"]).read_text(encoding="utf-8")
+    assert "1 active finding (1 resolved)" in markdown
+
+    # Risk counts table: only the active high-severity finding.
+    risk_counts = markdown.split("### Risk counts")[1].split("## 3.")[0]
+    severity_table = md_table_blocks(risk_counts)[0]
+    assert md_cells(severity_table[2]) == ["High", "1"]
+    assert md_cells(severity_table[3])[:2] == ["**Total**", "**1**"]
+    assert "Resolved/dismissed history: 1 finding(s) are excluded" in markdown
+
+    # Key Findings: active finding only; resolved history in its own subsection.
+    key_findings = markdown.split("## 5. Key Findings")[1].split("## 6.")[0]
+    assert "### Resolved findings (history)" in key_findings
+    active_part, history_part = key_findings.split("### Resolved findings (history)")
+    assert "Open inconsistency" in active_part
+    assert "Resolved historical issue" not in active_part
+    assert "Resolved historical issue" in history_part
+    assert "status `resolved`" in history_part
+
+    # Decision Brief open risks: only the active finding.
+    brief = markdown.split("## 1. Decision Brief")[1].split("## 2. Executive Summary")[0]
+    risk_section = brief.split("### Top open risks")[1].split("### Top seller questions")[0]
+    risk_rows = md_table_blocks(risk_section)[0][2:]
+    assert len(risk_rows) == 1
+    assert "Open inconsistency" in risk_rows[0]
+    assert "Resolved historical issue" not in risk_rows[0]
+
+    # XLSX: Findings sheet has active rows only (+ Status column filter).
+    workbook = load_workbook(stats["questions_xlsx"])
+    findings_sheet = workbook["Findings"]
+    assert findings_sheet.max_row == 2  # header + single active finding
+    status_column = [cell.value for cell in findings_sheet[1]].index("Status") + 1
+    assert findings_sheet.cell(row=2, column=status_column).value == "open"
+    assert findings_sheet.auto_filter.ref is not None
+    summary_rows = [[cell.value for cell in row] for row in workbook["Executive Summary"].iter_rows()]
+    summary_labels = {
+        str(row[0]): (row[1] if len(row) > 1 else None) for row in summary_rows if row and row[0]
+    }
+    summary_text = " ".join(str(value or "") for row in summary_rows for value in row)
+    assert "Active findings" in summary_labels
+    assert summary_labels["Active findings"] == 1
+    assert "Resolved findings (history)" in summary_labels
+    assert summary_labels["Resolved findings (history)"] == 1
+    assert "Resolved historical issue" in summary_text
+    severity_rows = [row for row in summary_rows if row and row[0] == "HIGH"]
+    assert any(row[1] == 1 for row in severity_rows)  # active risk profile only
+    assert not [row for row in summary_rows if row and row[0] == "CRITICAL"]
+
+    # DOCX: active headline + history subsection.
+    docx = Document(stats["report_docx"])
+    docx_text = "\n".join(paragraph.text for paragraph in docx.paragraphs)
+    assert "1 active finding (1 resolved)" in docx_text
+    assert "Resolved/dismissed history: 1 finding(s) are excluded" in docx_text
+    assert "Resolved findings (history)" in docx_text
+    assert "Resolved historical issue" in docx_text
+    assert "Open inconsistency" in docx_text

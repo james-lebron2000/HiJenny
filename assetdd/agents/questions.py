@@ -839,6 +839,7 @@ def run(session, project_id: str, force: bool = False) -> dict:
                 question["question_id"],
                 actor="system:questions",
                 status="closed",
+                evidence_ids=[],  # evidence rows were rebuilt by the updated package
             )
             if updated is not None:
                 closed += 1

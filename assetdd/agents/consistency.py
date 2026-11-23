@@ -5,44 +5,42 @@ classifies each discrepancy by its comparability vector::
 
     (trial_key, arm, population, data_cutoff, endpoint_def, assessment_method)
 
-Classification policy (deliberately conservative — an incomparable pair must
-never be reported as a contradiction):
+Partition policy (per field, per ``(trial_key, arm)`` cloud)
+------------------------------------------------------------
+1. The **largest exact-dimension group** is the *reference* analysis (ties are
+   broken in favour of the latest data cut-off, then a deterministic signature
+   order).
+2. Reference records that state the same dimensions but a different value from a
+   *different document* form a **Type A data_inconsistency** finding (a document
+   repeating its own value is not a sell-side inconsistency).
+3. Records differing **only** in ``data_cutoff`` form a **Type B
+   version_difference** finding (informational, not a contradiction).
+4. Records differing in population / endpoint definition / assessment method
+   form a **Type C definition_difference** finding.  If the cut-off differs as
+   well the definition difference dominates (priority ``A > C > B > U``).
+5. Records missing a field's *required* dimensions (or groups whose difference
+   cannot be attributed) form a **Type U comparability_unclear** finding.  A U
+   finding is only emitted when it actually has missing dimensions; a pair that
+   merely differs on two stated dimensions is a C/B difference, never U.
 
-``skip``
-    Trial or arm are both stated and differ: these are different studies /
-    cohorts, so the numbers are legitimately different and no finding is raised.
-``TYPE C  definition_difference``
-    Analysis population, endpoint definition or assessment method are both
-    stated and differ.  The values are not measuring the same quantity.  Same
-    document pairs are allowed here (e.g. a primary ITT analysis versus a FAS /
-    BICR sensitivity analysis reported in the same CSR) because the definition
-    difference is exactly what the reader needs to see.
-``TYPE B  version_difference``
-    All compared dimensions other than ``data_cutoff`` are compatible, and the
-    data cut-offs are both stated and differ.  This is an updated-data /
-    version difference, not a contradiction.
-``TYPE U  comparability_unclear``
-    At least one comparability dimension is stated in one record but not the
-    other (or otherwise cannot be aligned).  The pair is never labelled Type A;
-    the finding asks for the missing metadata (low severity).
-``TYPE A  data_inconsistency``
-    Every comparability dimension is equal (``None == None`` counts as equal),
-    both records come from **different** documents, and the values differ beyond
-    tolerance.  Same-document repetitions are suppressed (a document repeating
-    its own value is not a sell-side inconsistency).
+Each record appears in **at most one** of A/B/C/U.  Type B/C findings list only
+the deviating records; the reference analysis is carried separately in
+``detail["reference_values"]`` so a reader still sees both sides of the
+comparison without the same record being asserted as contradictory twice.
+
+Definition-only fields (``primary_endpoint`` and friends) are not measured
+values: they are canonicalised to endpoint concepts (ORR / PFS / OS / ...) and
+only emit a Type C finding when the documents genuinely name different endpoints
+(e.g. ORR vs PFS).  They never enter Type A.
 
 Numeric tolerance: relative 2% (``TOLERANCE_RELATIVE``) of the larger absolute
-value for percentages / medians / ratios; exact match for patient counts
-(``sample_size``, ``n_itt``, ``n_safety``, ``n_fas``, ``n_pp``).  Text fields
-(``primary_endpoint``) use whitespace-normalised equality.
+value for percentages / medians / ratios; exact match for patient counts.
+Findings are deterministic and deduplicated per (field, evidence group), and
+``evidence_ids`` is capped for readability with the full list kept in
+``detail["evidence_all"]``.  Superseded documents are excluded, so a round-2
+upload resolves stale findings instead of re-surfacing them.
 
-Findings are deterministic and deduplicated per (field, evidence group):
-``dedup_key = hash(field, sorted evidence ids)``, so re-running on an unchanged
-package updates the same rows instead of duplicating them.  Superseded
-documents (``store.list_documents(..., latest_only=True)``) are excluded, so a
-round-2 upload resolves stale version findings instead of re-surfacing them.
-
-The entry point is :func:`run(session, project_id, force=False) -> stats`.
+Entry point: :func:`run(session, project_id, force=False) -> stats`.
 """
 from __future__ import annotations
 
@@ -50,7 +48,7 @@ import hashlib
 import re
 from collections import defaultdict
 from itertools import combinations
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from assetdd import store
 from assetdd.schemas import (
@@ -68,7 +66,6 @@ from assetdd.schemas import (
 # Relative tolerance for percentage / median / ratio fields (2%).
 TOLERANCE_RELATIVE = 0.02
 TOLERANCE_PCT = TOLERANCE_RELATIVE * 100.0
-# Absolute floor used only when both values are zero (cannot divide).
 _ZERO_EPS = 1e-12
 
 DIMENSIONS: tuple[str, ...] = (
@@ -79,8 +76,6 @@ DIMENSIONS: tuple[str, ...] = (
     "endpoint_def",
     "assessment_method",
 )
-ANCHOR_DIMENSIONS: tuple[str, ...] = ("trial_key", "arm")
-DEFINITION_DIMENSIONS: tuple[str, ...] = ("population", "endpoint_def", "assessment_method")
 CUTOFF_DIMENSION = "data_cutoff"
 
 CHECK_FIELDS: tuple[str, ...] = (
@@ -102,21 +97,6 @@ CHECK_FIELDS: tuple[str, ...] = (
 )
 
 TEXT_FIELDS: frozenset[str] = frozenset({"primary_endpoint"})
-
-# Free-text endpoint definitions are compared after expanding common
-# abbreviations, so "objective response rate" and "ORR per RECIST 1.1" are
-# recognised as the same definition rather than a contradiction.
-_ENDPOINT_TEXT_ALIASES: tuple[tuple[str, str], ...] = (
-    ("objective response rate", "orr"),
-    ("overall response rate", "orr"),
-    ("disease control rate", "dcr"),
-    ("progression-free survival", "pfs"),
-    ("progression free survival", "pfs"),
-    ("overall survival", "os"),
-    ("serious adverse event", "sae"),
-    ("treatment-related death", "treatment related death"),
-    ("duration of response", "dor"),
-)
 EFFICACY_FIELDS: frozenset[str] = frozenset({"orr", "dcr", "pfs", "os", "hr"})
 SIZE_FIELDS: frozenset[str] = frozenset(
     {"sample_size", "n_itt", "n_safety", "n_fas", "n_pp"}
@@ -124,8 +104,32 @@ SIZE_FIELDS: frozenset[str] = frozenset(
 SAFETY_FIELDS: frozenset[str] = frozenset(
     {"grade3_ae", "sae", "treatment_related_death"}
 )
+DEFINITION_ONLY_FIELDS: frozenset[str] = frozenset({"primary_endpoint"})
 
 _COUNT_FIELD_VALUES: frozenset[str] = frozenset(str(f) for f in COUNT_FIELDS)
+
+# Dimensions that must be stated for a value to be meaningfully comparable.
+# Safety rates implicitly refer to the safety population (extraction does not
+# always repeat it), so only the cut-off is mandatory there.  Counts are
+# study-level and carry no required dimension.
+FIELD_REQUIRED_DIMS: dict[str, tuple[str, ...]] = {
+    **{field: ("population", CUTOFF_DIMENSION) for field in EFFICACY_FIELDS},
+    **{field: () for field in SIZE_FIELDS},
+    **{field: (CUTOFF_DIMENSION,) for field in SAFETY_FIELDS},
+}
+# Dimensions whose difference is a definitional (Type C) difference.
+FIELD_DEFINITION_DIMS: dict[str, tuple[str, ...]] = {
+    **{
+        field: ("population", "endpoint_def", "assessment_method")
+        for field in EFFICACY_FIELDS
+    },
+    **{field: ("population",) for field in SIZE_FIELDS},
+    **{field: ("population",) for field in SAFETY_FIELDS},
+}
+
+# UI/report readability: keep at most this many evidence rows on a finding; the
+# full list stays available in ``detail["evidence_all"]`` for auditing.
+MAX_FINDING_EVIDENCE = 6
 
 FIELD_LABELS: dict[str, str] = {
     "orr": "objective response rate (ORR)",
@@ -163,10 +167,6 @@ FIELD_DOMAINS: dict[str, str] = {
     "data_cutoff": "data_maturity",
 }
 
-# UI/report readability: keep at most this many evidence rows on a finding; the
-# full list stays available in ``detail["evidence_all"]`` for auditing.
-MAX_FINDING_EVIDENCE = 6
-
 DIMENSION_LABELS: dict[str, str] = {
     "trial_key": "trial",
     "arm": "treatment arm",
@@ -175,6 +175,33 @@ DIMENSION_LABELS: dict[str, str] = {
     "endpoint_def": "endpoint definition",
     "assessment_method": "assessment method",
 }
+
+# Free-text endpoint definitions are compared after expanding common
+# abbreviations, so "objective response rate" and "ORR per RECIST 1.1" are
+# recognised as the same definition rather than a contradiction.
+_ENDPOINT_TEXT_ALIASES: tuple[tuple[str, str], ...] = (
+    ("objective response rate", "orr"),
+    ("overall response rate", "orr"),
+    ("disease control rate", "dcr"),
+    ("progression-free survival", "pfs"),
+    ("progression free survival", "pfs"),
+    ("overall survival", "os"),
+    ("serious adverse event", "sae"),
+    ("duration of response", "dor"),
+)
+
+# Concept extraction used only for definition-only fields: two documents conflict
+# only when they describe genuinely different endpoints.
+_ENDPOINT_CONCEPT_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("orr", r"\borr\b|objective response rate|overall response rate"),
+    ("dcr", r"\bdcr\b|disease control rate"),
+    ("pfs", r"\bpfs\b|progression[- ]free survival"),
+    ("os", r"\bos\b|overall survival"),
+    ("hr", r"\bhr\b|hazard ratio"),
+    ("dor", r"\bdor\b|duration of response"),
+    ("sae", r"\bsae\b|serious adverse event"),
+    ("ae", r"\bae\b|adverse event"),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -258,9 +285,7 @@ def _values_differ(field: str, left: Mapping[str, Any], right: Mapping[str, Any]
             return False
         # Free-text definitions are frequently abbreviated in one source
         # ("ORR" vs "ORR per RECIST 1.1").  Containment means the shorter form
-        # does not contradict the fuller one; only genuinely different wording
-        # is escalated (and the assessment-method dimension still catches a
-        # different response criteria).
+        # does not contradict the fuller one.
         return not (left_text in right_text or right_text in left_text)
     if field == "data_cutoff":
         return _normalized_text(field, left) != _normalized_text(field, right)
@@ -305,80 +330,97 @@ def _fmt_value(field: str, evidence: Mapping[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Classification
+# Signature / partition helpers
 # ---------------------------------------------------------------------------
 
 
-def classify_pair(
-    field: str, left: Mapping[str, Any], right: Mapping[str, Any]
-) -> str:
-    """Classify a cross-record pair as ``skip`` / ``A`` / ``B`` / ``C`` / ``U``.
-
-    The function intentionally does *not* look at the values: callers only call
-    it for pairs whose values disagree, and Type A is additionally suppressed
-    for same-document pairs by the caller.
-    """
-    left_dims = _dims(left)
-    right_dims = _dims(right)
-
-    for dimension in ANCHOR_DIMENSIONS:
-        left_value = left_dims[dimension]
-        right_value = right_dims[dimension]
-        if left_value is not None and right_value is not None and left_value != right_value:
-            return "skip"  # different study / cohort: legitimately different
-        if (left_value is None) != (right_value is None):
-            return "U"  # cohort cannot be anchored
-
-    definition_differs = any(
-        left_dims[dimension] is not None
-        and right_dims[dimension] is not None
-        and left_dims[dimension] != right_dims[dimension]
-        for dimension in DEFINITION_DIMENSIONS
-    )
-    left_cutoff = left_dims[CUTOFF_DIMENSION]
-    right_cutoff = right_dims[CUTOFF_DIMENSION]
-    cutoff_differs = (
-        left_cutoff is not None and right_cutoff is not None and left_cutoff != right_cutoff
-    )
-
-    if definition_differs and cutoff_differs:
-        # Two confounded explanations (definition + data snapshot): request metadata
-        # rather than attributing the difference to either one.
-        return "U"
-    if definition_differs:
-        return "C"
-    if cutoff_differs:
-        return "B"
-
-    for dimension in DIMENSIONS:
-        if (left_dims[dimension] is None) != (right_dims[dimension] is None):
-            return "U"
-
-    return "A"
+def _signature(evidence: Mapping[str, Any]) -> tuple[str | None, ...]:
+    dims = _dims(evidence)
+    return tuple(dims[dimension] for dimension in DIMENSIONS)
 
 
-def _missing_signature(left: Mapping[str, Any], right: Mapping[str, Any]) -> tuple[str, ...]:
-    left_dims = _dims(left)
-    right_dims = _dims(right)
-    return tuple(
-        dimension
-        for dimension in DIMENSIONS
-        if (left_dims[dimension] is None) != (right_dims[dimension] is None)
-    )
+def _signature_string(signature: Sequence[str | None]) -> str:
+    return "|".join("" if value is None else value for value in signature)
 
 
-def _definition_signature(
-    left: Mapping[str, Any], right: Mapping[str, Any]
+def _signature_dims(signature: Sequence[str | None]) -> dict[str, str | None]:
+    return dict(zip(DIMENSIONS, signature))
+
+
+def _cloud_key(evidence: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    return (_dim_value(evidence, "trial_key"), _dim_value(evidence, "arm"))
+
+
+def _missing_required_dims(
+    field: str, evidence: Mapping[str, Any]
 ) -> tuple[str, ...]:
-    left_dims = _dims(left)
-    right_dims = _dims(right)
-    return tuple(
-        dimension
-        for dimension in DEFINITION_DIMENSIONS
-        if left_dims[dimension] is not None
-        and right_dims[dimension] is not None
-        and left_dims[dimension] != right_dims[dimension]
+    required = FIELD_REQUIRED_DIMS.get(field, ())
+    dims = _dims(evidence)
+    return tuple(dimension for dimension in required if dims[dimension] is None)
+
+
+def _conflicting_records(
+    field: str, records: Sequence[Mapping[str, Any]]
+) -> list[Mapping[str, Any]]:
+    """Records that participate in a cross-document value conflict."""
+    involved: dict[str, Mapping[str, Any]] = {}
+    for left, right in combinations(records, 2):
+        if left.get("document_id") == right.get("document_id"):
+            continue  # a document repeating its own value is not a sell-side issue
+        if _values_differ(field, left, right):
+            involved[str(left.get("evidence_id"))] = left
+            involved[str(right.get("evidence_id"))] = right
+    return sorted(involved.values(), key=_sort_key)
+
+
+def _conflicts_with_reference(
+    field: str,
+    records: Sequence[Mapping[str, Any]],
+    reference: Sequence[Mapping[str, Any]],
+) -> bool:
+    for record in records:
+        for ref_record in reference:
+            if _values_differ(field, record, ref_record):
+                return True
+    return False
+
+
+def _differing_dims(
+    group_dims: Mapping[str, str | None],
+    reference_dims: Mapping[str, str | None],
+) -> set[str]:
+    """Dims where both sides state a value and the values differ.
+
+    One-sided missing dimensions are not counted as differences here: required
+    ones already send the record to the unclear bucket, optional ones do not by
+    themselves make the records incomparable.
+    """
+    differing: set[str] = set()
+    for dimension in DIMENSIONS:
+        group_value = group_dims[dimension]
+        reference_value = reference_dims[dimension]
+        if group_value is None or reference_value is None:
+            continue
+        if group_value != reference_value:
+            differing.add(dimension)
+    return differing
+
+
+def _select_reference_signature(
+    groups: Mapping[tuple, Sequence[Mapping[str, Any]]]
+) -> tuple:
+    """Largest group wins; ties prefer the latest data cut-off, then stable order."""
+    largest = max(len(records) for records in groups.values())
+    candidates = [signature for signature, records in groups.items() if len(records) == largest]
+    latest_cutoff = max(
+        (_signature_dims(signature).get(CUTOFF_DIMENSION) or "") for signature in candidates
     )
+    preferred = [
+        signature
+        for signature in candidates
+        if (_signature_dims(signature).get(CUTOFF_DIMENSION) or "") == latest_cutoff
+    ]
+    return sorted(preferred, key=_signature_string)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -386,19 +428,14 @@ def _definition_signature(
 # ---------------------------------------------------------------------------
 
 
-def dedup_key(field: str, comparison_class: str, evidence_ids: Iterable[str]) -> str:
+def dedup_key(field: str, comparison_class: str, evidence_ids: Sequence[str]) -> str:
     payload = "|".join([field, comparison_class, *sorted(str(e) for e in evidence_ids)])
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
     return f"consistency:{comparison_class}:{digest}"
 
 
 def _values_detail(field: str, evidence: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """One entry per (document, value) pair; repeated extraction rows are collapsed.
-
-    The same value can be emitted several times from one document (body, table,
-    appendix).  The UI/report needs the distinct comparisons, while every raw
-    evidence row stays linked through the finding's ``evidence_ids``.
-    """
+    """One entry per (document, value) pair; repeated extraction rows are collapsed."""
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for record in evidence:
         document_id = str(record.get("document_id") or "")
@@ -443,6 +480,12 @@ def _dims_detail(field: str, evidence: Sequence[Mapping[str, Any]]) -> dict[str,
     return detail
 
 
+def _date_ordinal(iso_date: str) -> int:
+    from datetime import date
+
+    return date.fromisoformat(iso_date).toordinal()
+
+
 def _delta_detail(field: str, evidence: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     if field in TEXT_FIELDS:
         texts = sorted({_normalized_text(field, record) for record in evidence})
@@ -471,21 +514,10 @@ def _delta_detail(field: str, evidence: Sequence[Mapping[str, Any]]) -> dict[str
     }
 
 
-def _date_ordinal(iso_date: str) -> int:
-    from datetime import date
-
-    parsed = date.fromisoformat(iso_date)
-    return parsed.toordinal()
-
-
 def _select_finding_evidence(
     field: str, evidence: Sequence[Mapping[str, Any]]
 ) -> tuple[list[Mapping[str, Any]], list[str]]:
-    """Pick the most relevant records for display; return (selected, all_ids).
-
-    Selection order: value extremes (for numeric consistency checks), then one
-    representative per document, then remaining records in deterministic order.
-    """
+    """Pick the most relevant records for display; return (selected, all_ids)."""
     ordered = sorted(evidence, key=_sort_key)
     selected: dict[str, Mapping[str, Any]] = {}
     if field not in TEXT_FIELDS and field != "data_cutoff":
@@ -539,8 +571,6 @@ def _documents_detail(evidence: Sequence[Mapping[str, Any]]) -> list[dict[str, A
 def _severity_for_a(field: str) -> str:
     if field in EFFICACY_FIELDS or field in SIZE_FIELDS:
         return str(Severity.CRITICAL)
-    if field in SAFETY_FIELDS or field == "primary_endpoint":
-        return str(Severity.HIGH)
     return str(Severity.HIGH)
 
 
@@ -554,45 +584,44 @@ def _severity_for(comparison_class: str, field: str) -> str:
     return str(Severity.LOW)
 
 
-def _dim_summary(detail: dict[str, Any]) -> str:
-    parts: list[str] = []
-    for dimension in DIMENSIONS:
-        value = detail.get(dimension)
-        if value is None:
-            continue
-        if isinstance(value, list):
-            parts.append(f"{DIMENSION_LABELS[dimension]}={', '.join(value)}")
-        else:
-            parts.append(f"{DIMENSION_LABELS[dimension]}={value}")
-    return "; ".join(parts) if parts else "no comparability metadata stated"
-
-
 def _build_finding(
     field: str,
     comparison_class: str,
     evidence: Sequence[Mapping[str, Any]],
     *,
-    signature: tuple[str, ...] = (),
+    signature: Sequence[str] = (),
+    reference: Sequence[Mapping[str, Any]] = (),
 ) -> FindingDraft:
     label = FIELD_LABELS.get(field, field)
-    all_values = sorted(evidence, key=_sort_key)
-    values, evidence_all = _select_finding_evidence(field, all_values)
+    values, evidence_all = _select_finding_evidence(field, evidence)
+    reference_sorted = sorted(reference, key=_sort_key)
+    reference_values, reference_all = (
+        _select_finding_evidence(field, reference_sorted) if reference_sorted else ([], [])
+    )
+    combined = sorted([*values, *reference_values], key=_sort_key) if reference_sorted else values
     value_labels = "; ".join(
         f"{_fmt_value(field, record)} in {record.get('filename') or record.get('document_id')} "
         f"(page {record.get('page')})"
         for record in values
     )
-    dims = {dimension: _dim_value(values[0], dimension) for dimension in DIMENSIONS} if values else {}
-    dims_detail = _dims_detail(field, values)
-    delta = _delta_detail(field, values)
+    dims_detail = _dims_detail(field, combined)
+    delta = _delta_detail(field, combined)
     detail = {
         "field": field,
-        "field_label": FIELD_LABELS.get(field, field),
+        "field_label": label,
         "class": comparison_class,
         "values": _values_detail(field, values),
+        "reference_values": _values_detail(field, reference_values),
+        "reference_evidence_ids": reference_all,
+        "reference_dimensions": (
+            {dimension: _dim_value(reference_sorted[0], dimension) for dimension in DIMENSIONS}
+            if reference_sorted
+            else {}
+        ),
         "dims": dims_detail,
         "delta": delta,
-        "documents": _documents_detail(values),
+        "documents": _documents_detail(combined),
+        "document_ids": sorted({str(record.get("document_id") or "") for record in combined}),
         "tolerance": {
             "relative_pct": TOLERANCE_PCT if comparison_class == "A" else None,
             "mode": "exact" if field in _COUNT_FIELD_VALUES else "relative",
@@ -637,10 +666,11 @@ def _build_finding(
         else:
             title = f"Version difference: {label} differs by data cut-off"
             explanation = (
-                f"{label[:1].upper()}{label[1:]} differs between sources that use different data "
-                f"cut-offs. Values: {value_labels}. The cut-off difference is a plausible explanation "
-                f"for the changed value, so this is classified as a version difference rather than a "
-                f"data contradiction; the authoritative data cut-off should still be confirmed."
+                f"{label[:1].upper()}{label[1:]} differs from the reference analysis by data "
+                f"cut-off only. Values: {value_labels}. The cut-off difference is a plausible "
+                f"explanation for the changed value, so this is classified as a version difference "
+                f"rather than a data contradiction; the authoritative data cut-off should still be "
+                f"confirmed."
             )
         possible_causes = [
             "Data cut-off differs between the documents (earlier snapshot vs current analysis)",
@@ -657,10 +687,11 @@ def _build_finding(
             DIMENSION_LABELS.get(dimension, dimension) for dimension in signature
         ) or "analysis definition"
         explanation = (
-            f"{label[:1].upper()}{label[1:]} differs between records whose {dimension_labels} "
-            f"differ. Values: {value_labels}. Because the records do not measure the same quantity, "
-            f"the difference is attributable to the stated definitional difference and is not "
-            f"treated as a contradiction; the comparison should be made on a like-for-like basis."
+            f"{label[:1].upper()}{label[1:]} differs from the reference analysis because the "
+            f"{dimension_labels} differs. Values: {value_labels}. Because the records do not "
+            f"measure the same quantity, the difference is attributable to the stated definitional "
+            f"difference and is not treated as a contradiction; the comparison should be made on a "
+            f"like-for-like basis."
         )
         possible_causes = [
             "Primary versus sensitivity analysis using a different population or assessor",
@@ -717,115 +748,200 @@ def _build_finding(
     )
 
 
+def _definition_concepts(evidence: Mapping[str, Any]) -> frozenset[str]:
+    text = normalize_ws(str(evidence.get("value_text") or evidence.get("quote") or "")).lower()
+    return frozenset(
+        concept
+        for concept, pattern in _ENDPOINT_CONCEPT_PATTERNS
+        if re.search(pattern, text)
+    )
+
+
+def _definition_conflict_findings(
+    field: str, records: Sequence[Mapping[str, Any]]
+) -> list[FindingDraft]:
+    """Definition-only fields: only genuinely conflicting endpoint concepts are findings."""
+    involved: dict[str, Mapping[str, Any]] = {}
+    concepts_by_document: dict[str, set[str]] = defaultdict(set)
+    for record in records:
+        concepts_by_document[str(record.get("document_id") or "")].update(
+            _definition_concepts(record)
+        )
+    for left, right in combinations(records, 2):
+        if left.get("document_id") == right.get("document_id"):
+            continue
+        left_concepts = _definition_concepts(left)
+        right_concepts = _definition_concepts(right)
+        if not left_concepts or not right_concepts:
+            continue
+        if left_concepts & right_concepts:
+            continue
+        # ORR vs PFS is a real conflict; a fuller description of the same metric
+        # is recognised by the shared concept and not flagged.
+        involved[str(left.get("evidence_id"))] = left
+        involved[str(right.get("evidence_id"))] = right
+    if not involved:
+        return []
+    finding = _build_finding(field, "C", sorted(involved.values(), key=_sort_key))
+    finding.title = "Endpoint definition conflict across documents"
+    finding.explanation = (
+        "The documents describe the primary endpoint with different endpoint concepts "
+        "(for example ORR versus PFS or OS). Free-text endpoint descriptors are not "
+        "measured values, so this is classified as a definition difference (medium) "
+        "rather than a data inconsistency; the endpoint definitions should be confirmed."
+    )
+    finding.recommended_action = (
+        "Ask the seller to confirm the protocol-defined primary endpoint and align the "
+        "endpoint wording across the package."
+    )
+    finding.detail["concepts_by_document"] = {
+        document_id: sorted(concepts)
+        for document_id, concepts in sorted(concepts_by_document.items())
+    }
+    return [finding]
+
+
 # ---------------------------------------------------------------------------
-# Pair collection / grouping
+# Per-field partition
 # ---------------------------------------------------------------------------
 
 
-def _collect_pairs(
-    field: str, evidence: Sequence[Mapping[str, Any]]
-) -> list[dict[str, Any]]:
-    """Classify every cross-record pair whose values disagree."""
-    pairs: list[dict[str, Any]] = []
-    for left, right in combinations(evidence, 2):
-        if not _values_differ(field, left, right):
-            continue
-        comparison_class = classify_pair(field, left, right)
-        if comparison_class == "skip":
-            continue
-        if comparison_class == "A" and left.get("document_id") == right.get("document_id"):
-            # A document repeating its own value is not a sell-side inconsistency.
-            continue
-        pairs.append(
+def _partition_field(
+    field: str, records: Sequence[Mapping[str, Any]]
+) -> list[FindingDraft]:
+    """Partition one field's records into disjoint A / B / C / U findings."""
+    required_dims = FIELD_REQUIRED_DIMS.get(field, ())
+    definition_dims = set(FIELD_DEFINITION_DIMS.get(field, ()))
+
+    clouds: dict[tuple[str | None, str | None], list[Mapping[str, Any]]] = defaultdict(list)
+    for record in records:
+        clouds[_cloud_key(record)].append(record)
+
+    a_findings: list[FindingDraft] = []
+    b_findings: list[FindingDraft] = []
+    c_findings: list[FindingDraft] = []
+    unclear_records: dict[str, Mapping[str, Any]] = {}
+
+    for cloud_records in clouds.values():
+        eligible: list[Mapping[str, Any]] = []
+        missing_required: list[Mapping[str, Any]] = []
+        for record in cloud_records:
+            if _missing_required_dims(field, record):
+                missing_required.append(record)
+            else:
+                eligible.append(record)
+
+        signature_groups: dict[tuple, list[Mapping[str, Any]]] = defaultdict(list)
+        for record in eligible:
+            signature_groups[_signature(record)].append(record)
+
+        reference_records: list[Mapping[str, Any]] = []
+        reference_dims: dict[str, str | None] = {}
+        if signature_groups:
+            reference_signature = _select_reference_signature(signature_groups)
+            reference_records = signature_groups[reference_signature]
+            reference_dims = _signature_dims(reference_signature)
+
+            # Type A: exact-dimension reference records that disagree across docs.
+            conflicting = _conflicting_records(field, reference_records)
+            if conflicting:
+                a_findings.append(_build_finding(field, "A", conflicting))
+
+            for signature, group_records in signature_groups.items():
+                if signature == reference_signature:
+                    continue
+                dims = _signature_dims(signature)
+                differing = _differing_dims(dims, reference_dims)
+                if not _conflicts_with_reference(field, group_records, reference_records):
+                    continue  # dimension differs but the value is consistent: no finding
+                if not differing:
+                    # Only an optional dimension is stated on one side; remain
+                    # conservative and ask for the metadata (never Type A).
+                    for record in group_records:
+                        unclear_records[str(record.get("evidence_id"))] = record
+                    continue
+                if differing <= {CUTOFF_DIMENSION}:
+                    b_findings.append(
+                        _build_finding(
+                            field,
+                            "B",
+                            group_records,
+                            signature=tuple(sorted(differing)),
+                            reference=reference_records,
+                        )
+                    )
+                elif differing <= definition_dims or differing <= definition_dims | {CUTOFF_DIMENSION}:
+                    c_findings.append(
+                        _build_finding(
+                            field,
+                            "C",
+                            group_records,
+                            signature=tuple(sorted(differing)),
+                            reference=reference_records,
+                        )
+                    )
+                else:
+                    for record in group_records:
+                        unclear_records[str(record.get("evidence_id"))] = record
+
+        if missing_required:
+            if reference_records:
+                for record in missing_required:
+                    if _conflicts_with_reference(field, [record], reference_records):
+                        unclear_records[str(record.get("evidence_id"))] = record
+            else:
+                # No reference in this cloud: any cross-document disagreement is unclear.
+                conflicting = _conflicting_records(field, missing_required)
+                for record in conflicting or missing_required:
+                    unclear_records[str(record.get("evidence_id"))] = record
+
+    findings = [*a_findings, *c_findings, *b_findings]
+    if unclear_records:
+        unclear = sorted(unclear_records.values(), key=_sort_key)
+        missing_dims = sorted(
             {
-                "left": left,
-                "right": right,
-                "class": comparison_class,
-                "signature": (
-                    _missing_signature(left, right)
-                    if comparison_class == "U"
-                    else _definition_signature(left, right)
-                    if comparison_class == "C"
-                    else ()
-                ),
+                dimension
+                for record in unclear
+                for dimension in DIMENSIONS
+                if _dim_value(record, dimension) is None
+                and (dimension in required_dims or dimension in definition_dims)
             }
         )
-    return pairs
-
-
-def _group_pairs(
-    field: str, pairs: Sequence[Mapping[str, Any]]
-) -> list[dict[str, Any]]:
-    """Aggregate pairs into one finding per (field, comparison) group."""
-    groups: dict[tuple, dict[str, Any]] = {}
-    for pair in pairs:
-        left = pair["left"]
-        right = pair["right"]
-        comparison_class = pair["class"]
-        left_dims = _dims(left)
-        signature = pair["signature"]
-        if comparison_class == "A":
-            key = (field, "A", *(left_dims[dimension] for dimension in DIMENSIONS))
-        elif comparison_class == "B":
-            key = (
-                field,
-                "B",
-                *(left_dims[dimension] for dimension in DIMENSIONS if dimension != CUTOFF_DIMENSION),
+        # A comparability-unclear finding must actually have missing metadata;
+        # a record set that merely differs on multiple stated dimensions is a
+        # C/B difference (handled above), never U.
+        if missing_dims:
+            findings.append(
+                _build_finding(field, "U", unclear, signature=tuple(missing_dims))
             )
-        elif comparison_class == "C":
-            key = (field, "C", left_dims["trial_key"], left_dims["arm"], signature)
-        else:
-            # A clarification request is per field: collapse the (usually many)
-            # pairwise missing-dimension combinations into one low-severity finding.
-            key = (field, "U")
-        group = groups.get(key)
-        if group is None:
-            group = {
-                "class": comparison_class,
-                "signature": set(signature),
-                "evidence": {},
-            }
-            groups[key] = group
-        else:
-            group["signature"].update(signature)
-        group["evidence"][str(left.get("evidence_id"))] = left
-        group["evidence"][str(right.get("evidence_id"))] = right
-    return list(groups.values())
+    return findings
 
 
-def _group_cutoff_field(
-    evidence: Sequence[Mapping[str, Any]]
-) -> list[dict[str, Any]]:
+# ---------------------------------------------------------------------------
+# Data cut-off detail field
+# ---------------------------------------------------------------------------
+
+
+def _cutoff_field_findings(records: Sequence[Mapping[str, Any]]) -> list[FindingDraft]:
     """Data cut-off statements are compared per trial/arm cohort as version differences."""
     buckets: dict[tuple, list[Mapping[str, Any]]] = defaultdict(list)
-    for record in evidence:
+    for record in records:
         buckets[(_dim_value(record, "trial_key"), _dim_value(record, "arm"))].append(record)
-    groups: list[dict[str, Any]] = []
+    findings: list[FindingDraft] = []
     for bucket in buckets.values():
         distinct = {_normalized_text("data_cutoff", record) for record in bucket}
         if len(distinct) >= 2:
-            groups.append(
-                {
-                    "class": "B",
-                    "signature": (),
-                    "evidence": {
-                        str(record.get("evidence_id")): record for record in bucket
-                    },
-                }
-            )
-    return groups
+            findings.append(_build_finding("data_cutoff", "B", bucket))
+    return findings
 
 
-def _resolve_stale_findings(
-    session, project_id: str, current_keys: set[str]
-) -> int:
-    """Mark auto-generated consistency findings that are no longer reproduced as resolved.
+# ---------------------------------------------------------------------------
+# Stale-finding resolution
+# ---------------------------------------------------------------------------
 
-    Only findings created by this agent (``consistency:`` dedup prefix, open
-    status) are touched; human-dismissed/confirmed findings are left alone.  This
-    is what makes a round-2 upload close resolved discrepancies instead of
-    leaving them open forever.
-    """
+
+def _resolve_stale_findings(session, project_id: str, current_keys: set[str]) -> int:
+    """Mark auto consistency findings that are no longer reproduced as resolved."""
     resolved = 0
     managed_types = {
         str(FindingType.DATA_INCONSISTENCY),
@@ -837,8 +953,8 @@ def _resolve_stale_findings(
         if str(finding.get("finding_type")) not in managed_types:
             continue
         key = str(finding.get("dedup_key") or "")
-        if not key.startswith("consistency:"):
-            continue
+        # Resolve any auto-managed consistency finding that this run did not reproduce,
+        # including rows created by earlier code versions with a different dedup-key format.
         if key in current_keys:
             continue
         updated = store.update_finding(
@@ -886,24 +1002,13 @@ def run(session, project_id: str, force: bool = False) -> dict:
         records = by_field.get(field, [])
         if len(records) < 2:
             continue
+        comparisons += len(records)
         if field == "data_cutoff":
-            groups = _group_cutoff_field(records)
-            comparisons += len(groups)
+            drafts.extend(_cutoff_field_findings(records))
+        elif field in DEFINITION_ONLY_FIELDS:
+            drafts.extend(_definition_conflict_findings(field, records))
         else:
-            pairs = _collect_pairs(field, records)
-            comparisons += len(pairs)
-            groups = _group_pairs(field, pairs)
-        for group in groups:
-            group_evidence = [group["evidence"][key] for key in sorted(group["evidence"])]
-            signature = tuple(sorted(group["signature"]))
-            drafts.append(
-                _build_finding(
-                    field,
-                    group["class"],
-                    group_evidence,
-                    signature=signature,
-                )
-            )
+            drafts.extend(_partition_field(field, records))
 
     saved = store.save_findings(session, project_id, drafts)
     current_keys = {draft.dedup_key for draft in drafts if draft.dedup_key}

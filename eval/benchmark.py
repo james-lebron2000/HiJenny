@@ -649,6 +649,9 @@ def _count_by(rows: list[dict], key: str) -> dict[str, int]:
 def _clean_control_block(findings: list[dict], ground_truth: dict) -> dict:
     expected = bool(ground_truth.get("expect_no_findings"))
     disallowed_types = set(CLEAN_CONTROL_EXPECTATIONS["disallowed_finding_types"])
+    completeness_types = set(
+        CLEAN_CONTROL_EXPECTATIONS.get("expected_completeness_finding_types") or []
+    )
     disallowed = [
         {
             "finding_id": row.get("finding_id"),
@@ -659,6 +662,16 @@ def _clean_control_block(findings: list[dict], ground_truth: dict) -> dict:
         for row in findings
         if str(row.get("finding_type") or "") in disallowed_types
     ]
+    completeness = [
+        {
+            "finding_id": row.get("finding_id"),
+            "finding_type": row.get("finding_type"),
+            "severity": row.get("severity"),
+            "title": row.get("title"),
+        }
+        for row in findings
+        if str(row.get("finding_type") or "") in completeness_types
+    ]
     other = [
         {
             "finding_id": row.get("finding_id"),
@@ -666,7 +679,8 @@ def _clean_control_block(findings: list[dict], ground_truth: dict) -> dict:
             "title": row.get("title"),
         }
         for row in findings
-        if str(row.get("finding_type") or "") not in disallowed_types
+        if str(row.get("finding_type") or "")
+        not in (disallowed_types | completeness_types)
     ]
     return {
         "enabled": expected,
@@ -674,7 +688,15 @@ def _clean_control_block(findings: list[dict], ground_truth: dict) -> dict:
         "findings_raised": len(findings),
         "disallowed_finding_types": sorted(disallowed_types),
         "disallowed_findings": disallowed,
+        "expected_completeness_finding_types": sorted(completeness_types),
+        "completeness_findings": completeness,
         "other_findings": other,
+        "pass_criterion": (
+            "zero contradiction-type findings (data_inconsistency / "
+            "version_difference / definition_difference / comparability_unclear); "
+            "evidence_gap/incomplete_evidence findings are expected on the minimal "
+            "control fixture and are not counted as false positives."
+        ),
         "passed": (not disallowed) if expected else None,
     }
 
@@ -1317,9 +1339,13 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
         lines.append("")
         lines.append(
             f"Findings raised on the clean package: **{clean['findings_raised']}** — "
-            f"disallowed-type findings: **{len(clean['disallowed_findings'])}** — "
+            f"contradiction-type false positives: **{len(clean['disallowed_findings'])}** — "
+            f"completeness findings expected on the minimal fixture: "
+            f"**{len(clean.get('completeness_findings') or [])}** — "
             f"**{'PASS' if clean['passed'] else 'FAIL'}**."
         )
+        lines.append("")
+        lines.append(str(clean.get("pass_criterion") or ""))
         lines.append("")
         if clean.get("disallowed_findings"):
             lines.extend(
@@ -1330,6 +1356,17 @@ def _render_markdown(scorecard: dict, heading_level: int = 1) -> list[str]:
                         for f in clean["disallowed_findings"]
                     ],
                 )
+            )
+            lines.append("")
+        if clean.get("completeness_findings"):
+            lines.append(
+                "Completeness findings (expected on a 5-page control; not false "
+                "positives): "
+                + ", ".join(
+                    f"{f.get('finding_type')}: {str(f.get('title'))[:60]}"
+                    for f in clean["completeness_findings"][:8]
+                )
+                + (" …" if len(clean["completeness_findings"]) > 8 else "")
             )
             lines.append("")
         if clean.get("other_findings"):

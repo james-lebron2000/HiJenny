@@ -9,6 +9,7 @@ const STAGES = ['INGEST', 'EXTRACT', 'VALIDATE', 'CONSISTENCY', 'GAP', 'QUESTION
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 const FINDING_STATUSES = ['open', 'needs_review', 'confirmed', 'dismissed', 'resolved'];
+const ACTIVE_FINDING_STATUSES = ['open', 'confirmed', 'needs_review'];
 const QUESTION_STATUSES = ['draft', 'reviewed', 'approved', 'sent', 'answered', 'closed', 'dismissed'];
 const REVIEW_STATUSES = ['pending', 'approved', 'edited', 'rejected'];
 const OWNERS = [
@@ -127,6 +128,10 @@ function jsonOptions(method, body) {
 
 function chip(text, cls) {
   return `<span class="chip ${cls || 'grey'}">${esc(text)}</span>`;
+}
+
+function isActiveFinding(finding) {
+  return ACTIVE_FINDING_STATUSES.includes(String((finding && finding.status) || 'open').toLowerCase());
 }
 
 function severityChip(sev) {
@@ -248,7 +253,9 @@ function updateSidebarBadges() {
     'badge-projects': state.projects.length || 0,
     'badge-docs': state.documents.length || s.documents || 0,
     'badge-evidence': state.evidenceAll.length || s.evidence || 0,
-    'badge-findings': state.findings.length || s.findings || 0,
+    'badge-findings': state.findings.length
+      ? state.findings.filter(isActiveFinding).length
+      : s.findings || 0,
   };
   Object.entries(counts).forEach(([id, value]) => {
     const el = document.getElementById(id);
@@ -922,8 +929,10 @@ function reviewEventsHtml() {
 }
 
 function findingsViewHtml() {
+  const activeFindings = state.findings.filter(isActiveFinding);
+  const historyCount = state.findings.length - activeFindings.length;
   const severityCounts = {};
-  state.findings.forEach((f) => { severityCounts[f.severity] = (severityCounts[f.severity] || 0) + 1; });
+  activeFindings.forEach((f) => { severityCounts[f.severity] = (severityCounts[f.severity] || 0) + 1; });
   const bars = SEVERITIES.map((sev) => {
     const n = severityCounts[sev] || 0;
     const max = Math.max(1, ...Object.values(severityCounts));
@@ -932,7 +941,7 @@ function findingsViewHtml() {
   return `
     <div class="page-head">
       <div><h1>Findings &amp; Questions</h1>
-        <div class="sub">${state.findings.length} findings · ${state.questions.length} seller questions — inline edits are audit-logged.</div>
+        <div class="sub">${activeFindings.length} active findings${historyCount ? ` (${historyCount} resolved/dismissed in history)` : ''} · ${state.questions.length} seller questions — inline edits are audit-logged.</div>
       </div>
       <div class="actions">
         <button class="btn" data-action="refresh-view">Refresh</button>
@@ -942,7 +951,7 @@ function findingsViewHtml() {
         <button class="btn primary" data-action="generate-report">Generate report</button>
       </div>
     </div>
-    <div class="card" style="margin-bottom:14px"><div class="card-head"><h2>Risk profile</h2></div>
+    <div class="card" style="margin-bottom:14px"><div class="card-head"><h2>Risk profile</h2><span class="sub">active findings only${historyCount ? ` · ${historyCount} in history` : ''}</span></div>
       <div class="card-body"><div class="bar-chart">${bars}</div></div></div>
     ${findingsTableHtml()}
     ${questionsTableHtml()}

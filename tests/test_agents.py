@@ -499,6 +499,92 @@ def test_data_cutoff_field_version_difference() -> None:
         assert findings[0]["severity"] == str(Severity.LOW)
 
 
+def test_partition_is_disjoint_across_a_b_c_u() -> None:
+    """Sample-package ORR shape: A (42 vs 48.4), B (IB 45 older cutoff), C (FAS 40)."""
+    with store.session_scope() as session:
+        project = make_project(session)
+        csr = make_document(session, project, "CSR_v1.pdf", str(DocType.CSR))
+        ppt = make_document(session, project, "Commercial_deck.pptx", str(DocType.COMMERCIAL))
+        ib = make_document(session, project, "IB_v3.pdf", str(DocType.IB))
+        base = dict(trial_key="NCT05712345", assessment_method="RECIST 1.1")
+        # Primary ITT analysis, data cutoff 2026-01-15.
+        save_evidence(
+            session, project, csr,
+            [
+                make_evidence("orr", 42.0, page=11, population="ITT", data_cutoff="2026-01-15", **base),
+                make_evidence("orr", 42.0, page=2, population="ITT", data_cutoff="2026-01-15", **base),
+                make_evidence("orr", 40.0, page=17, population="FAS", data_cutoff="2026-01-15", **base),
+            ],
+        )
+        save_evidence(
+            session, project, ppt,
+            [make_evidence("orr", 48.4, page=3, population="ITT", data_cutoff="2026-01-15", **base)],
+        )
+        save_evidence(
+            session, project, ib,
+            [make_evidence("orr", 45.0, page=2, population="ITT", data_cutoff="2025-10-01", **base)],
+        )
+
+        consistency.run(session, project["project_id"])
+        findings = findings_of(session, project)
+        assert {finding["finding_type"] for finding in findings} == {
+            str(FindingType.DATA_INCONSISTENCY),
+            str(FindingType.VERSION_DIFFERENCE),
+            str(FindingType.DEFINITION_DIFFERENCE),
+        }
+        by_type = {finding["finding_type"]: finding for finding in findings}
+        assert by_type[str(FindingType.DATA_INCONSISTENCY)]["detail"]["values"] and {
+            value["value"] for value in by_type[str(FindingType.DATA_INCONSISTENCY)]["detail"]["values"]
+        } == {42.0, 48.4}
+        assert {
+            value["value"] for value in by_type[str(FindingType.VERSION_DIFFERENCE)]["detail"]["values"]
+        } == {45.0}
+        assert {
+            value["value"] for value in by_type[str(FindingType.DEFINITION_DIFFERENCE)]["detail"]["values"]
+        } == {40.0}
+        # Reference side is carried separately, not re-asserted as contradictory.
+        assert by_type[str(FindingType.VERSION_DIFFERENCE)]["detail"]["reference_values"]
+        assert by_type[str(FindingType.DEFINITION_DIFFERENCE)]["detail"]["reference_values"]
+
+        sets = [set(finding["evidence_ids"]) for finding in findings]
+        for left in range(len(sets)):
+            for right in range(left + 1, len(sets)):
+                assert not (sets[left] & sets[right]), "A/B/C/U evidence sets must be disjoint"
+        assert not findings_of(session, project, str(FindingType.COMPARABILITY_UNCLEAR))
+
+
+def test_unclear_requires_non_empty_missing_dimensions() -> None:
+    with store.session_scope() as session:
+        project = make_project(session)
+        csr = make_document(session, project, "CSR_v1.pdf", str(DocType.CSR))
+        ppt = make_document(session, project, "Commercial_deck.pptx", str(DocType.COMMERCIAL))
+        base = dict(trial_key="NCT05712345", assessment_method="RECIST 1.1")
+        # Two dimensions differ (population + cutoff) but both are stated.
+        save_evidence(
+            session, project, csr,
+            [make_evidence("orr", 42.0, population="ITT", data_cutoff="2026-01-15", **base)],
+        )
+        save_evidence(
+            session, project, ppt,
+            [make_evidence("orr", 45.0, population="FAS", data_cutoff="2025-10-01", **base)],
+        )
+        consistency.run(session, project["project_id"])
+        unclear = findings_of(session, project, str(FindingType.COMPARABILITY_UNCLEAR))
+        assert unclear == [], "multiple stated differences must be C/B, never U"
+        for finding in unclear:
+            assert finding["detail"]["missing_dimensions"]
+
+        # A genuinely missing required dimension -> U with non-empty dims.
+        ib = make_document(session, project, "IB_v3.pdf", str(DocType.IB))
+        save_evidence(session, project, ib, [make_evidence("orr", 50.0, population=None,
+                                                           data_cutoff="2026-01-15", **base)])
+        consistency.run(session, project["project_id"])
+        unclear = findings_of(session, project, str(FindingType.COMPARABILITY_UNCLEAR))
+        assert unclear
+        assert unclear[0]["detail"]["missing_dimensions"]
+        assert "population" in unclear[0]["detail"]["missing_dimensions"]
+
+
 def test_primary_endpoint_text_abbreviation_is_not_a_contradiction() -> None:
     with store.session_scope() as session:
         project = make_project(session)

@@ -514,6 +514,7 @@ _LOW_CARDINALITY_FIELDS = {
     FieldName.SUBGROUP_ANALYSIS,
     FieldName.PROTOCOL_DEVIATION,
     FieldName.AUDIT_SUMMARY,
+    FieldName.AESI,
     FieldName.ASSET_NAME,
     FieldName.MECHANISM,
     FieldName.TARGET,

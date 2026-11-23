@@ -840,3 +840,25 @@ def test_finding_field_mismatch_not_overridden_by_wording():
     ]
     prf = metrics.finding_prf(findings, topics)
     assert (prf["tp"], prf["fp"], prf["fn"]) == (0, 1, 1)
+
+
+def test_clean_control_block_passes_with_only_completeness_findings():
+    from eval.benchmark import _clean_control_block
+    from corpus.adjudication import CLEAN_CONTROL_EXPECTATIONS as cc
+
+    gt = {"expect_no_findings": True}
+    gap_only = [
+        {"finding_id": "f1", "finding_type": "evidence_gap", "severity": "medium",
+         "title": "Evidence gap: OS estimate"}
+    ]
+    block = _clean_control_block(gap_only, gt)
+    assert block["passed"] is True
+    assert len(block["completeness_findings"]) == 1
+    contradiction = [
+        {"finding_id": "f2", "finding_type": "data_inconsistency", "severity": "critical",
+         "title": "Data inconsistency: ORR differs"}
+    ]
+    failed = _clean_control_block(contradiction, gt)
+    assert failed["passed"] is False
+    assert "evidence_gap" in cc["expected_completeness_finding_types"]
+    assert "evidence_gap" not in cc["disallowed_finding_types"]

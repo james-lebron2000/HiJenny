@@ -268,6 +268,29 @@ def test_table_extractor_ignores_rows_without_locatable_value(project_id):
     assert TableExtractor(context).extract() == []
 
 
+def test_aesi_special_interest_statement(project_id):
+    page = (
+        "3. Adverse events of special interest\n"
+        "Adverse events of special interest included hepatic toxicity, anaemia and thrombocytopenia. "
+        "All were manageable with dose interruption or reduction."
+    )
+    document = add_document(
+        project_id,
+        "SAFETY.pdf",
+        ["Safety population: 126 patients. Data cutoff: 2026-01-15.", page],
+        doc_type="SAFETY",
+    )
+    context = build_context(project_id, document["document_id"])
+    drafts = RulesExtractor(context).extract()
+    aesi = by_field(drafts, FieldName.AESI)
+    assert len(aesi) == 1, aesi
+    assert aesi[0].page == 2
+    assert "hepatic toxicity" in (aesi[0].value_text or "")
+    assert "thrombocytopenia" in (aesi[0].value_text or "")
+    assert aesi[0].population == "SAFETY"
+    assert normalize_ws(aesi[0].quote) in normalize_ws(page)
+
+
 # ---------------------------------------------------------------------------
 # 4. Validation: pass and fail cases
 # ---------------------------------------------------------------------------

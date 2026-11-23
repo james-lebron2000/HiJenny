@@ -52,6 +52,39 @@ SAMPLE_PACKAGE_FINDING_TOPICS: list[dict] = [
         "rationale": "IB reports an earlier data cutoff; a version difference, not a contradiction.",
     },
     {
+        "topic_id": "typeB_pfs_ib_cutoff",
+        "finding_type": "version_difference",
+        "field_name": "pfs",
+        "document_types": ["CSR", "IB"],
+        "documents": ["Clinical_Study_Report_v1.0.pdf", "Investigator_Brochure_v3.0.pdf"],
+        "keywords": ["PFS", "6.8", "7.1", "cut-off"],
+        "expected_severity": "low",
+        "expected_status_v2": "resolved",
+        "rationale": "IB reports PFS at an earlier data cutoff; version difference, not contradiction.",
+    },
+    {
+        "topic_id": "typeB_sae_ib_cutoff",
+        "finding_type": "version_difference",
+        "field_name": "sae",
+        "document_types": ["CSR", "IB"],
+        "documents": ["Clinical_Study_Report_v1.0.pdf", "Investigator_Brochure_v3.0.pdf"],
+        "keywords": ["SAE", "20.0", "cut-off"],
+        "expected_severity": "low",
+        "expected_status_v2": "resolved",
+        "rationale": "IB reports SAE at an earlier data cutoff; version difference.",
+    },
+    {
+        "topic_id": "typeB_data_cutoff",
+        "finding_type": "version_difference",
+        "field_name": "data_cutoff",
+        "document_types": ["CSR", "IB"],
+        "documents": ["Clinical_Study_Report_v1.0.pdf", "Investigator_Brochure_v3.0.pdf"],
+        "keywords": ["cut-off", "2025-10-01", "2026-01-15"],
+        "expected_severity": "low",
+        "expected_status_v2": "resolved",
+        "rationale": "Data cutoffs differ between documents; version difference.",
+    },
+    {
         "topic_id": "typeC_orr_fas_bicr",
         "finding_type": "definition_difference",
         "field_name": "orr",
@@ -71,16 +104,6 @@ SAMPLE_PACKAGE_FINDING_TOPICS: list[dict] = [
         "expected_severity": "medium",
         "expected_status_v2": "resolved",
         "rationale": "Protocol defines the PP population but gives no size; v1 SAP references PP without a size.",
-    },
-    {
-        "topic_id": "gap_multiplicity",
-        "finding_type": "evidence_gap",
-        "field_name": "multiplicity",
-        "document_types": ["SAP"],
-        "keywords": ["multiplicity", "alpha", "type I error"],
-        "expected_severity": "medium",
-        "expected_status_v2": "resolved",
-        "rationale": "v1 SAP does not document a multiplicity/alpha-control strategy.",
     },
     {
         "topic_id": "gap_subgroup_results",
@@ -140,11 +163,6 @@ SAMPLE_PACKAGE_QUESTION_TOPICS: list[dict] = [
         "finding_topic_id": "gap_pp_population",
         "keywords": ["per-protocol", "PP population", "size"],
     },
-    {
-        "topic_id": "q_multiplicity",
-        "finding_topic_id": "gap_multiplicity",
-        "keywords": ["multiplicity", "alpha"],
-    },
 ]
 
 SAMPLE_PACKAGE_COVERAGE: list[dict] = [
@@ -154,14 +172,9 @@ SAMPLE_PACKAGE_COVERAGE: list[dict] = [
         "expected_status": "partial",
     },
     {
-        "dimension": "statistics",
-        "requirement": "multiplicity / alpha control",
-        "expected_status": "not_found",
-    },
-    {
         "dimension": "efficacy",
         "requirement": "subgroup analyses results",
-        "expected_status": "not_found",
+        "expected_status": "partial",
     },
     {
         "dimension": "quality",
@@ -189,7 +202,6 @@ SAMPLE_PACKAGE_LIFECYCLE: dict = {
         "typeA_sae_csr_vs_safety",
         "typeB_orr_ib_cutoff",
         "gap_pp_population",
-        "gap_multiplicity",
         "gap_subgroup_results",
     ],
     "persisting_topics": [
@@ -198,7 +210,11 @@ SAMPLE_PACKAGE_LIFECYCLE: dict = {
         "prompt_injection_ib",
     ],
     "new_topics": [],
-    "note": "Lead-pinned lifecycle lists. v2 ground truth JSON wins when present.",
+    "note": (
+        "Lead-pinned lifecycle lists. v2 ground truth JSON wins when present. "
+        "Multiplicity was removed from expectations after corpus review: the v1 "
+        "package does state the alpha/multiplicity position."
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -290,21 +306,27 @@ def fallback_ground_truth(package_name: str = "sample_package") -> dict:
 CLEAN_CONTROL_EXPECTATIONS: dict = {
     "package": "clean_control",
     "variant": "clean_control",
+    # "No findings" here means no *manufactured contradiction* findings.  The
+    # generated control fixture is deliberately tiny (5 short pages), so it does
+    # not cover every diligence-checklist item: completeness findings
+    # (evidence_gap / incomplete_evidence) on it are true observations about the
+    # fixture, not false positives.  Contradiction findings are the false
+    # positives this control exists to catch.
     "expect_no_findings": True,
-    # A clean package must not raise contradiction-style findings.  Evidence
-    # gaps are also disallowed because the fixture deliberately supplies every
-    # required field; unrelated technical concerns are reported but not scored.
     "disallowed_finding_types": [
         "data_inconsistency",
         "version_difference",
         "definition_difference",
         "comparability_unclear",
-        "evidence_gap",
-        "incomplete_evidence",
     ],
+    "expected_completeness_finding_types": ["evidence_gap", "incomplete_evidence"],
     "finding_topics": [],
     "question_topics": [],
     "coverage": [],
+    "note": (
+        "PASS = zero contradiction-type findings; completeness findings are "
+        "expected because the control fixture is intentionally minimal."
+    ),
 }
 
 

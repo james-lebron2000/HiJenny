@@ -886,7 +886,8 @@ def save_findings(
         row.title = draft.title
         row.explanation = draft.explanation
         row.severity = str(draft.severity)
-        row.evidence_ids_json = _dump(draft.evidence_ids)
+        evidence_ids = _filter_existing_evidence_ids(session, draft.evidence_ids)
+        row.evidence_ids_json = _dump(evidence_ids)
         row.possible_causes_json = _dump(draft.possible_causes)
         row.missing_information_json = _dump(draft.missing_information)
         row.recommended_action = draft.recommended_action
@@ -894,9 +895,28 @@ def save_findings(
         row.detail_json = _dump(draft.detail)
         row.created_by_run = run_id or row.created_by_run
         session.flush()
-        _sync_links(session, FindingEvidence, "finding_id", row.finding_id, draft.evidence_ids)
+        _sync_links(session, FindingEvidence, "finding_id", row.finding_id, evidence_ids)
         stored.append(_finding_dict(row))
     return {"created": created, "updated": updated, "findings": stored}
+
+
+def _filter_existing_evidence_ids(session: Session, evidence_ids: Sequence[str]) -> list[str]:
+    """Drop references to evidence rows that no longer exist (e.g. after a force re-ingest).
+
+    Keeps the audit trail clean: a question/finding never points at a deleted
+    evidence row, while the review-event history preserves what was changed.
+    """
+    ids = [str(i) for i in evidence_ids if i]
+    if not ids:
+        return []
+    existing = set(session.scalars(select(Evidence.evidence_id).where(Evidence.evidence_id.in_(ids))).all())
+    seen: set[str] = set()
+    out: list[str] = []
+    for eid in ids:
+        if eid in existing and eid not in seen:
+            seen.add(eid)
+            out.append(eid)
+    return out
 
 
 def _sync_links(session: Session, model, fk_name: str, owner_id: str, evidence_ids: Sequence[str]) -> None:
@@ -997,13 +1017,14 @@ def save_questions(
         row.priority = str(draft.priority)
         row.owner = str(draft.owner)
         row.required_documents_json = _dump(draft.required_documents)
-        row.evidence_ids_json = _dump(draft.evidence_ids)
+        evidence_ids = _filter_existing_evidence_ids(session, draft.evidence_ids)
+        row.evidence_ids_json = _dump(evidence_ids)
         row.finding_ids_json = _dump(draft.finding_ids)
         row.finding_type = draft.finding_type
         row.source = draft.source
         row.updated_at = utcnow()
         session.flush()
-        _sync_links(session, QuestionEvidence, "question_id", row.question_id, draft.evidence_ids)
+        _sync_links(session, QuestionEvidence, "question_id", row.question_id, evidence_ids)
         stored.append(_question_dict(row))
     return {
         "created": created,
@@ -1052,6 +1073,10 @@ def update_question(
             setattr(row, key, value)
     if fields.get("required_documents") is not None:
         row.required_documents_json = _dump(fields["required_documents"])
+    if fields.get("evidence_ids") is not None:
+        row.evidence_ids_json = _dump(_filter_existing_evidence_ids(session, fields["evidence_ids"]))
+    if fields.get("finding_ids") is not None:
+        row.finding_ids_json = _dump([str(i) for i in fields["finding_ids"] if i])
     row.updated_at = utcnow()
     session.flush()
     after = _question_dict(row)
