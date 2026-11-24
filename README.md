@@ -699,5 +699,6 @@ object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Engineering architecture: modules, data model, state machine, comparability algorithm, API, extension points |
 | [docs/EVALUATION.md](docs/EVALUATION.md) | Evaluation methodology, results, confidence intervals, limitations, real-data plan |
 | [docs/IO_EXAMPLES.md](docs/IO_EXAMPLES.md) | Real input/output samples: package manifest, source page excerpts, Evidence/Finding/Question JSON, report & Excel rows, v1→v2 lifecycle |
+| [docs/PRODUCTION_ROADMAP.md](docs/PRODUCTION_ROADMAP.md) | Production readiness: real-data benchmark, OCR/parsing hardening, review workflow, security/deployment baseline, quality flywheel, 90-day plan, KPIs |
 | [AGENTS_CONTRACT.md](AGENTS_CONTRACT.md) | Internal module contract used by the multi-agent build |
 | [LICENSE](LICENSE) | Apache-2.0 |
