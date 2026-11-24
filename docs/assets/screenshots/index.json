@@ -1,0 +1,11 @@
+{
+  "project_id": "prj_7952af1a2d4d",
+  "base": "http://127.0.0.1:8123",
+  "views": {
+    "projects": "01_projects.png",
+    "upload": "02_upload.png",
+    "evidence": "03_evidence.png",
+    "findings": "04_findings.png",
+    "report": "05_report.png"
+  }
+}

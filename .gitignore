@@ -18,3 +18,5 @@ data/*
 *.db-shm
 .DS_Store
 exports/
+
+demo_workspace/

@@ -15,6 +15,14 @@ list and a reviewable report — every claim linked to document + page + verbati
 
 [中文文档](#中文文档) · [English documentation](#english-documentation)
 
+![HiJenny Evidence Workspace](docs/assets/screenshots/03_evidence.png)
+
+> **一键演示 / One-command demo:** `./scripts/demo.sh` → http://127.0.0.1:8123/
+> · [演示指南 / Demo guide](docs/DEMO_GUIDE.md) ·
+> [路演 PPT / Pitch deck](docs/HiJenny_Pitch.pptx) ·
+> [示例交付物 / Sample output](docs/sample_output/) ·
+> [截图 / Screenshots](docs/assets/screenshots/)
+>
 > **状态 / Status:** MVP 端到端可运行 / end-to-end MVP. 示例包 13 份文档、284 页；
 > 136 条证据全部通过原文校验；11 条 active findings；6 条卖方问题；174 个自动化测试。
 > 合成语料，非真实客户性能验证 — 见 [限制](#14-安全与限制) / [Limitations](#14-security--limitations)。
@@ -78,7 +86,14 @@ pip install -e ".[dev]"              # 运行时依赖 + pytest/reportlab（跑�
 
 ## 5. 快速开始（CLI，5 分钟）
 
-仓库已提交确定性的示例资料包 `data/sample_package/`，克隆后可直接运行：
+仓库已提交确定性的示例资料包 `data/sample_package/`，克隆后可直接运行。**推荐先跑一键演示**
+（自动创建隔离工作区、跑完整流水线、启动 UI）：
+
+```bash
+./scripts/demo.sh              # http://127.0.0.1:8123/
+```
+
+也可以分步执行：
 
 ```bash
 # 1) 一键跑完整流水线（解析 → 抽取 → 校验 → 一致性 → 缺口 → 问题 → 报告）
@@ -415,7 +430,14 @@ below also works as `python3 -m hijenny.cli ...`.
 
 ## 5. Quickstart (CLI, 5 minutes)
 
-A deterministic sample package is committed at `data/sample_package/`:
+A deterministic sample package is committed at `data/sample_package/`. The fastest
+start is the one-command demo (isolated workspace + full pipeline + UI):
+
+```bash
+./scripts/demo.sh              # http://127.0.0.1:8123/
+```
+
+Or run the steps manually:
 
 ```bash
 # Full pipeline: parse -> extract -> verify -> consistency -> gaps -> questions -> report
@@ -700,5 +722,10 @@ object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
 | [docs/EVALUATION.md](docs/EVALUATION.md) | Evaluation methodology, results, confidence intervals, limitations, real-data plan |
 | [docs/IO_EXAMPLES.md](docs/IO_EXAMPLES.md) | Real input/output samples: package manifest, source page excerpts, Evidence/Finding/Question JSON, report & Excel rows, v1→v2 lifecycle |
 | [docs/PRODUCTION_ROADMAP.md](docs/PRODUCTION_ROADMAP.md) | Production readiness: real-data benchmark, OCR/parsing hardening, review workflow, security/deployment baseline, quality flywheel, 90-day plan, KPIs |
+| [docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md) | 10/15-minute customer & investor demo script, screenshots, FAQ (中文/English) |
+| [docs/CUSTOMER_ONE_PAGER.md](docs/CUSTOMER_ONE_PAGER.md) | Customer one-pager: deliverables, pilot offer, acceptance criteria |
+| [docs/SECURITY_ONE_PAGER.md](docs/SECURITY_ONE_PAGER.md) | Security questionnaire answers: deployment, isolation, LLM policy, access/audit, honest gaps |
+| [docs/HiJenny_Pitch.pptx](docs/HiJenny_Pitch.pptx) · [PDF](docs/HiJenny_Pitch.pdf) | Investor/customer pitch deck with product screenshots and synthetic-corpus benchmark |
+| [docs/sample_output/](docs/sample_output/) | Ready client deliverables generated from the demo package (MD/DOCX/PDF/XLSX) |
 | [AGENTS_CONTRACT.md](AGENTS_CONTRACT.md) | Internal module contract used by the multi-agent build |
 | [LICENSE](LICENSE) | Apache-2.0 |

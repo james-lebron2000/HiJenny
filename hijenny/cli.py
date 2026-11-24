@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from hijenny import config, pipeline, store
@@ -50,6 +52,153 @@ def cmd_demo(args: argparse.Namespace) -> int:
         store.update_project(session, project_id, meta={"package_dir": str(dest), "source_package": str(package_dir)})
     print(f"project created: {project_id}  documents: {dest}")
     return _run(project_id, force=args.force)
+
+
+def _convert_pdf(docx_path: Path, out_dir: Path) -> Path | None:
+    """Convert a DOCX report to PDF with LibreOffice, when available."""
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        return None
+    profile_dir = Path(tempfile.mkdtemp(prefix="hijenny_lo_"))
+    try:
+        subprocess.run(
+            [
+                soffice,
+                # Isolated, writable LibreOffice profile (required in sandboxed/CI environments).
+                f"-env:UserInstallation=file://{profile_dir}",
+                "--headless",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                str(out_dir),
+                str(docx_path),
+            ],
+            check=False,
+            timeout=180,
+            capture_output=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    pdf = out_dir / (docx_path.stem + ".pdf")
+    return pdf if pdf.is_file() and pdf.stat().st_size > 0 else None
+
+
+def cmd_demo_kit(args: argparse.Namespace) -> int:
+    """Build an isolated, ready-to-present demo workspace (DB + project + deliverables)."""
+    package_dir = Path(args.package).resolve()
+    if not package_dir.is_dir():
+        print(f"package directory not found: {package_dir}", file=sys.stderr)
+        return 2
+
+    out = Path(args.out).resolve()
+    data_dir = out / "data"
+    deliverables = out / "deliverables"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    deliverables.mkdir(parents=True, exist_ok=True)
+
+    # Isolate the demo: its own data dir, DB and project store.
+    config.DATA_DIR = data_dir
+    config.DB_PATH = data_dir / "hijenny.db"
+    store.configure(config.DB_PATH)
+    store.init_db()
+
+    with store.session_scope() as session:
+        project = store.create_project(
+            session,
+            name=args.name or "ASD-101 License-in Clinical Due Diligence",
+            asset_name=args.asset or "ASD-101 (zafinostat)",
+            indication=args.indication or "MTAP-deleted advanced solid tumors",
+            phase=args.phase or "Phase 2",
+        )
+        project_id = project["project_id"]
+        dest = _load_package(project_id, package_dir)
+        store.update_project(session, project_id, meta={"package_dir": str(dest), "source_package": str(package_dir)})
+
+    run = pipeline.run_pipeline(project_id)
+    if run.get("error"):
+        print(run["error"], file=sys.stderr)
+        return 1
+
+    exports_dir = data_dir / "projects" / project_id / "exports"
+    copied: list[Path] = []
+    for name in ("HiJenny_Report.md", "HiJenny_Report.docx", "Seller_Questions.xlsx"):
+        src = exports_dir / name
+        if src.is_file():
+            target = deliverables / name
+            shutil.copy2(src, target)
+            copied.append(target)
+    pdf_path = None
+    docx = deliverables / "HiJenny_Report.docx"
+    if not args.no_pdf and docx.is_file():
+        pdf_path = _convert_pdf(docx, deliverables)
+        if pdf_path:
+            copied.append(pdf_path)
+
+    with store.session_scope() as session:
+        stats = store.project_stats(session, project_id)
+        findings = store.list_findings(session, project_id)
+        questions = store.list_questions(session, project_id)
+
+    info = {
+        "project_id": project_id,
+        "workspace": str(out),
+        "data_dir": str(data_dir),
+        "db_path": str(config.DB_PATH),
+        "documents": stats.get("documents"),
+        "pages": stats.get("pages"),
+        "evidence": stats.get("evidence"),
+        "findings": len(findings),
+        "findings_by_severity": stats.get("findings_by_severity"),
+        "questions": len(questions),
+        "coverage_by_status": stats.get("coverage_by_status"),
+        "deliverables": [str(p.relative_to(out)) for p in copied],
+        "serve_command": (
+            f"HIJENNY_DATA_DIR={data_dir} HIJENNY_DB_PATH={config.DB_PATH} "
+            f"hijenny serve --port 8123"
+        ),
+    }
+    (out / "demo_info.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
+    (out / "README.md").write_text(_demo_readme(info), encoding="utf-8")
+
+    print(json.dumps(info, indent=2))
+    print(f"\ndemo workspace ready: {out}")
+    print(f"open the UI: {info['serve_command']}")
+    if args.serve:
+        import uvicorn
+
+        uvicorn.run("hijenny.api.main:app", host=args.host, port=args.port, reload=False)
+    return 0
+
+
+def _demo_readme(info: dict) -> str:
+    return f"""# HiJenny demo workspace / 演示工作区
+
+Generated by `hijenny demo-kit`. Everything here is isolated from your normal
+`data/` directory, so it is safe to reset or delete.
+
+- Project: `{info['project_id']}`
+- Package: {info['documents']} documents / {info['pages']} pages
+- Evidence: {info['evidence']} rows · Findings: {info['findings']} · Questions: {info['questions']}
+- Deliverables: {', '.join(info['deliverables'])}
+
+## Start the demo UI / 启动演示界面
+
+```bash
+{info['serve_command']}
+```
+
+Open <http://127.0.0.1:8123/> with a desktop browser. Suggested demo flow:
+Projects → Upload & Analysis → Evidence → Findings & Questions → Report.
+
+## Deliverables / 交付物
+
+See `deliverables/`: due-diligence report (MD/DOCX/PDF) and the 6-sheet
+`Seller_Questions.xlsx` workbook.
+
+## Reset / 重置
+
+Delete this directory and run `hijenny demo-kit --out <dir>` again.
+"""
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -142,6 +291,22 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--phase", default=None)
     demo.add_argument("--force", action="store_true")
     demo.set_defaults(func=cmd_demo)
+
+    kit = sub.add_parser(
+        "demo-kit",
+        help="build an isolated, presentation-ready demo workspace (DB + project + deliverables)",
+    )
+    kit.add_argument("--package", default="data/sample_package")
+    kit.add_argument("--out", default="demo_workspace")
+    kit.add_argument("--name", default=None)
+    kit.add_argument("--asset", default=None)
+    kit.add_argument("--indication", default=None)
+    kit.add_argument("--phase", default=None)
+    kit.add_argument("--no-pdf", action="store_true", help="skip DOCX→PDF conversion")
+    kit.add_argument("--serve", action="store_true", help="start the UI after building the workspace")
+    kit.add_argument("--host", default="127.0.0.1")
+    kit.add_argument("--port", type=int, default=8123)
+    kit.set_defaults(func=cmd_demo_kit)
 
     run = sub.add_parser("run", help="run the analysis pipeline for an existing project")
     run.add_argument("--project", required=True)

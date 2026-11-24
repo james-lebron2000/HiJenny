@@ -182,9 +182,18 @@ function currentView() {
   return ['projects', 'upload', 'evidence', 'findings', 'report'].includes(view) ? view : 'projects';
 }
 
+function hashParams() {
+  const raw = location.hash || '';
+  const idx = raw.indexOf('?');
+  return new URLSearchParams(idx >= 0 ? raw.slice(idx + 1) : '');
+}
+
 function nav(view) {
+  const project = hashParams().get('project') || state.projectId;
+  // Leaving a deep-linked document view resets its transient evidence filter.
+  state.filters.evidence.document_id = '';
   if (currentView() === view) { renderView(); return; }
-  location.hash = `#/${view}`;
+  location.hash = `#/${view}${project ? '?project=' + encodeURIComponent(project) : ''}`;
 }
 
 function setView(html) {
@@ -271,6 +280,20 @@ function updateSidebarBadges() {
 /* ---------------------------------------------------------------- router */
 async function renderView() {
   state.view = currentView();
+  // Deep-link controls (used by the demo kit and shareable review links):
+  //   #/evidence?project=<id>&doc=<document_id>&page=11&preview=text&evidence=<evidence_id>
+  const params = hashParams();
+  if (params.get('preview') === 'text') state.previewMode = 'text';
+  if (state.view === 'evidence') {
+    const doc = params.get('doc');
+    if (doc) {
+      state.previewDocId = doc;
+      state.previewPage = Number(params.get('page') || 1) || 1;
+      // Focus the evidence list on the linked document (shareable review link).
+      state.filters.evidence.document_id = doc;
+    }
+    if (params.get('evidence')) state.pendingFocusEvidence = params.get('evidence');
+  }
   $$('.nav-item[data-nav]').forEach((btn) => btn.classList.toggle('active', btn.dataset.nav === state.view));
   const seq = ++state.renderSeq;
   updateTopbar();
@@ -448,11 +471,16 @@ function updateRunPanels() {
 async function renderUpload(seq) {
   setView(loadingBlock('Loading documents…'));
   try {
-    const data = await api(`/api/projects/${state.projectId}`);
+    // The documents endpoint adds evidence_count + file_url used by the table;
+    // the project endpoint carries stats/runs/outputs.
+    const [data, docsRes] = await Promise.all([
+      api(`/api/projects/${state.projectId}`),
+      api(`/api/projects/${state.projectId}/documents`),
+    ]);
     if (seq !== state.renderSeq) return;
     state.project = data.project;
     state.stats = data.stats;
-    state.documents = (data.documents || []);
+    state.documents = (docsRes.documents || data.documents || []);
     state.runs = data.runs || [];
     state.outputs = data.outputs || null;
     const latest = data.latest_run;
@@ -794,6 +822,10 @@ async function renderEvidence(seq) {
     }
     renderEvidenceView();
     renderEvidenceCards();
+    if (state.selectedEvidenceId) {
+      const selected = document.querySelector(`.ev-card[data-id="${state.selectedEvidenceId}"]`);
+      if (selected && selected.scrollIntoView) selected.scrollIntoView({ block: 'center' });
+    }
     await updatePreview();
     state.outputs = null;
     updateSidebarBadges();
@@ -1459,8 +1491,10 @@ async function init() {
     const data = await api('/api/projects');
     state.projects = data.projects || [];
     const stored = localStorage.getItem('hijenny.project');
+    const requested = hashParams().get('project');
+    const validRequested = requested && state.projects.find((p) => p.project_id === requested);
     const valid = state.projects.find((p) => p.project_id === stored);
-    state.projectId = valid ? stored : (state.projects[0] ? state.projects[0].project_id : null);
+    state.projectId = validRequested ? requested : (valid ? stored : (state.projects[0] ? state.projects[0].project_id : null));
     if (state.projectId) localStorage.setItem('hijenny.project', state.projectId);
     state.project = null;
   } catch (error) {
