@@ -163,7 +163,7 @@ def _parse_pdf_page(
     try:
         finder = page.find_tables()
         for raw_table in getattr(finder, "tables", []):
-            rows = _clean_table_rows(raw_table.extract())
+            rows = _table_rows(raw_table, page)
             if not rows:
                 continue
             table_bbox = common.bbox_from_rect(getattr(raw_table, "bbox", []))
@@ -220,6 +220,74 @@ def _clean_table_rows(raw_rows) -> list[list[str]]:
         if any(row):
             rows.append(row)
     return rows[:_MAX_TABLE_ROWS]
+
+
+def _table_rows(raw_table, page: "fitz.Page") -> list[list[str]]:
+    """Build table rows with verbatim cell text.
+
+    PyMuPDF 2.x can split ``42.0`` into ``"420\\n."`` in
+    ``table.extract()`` (cell text is rebuilt from glyph fragments).  The
+    page's word list is unaffected, so we prefer rebuilding every cell from
+    the words whose centres fall inside the cell bbox, and fall back to the
+    library extraction when cell geometry is unavailable.
+    """
+    raw_rows = _clean_table_rows(raw_table.extract())
+    try:
+        words = page.get_text("words")
+        rebuilt = _rebuild_rows_from_words(raw_table, raw_rows, words)
+    except Exception:  # noqa: BLE001 - geometry parsing is best-effort
+        rebuilt = None
+    if rebuilt:
+        rebuilt_chars = sum(len("".join(row)) for row in rebuilt)
+        raw_chars = sum(len("".join(row)) for row in raw_rows)
+        # Accept the rebuild unless it lost most of the cell content (e.g. a
+        # scanned/image cell with no extractable words).
+        if rebuilt_chars >= max(1, int(raw_chars * 0.6)):
+            return rebuilt[:_MAX_TABLE_ROWS]
+    return raw_rows
+
+
+def _rebuild_rows_from_words(raw_table, raw_rows: list[list[str]], words) -> list[list[str]] | None:
+    cells = getattr(raw_table, "cells", None)
+    rows_n = getattr(raw_table, "row_count", None) or len(raw_rows)
+    cols_n = getattr(raw_table, "col_count", None) or max((len(r) for r in raw_rows), default=0)
+    if not cells or rows_n <= 0 or cols_n <= 0 or len(cells) != rows_n * cols_n:
+        return None
+    rows: list[list[str]] = []
+    for r in range(rows_n):
+        row: list[str] = []
+        for c in range(cols_n):
+            # PyMuPDF exposes cells column-major: index = column * row_count + row.
+            bbox = cells[c * rows_n + r]
+            row.append(_cell_text_from_words(words, bbox))
+        rows.append(row)
+    return [row for row in rows if any(cell.strip() for cell in row)]
+
+
+def _cell_text_from_words(words, bbox, pad: float = 1.5) -> str:
+    """Verbatim cell text: words whose centre lies inside the cell bbox."""
+    try:
+        x0, y0, x1, y1 = (float(v) for v in bbox[:4])
+    except (TypeError, ValueError):
+        return ""
+    by_line: dict[int, list[tuple[float, str]]] = {}
+    for word in words:
+        try:
+            wx0, wy0, wx1, wy1, text = (float(word[0]), float(word[1]), float(word[2]), float(word[3]), str(word[4]))
+        except (IndexError, TypeError, ValueError):
+            continue
+        cx, cy = (wx0 + wx1) / 2.0, (wy0 + wy1) / 2.0
+        if cx < x0 - pad or cx > x1 + pad or cy < y0 - pad or cy > y1 + pad:
+            continue
+        line_key = int(round(cy / 4.0))
+        by_line.setdefault(line_key, []).append((wx0, text))
+    if not by_line:
+        return ""
+    lines = []
+    for key in sorted(by_line):
+        line_words = [text for _, text in sorted(by_line[key], key=lambda item: item[0])]
+        lines.append(" ".join(line_words))
+    return "\n".join(lines)
 
 
 def _caption_for_table(blocks: list[TextBlock], table_bbox: list[float]) -> str | None:
