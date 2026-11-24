@@ -1,258 +1,701 @@
-# HiJenny — 医药资产交易智能尽调系统
+# HiJenny
 
 [![CI](https://github.com/james-lebron2000/HiJenny/actions/workflows/ci.yml/badge.svg)](https://github.com/james-lebron2000/HiJenny/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](pyproject.toml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**GitHub:** https://github.com/james-lebron2000/HiJenny
+**医药资产交易智能尽调系统 · Evidence-first pharmaceutical BD due diligence platform**
 
-**Evidence-first, workflow-driven due diligence for pharma BD / license-in teams.**
-Input: a seller data package (PDF / PPTX / XLSX). Output: a traceable clinical
-evidence base, cross-document consistency findings, evidence gaps, a seller
-question list, and a reviewable due-diligence report — every claim linked to
-document + page + verbatim quote.
+把卖方临床资料包（PDF / PPTX / XLSX）变成一份**每条结论都能点回原文**的尽调工作底稿：
+证据库 → 跨文件一致性 → 证据缺口 → 卖方问题清单 → 可审核报告。
 
-> **Status: MVP implemented and running end-to-end** on a 276-page synthetic
-> Phase 2 oncology package (13 documents; 1,000-page class when the CSR appendix
-> is expanded): 136 verified evidence rows, 11 active findings, 6 seller
-> questions, 174 automated tests. This is a working product prototype, not a
-> validated clinical/regulatory instrument — see [Limitations](#limitations).
-> Product design: [docs/PRODUCT.md](docs/PRODUCT.md). Engineering:
-> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Evaluation:
-> [docs/EVALUATION.md](docs/EVALUATION.md).
+Turn a seller data package into a traceable due-diligence work product: a clinical
+evidence base, cross-document consistency findings, evidence gaps, a seller question
+list and a reviewable report — every claim linked to document + page + verbatim quote.
+
+[中文文档](#中文文档) · [English documentation](#english-documentation)
+
+> **状态 / Status:** MVP 端到端可运行 / end-to-end MVP. 示例包 13 份文档、284 页；
+> 136 条证据全部通过原文校验；11 条 active findings；6 条卖方问题；174 个自动化测试。
+> 合成语料，非真实客户性能验证 — 见 [限制](#14-安全与限制) / [Limitations](#14-security--limitations)。
+>
+> **产品设计 / Product design:** [docs/PRODUCT.md](docs/PRODUCT.md) ·
+> **架构 / Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
+> **评测 / Evaluation:** [docs/EVALUATION.md](docs/EVALUATION.md)
 
 ---
 
-## 1. Why not a PDF chatbot
+# 中文文档
 
-A general LLM reading 1,600 pages cannot reliably tell you *which document a
-number came from*, whether two numbers are even comparable, or what the seller
-*did not* provide. HiJenny therefore builds a structured evidence database
-first, then reasons over it:
+## 1. 这是什么
 
-```
-Document -> Page -> Evidence -> Finding -> Question -> Report
-```
+HiJenny 面向药企 BD / License-in 团队，自动完成创新药临床尽调的**初筛与问题清单**：
 
-Each **Evidence** record carries a *comparability vector*
-(`trial, arm, population, data cutoff, endpoint definition, assessment method`).
-Two numbers are only compared when those dimensions agree. That is what keeps
-the consistency agent from inventing contradictions out of incomparable data —
-the single most important product-quality decision in this system.
+1. 解析卖方资料包（CSR、IB、Protocol、SAP、安全性汇总、CMC、专利、商业预测等）；
+2. 抽取结构化临床证据（疗效、安全性、研究设计、统计质量），每条证据保存 **文件 + 页码 + 原文逐字引用**；
+3. 只对"同试验、同人群、同 cutoff、同终点定义、同评价方法"的数据做数值比对，区分 **A 直接矛盾 / B 版本差异 / C 定义差异 / U 可比性不明**；
+4. 按可版本化的 YAML 尽调清单计算**证据覆盖度**（充分/部分/未发现/不适用）；
+5. 将发现和缺口合并成**去重、可分派、可导出**的卖方问题清单；
+6. 生成 **Decision Brief + 尽调报告（MD/DOCX）+ 6-Sheet Excel**，并提供审核 UI。
 
-## 2. What it does
+> 这不是 PDF 聊天机器人：先建证据库，再做分析。没有原文引用的结论不会进入交付物。
 
-| Stage | Module | Output |
-|---|---|---|
-| Ingest | `hijenny/ingestion.py`, `hijenny/parsers/` | documents, pages, bboxes, tables, chunks, hashes, version/supersede chain, prompt-injection flags |
-| Extract | `hijenny/extraction/` | clinical evidence (study design, efficacy, safety, statistics) with page/table/quote + dimensions |
-| Verify | `hijenny/validation.py` | verbatim-quote check, value-in-quote, numeric plausibility, CR+PR vs ORR, CI ordering, duplicates |
-| Consistency | `hijenny/agents/consistency.py` | Type A contradiction / Type B version difference / Type C definition difference / comparability unclear — only within comparable dimensions |
-| Gap analysis | `hijenny/agents/gap.py`, `hijenny/rules/` | Checklist coverage: sufficient / partial / not found / not applicable, from YAML rule packs |
-| Questions | `hijenny/agents/questions.py` | Deduplicated seller questions with priority, owner, requested documents, evidence links |
-| Deliverables | `hijenny/reporting.py`, `hijenny/exports.py` | Markdown + DOCX report (Decision Brief first), 6-sheet Excel workbook |
-| App | `hijenny/api/`, `web/` | FastAPI + no-build SPA: upload, evidence workspace with PDF page jump, findings/questions review, report |
+## 2. 核心能力
 
-## 3. Quickstart (no API key needed)
+| 能力 | 说明 |
+|---|---|
+| 文档解析 | PDF（页码/bbox/表格）、DOCX、PPTX、XLSX；SHA-256 去重；版本链（CSR v1 → v2 自动 supersede） |
+| 临床抽取 | 研究设计、ORR/DCR/PFS/OS/DoR、安全性（AE/SAE/TRAE/停药）、统计质量字段 |
+| 逐字校验 | 每条证据的 quote 必须是所引页面的逐字子串；数值/单位/算术一致性独立复核 |
+| 一致性检查 | 六维可比性门控，避免把不同 cutoff/人群的数据误判为矛盾 |
+| 缺口分析 | 10 个 YAML 规则包、46 条肿瘤 Phase 1–3 尽调检查项 |
+| 卖方问题 | 按 finding 簇合并、优先级、责任部门、所需文件、证据链接；支持人工编辑/锁定/导出 |
+| 交付物 | Decision Brief、证据矩阵、风险清单、覆盖度、问题清单；MD/DOCX/XLSX |
+| 审核工作台 | 上传 → 分析进度 → 证据工作区（跳转 PDF 页码）→ 问题审核 → 报告下载 |
+| 安全 | 默认完全离线；文档视为不可信数据；项目级隔离；提示注入检测与标记 |
 
-Python 3.11. No cloud services are required; **offline rule-based extraction is
-the default mode**. The sample package is committed, so the demo runs immediately
-after install:
+## 3. 环境要求
+
+- Python **3.11+**
+- 无需 GPU、无需 API Key；默认离线规则模式
+- 支持 macOS / Linux；Windows 未专门测试（路径处理使用 pathlib）
+
+## 4. 安装
 
 ```bash
-pip install -e ".[dev]"        # installs runtime dependencies + pytest/reportlab
+git clone https://github.com/james-lebron2000/HiJenny.git
+cd HiJenny
 
-# 1) run the full pipeline and produce the deliverables
+python3 -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+
+pip install -e ".[dev]"              # 运行时依赖 + pytest/reportlab（跑测试与生成示例包需要）
+```
+
+安装完成后可使用 `hijenny` 命令；若未安装 console script，等价写法是
+`python3 -m hijenny.cli`（下文所有命令都可用该形式替代）。
+
+## 5. 快速开始（CLI，5 分钟）
+
+仓库已提交确定性的示例资料包 `data/sample_package/`，克隆后可直接运行：
+
+```bash
+# 1) 一键跑完整流水线（解析 → 抽取 → 校验 → 一致性 → 缺口 → 问题 → 报告）
 hijenny demo --package data/sample_package \
-    --name "ASD-101 License-in Clinical Due Diligence" \
-    --asset "ASD-101 (zafinostat)" --indication "MTAP-deleted advanced solid tumors" --phase "Phase 2"
+  --name "ASD-101 License-in Clinical Due Diligence" \
+  --asset "ASD-101 (zafinostat)" \
+  --indication "MTAP-deleted advanced solid tumors" \
+  --phase "Phase 2"
+```
 
-# (equivalent) python3 -m hijenny.cli demo --package data/sample_package ...
+输出会打印 `project_id`，并在以下位置生成交付物：
 
-# 2) inspect results
-hijenny status --project <project_id>
-open data/projects/<project_id>/exports/HiJenny_Report.md
-open data/projects/<project_id>/exports/Seller_Questions.xlsx
+```
+data/projects/<project_id>/exports/
+├── HiJenny_Report.md      # 尽调报告（Decision Brief 在最前）
+├── HiJenny_Report.docx    # Word 版
+└── Seller_Questions.xlsx  # 6 个 Sheet：Executive Summary / Asset Profile /
+                           # Evidence Matrix / Findings / Questions / Coverage
+```
 
-# 3) web app (upload -> analyze -> evidence workspace -> review -> report)
-hijenny serve --port 8123     # http://127.0.0.1:8123/
+常用命令：
 
-# 4) optional: regenerate the synthetic data package deterministically
+```bash
+hijenny projects                          # 列出所有项目
+hijenny status --project <project_id>     # 查看 findings / questions / coverage
+hijenny run --project <project_id>        # 对已有项目重新分析（增量）
+hijenny run --project <project_id> --force  # 强制重算（重建证据/发现）
+hijenny ingest --project <project_id>     # 只跑解析（调试用）
+```
+
+## 6. Web 界面使用（5 步）
+
+```bash
+hijenny serve --port 8123
+# 打开 http://127.0.0.1:8123/
+```
+
+| 步骤 | 页面 | 操作 |
+|---|---|---|
+| 1 | **Projects** | 新建项目（名称/资产/适应症/阶段），或打开已有项目 |
+| 2 | **Upload & Analysis** | 拖拽批量上传 PDF/PPTX/XLSX；等待解析完成；点 **Analyze** 启动分析，页面轮询显示各阶段进度 |
+| 3 | **Evidence** | 左：文档树；中：PDF 页码预览；右：证据卡片。点击证据自动跳到原文页码并高亮引文 |
+| 4 | **Findings & Questions** | 按严重度/优先级/类型/状态筛选；行内修改优先级、状态、责任部门（自动记录审核事件）；删除问题；导出 Excel；强制重跑 |
+| 5 | **Report** | 渲染报告全文，下载 MD / DOCX / XLSX |
+
+> 上传后如果只想先解析、稍后分析，可在页面直接上传并等待；分析时可以离开页面，任务在后台线程执行。
+
+## 7. REST API 使用
+
+启动 `hijenny serve --port 8123` 后，交互式文档在 `http://127.0.0.1:8123/docs`。
+
+完整流程示例（macOS/Linux shell）：
+
+```bash
+BASE=http://127.0.0.1:8123
+
+# 1) 创建项目
+PID=$(curl -s -X POST "$BASE/api/projects" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"ASD-101 DD","asset_name":"ASD-101","indication":"MTAP-deleted advanced solid tumors","phase":"Phase 2"}' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["project"]["project_id"])')
+echo "project=$PID"
+
+# 2) 上传（多文件；parse=true 会立即解析）
+curl -s -X POST "$BASE/api/projects/$PID/documents?parse=true" \
+  -F "files=@data/sample_package/Clinical_Study_Report_v1.0.pdf" \
+  -F "files=@data/sample_package/Statistical_Analysis_Plan_v1.0.pdf" \
+  -F "files=@data/sample_package/Commercial_Forecast_v1.pptx"
+
+# 3) 启动分析（force=false 为增量）
+RUN=$(curl -s -X POST "$BASE/api/projects/$PID/analyze" \
+  -H 'Content-Type: application/json' -d '{"force":false}' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["run_id"])')
+
+# 4) 轮询进度，直到 state=REPORT_READY
+curl -s "$BASE/api/runs/$RUN"
+
+# 5) 查询结果
+curl -s "$BASE/api/projects/$PID/findings?severity=critical"
+curl -s "$BASE/api/projects/$PID/questions?priority=high"
+curl -s "$BASE/api/projects/$PID/evidence?field_name=orr"
+
+# 6) 审核问题（记录 review events）
+QID=<question_id>
+curl -s -X PATCH "$BASE/api/questions/$QID" \
+  -H 'Content-Type: application/json' \
+  -d '{"priority":"critical","status":"reviewed","review_status":"approved","owner":"Clinical Development","actor":"bd-reviewer"}'
+
+# 7) 导出交付物（返回下载 URL）
+curl -s -X POST "$BASE/api/projects/$PID/exports/report"
+curl -s -X POST "$BASE/api/projects/$PID/exports/questions"
+```
+
+主要接口：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/projects` | 创建项目 |
+| GET | `/api/projects` · `/api/projects/{id}` | 列表 / 详情（含统计、文档、运行、输出） |
+| POST | `/api/projects/{id}/documents` | 多文件上传（`files` 字段，`parse=true`） |
+| POST | `/api/projects/{id}/analyze` | 启动分析（body 可选 `{"force": true}`） |
+| GET | `/api/runs/{run_id}` | 运行状态与进度 |
+| GET | `/api/projects/{id}/evidence` | 证据（`field_name` / `category` / `verification_status` / `search`） |
+| GET/PATCH | `/api/projects/{id}/findings` · `/api/findings/{id}` | 发现列表 / 审核 |
+| GET/PATCH/DELETE | `/api/projects/{id}/questions` · `/api/questions/{id}` | 卖方问题管理 |
+| GET | `/api/projects/{id}/coverage` · `/stats` · `/review-events` | 覆盖度 / 统计 / 审核日志 |
+| POST | `/api/projects/{id}/exports/report` · `/exports/questions` | 生成报告 / Excel |
+| GET | `/api/files/...` | 下载项目文档与导出文件（白名单，防路径穿越） |
+
+## 8. Python API 使用
+
+```python
+from hijenny import pipeline, store
+
+# 可选：使用独立数据库（默认 data/hijenny.db）
+# store.configure("/tmp/demo.db")
+store.init_db()
+
+with store.session_scope() as session:
+    project = store.create_project(
+        session,
+        name="ASD-101 DD",
+        asset_name="ASD-101 (zafinostat)",
+        indication="MTAP-deleted advanced solid tumors",
+        phase="Phase 2",
+    )
+    project_id = project["project_id"]
+    # 指定资料包目录（ingest 会扫描该目录，默认也支持 data/projects/<id>/documents）
+    store.update_project(session, project_id, meta={"package_dir": "data/sample_package"})
+
+run = pipeline.run_pipeline(project_id)
+print(run["state"])                                   # REPORT_READY
+print(run["stats"]["stage_report"]["report_path"])    # 报告路径
+
+with store.session_scope() as session:
+    findings = store.list_findings(session, project_id)
+    questions = store.list_questions(session, project_id)
+    stats = store.project_stats(session, project_id)
+    print(len(findings), len(questions), stats["evidence"])
+```
+
+后台运行（不阻塞）：
+
+```python
+run_id = pipeline.start_pipeline(project_id, force=False)
+# 之后轮询
+progress = pipeline.progress(store.get_run(...))  # 或使用 GET /api/runs/{run_id}
+```
+
+## 9. 配置项
+
+所有配置通过环境变量，均有安全默认值：
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `HIJENNY_DATA_DIR` | `data` | 数据根目录（项目文件、导出物） |
+| `HIJENNY_DB_PATH` | `data/hijenny.db` | SQLite 数据库路径 |
+| `HIJENNY_EXTRACT_MODE` | `rules` | `rules`（离线）/ `hybrid`（规则优先，LLM 补缺）/ `llm` |
+| `HIJENNY_LLM_BASE_URL` | `https://api.openai.com/v1` | 任意 OpenAI 兼容端点 |
+| `HIJENNY_LLM_API_KEY` | 空 | 为空则强制离线规则模式 |
+| `HIJENNY_LLM_MODEL` | `gpt-4o-mini` | 模型名称 |
+| `HIJENNY_LLM_TIMEOUT` | `120` | 单次请求超时（秒） |
+| `HIJENNY_LLM_MAX_PAGES` | `6` | 单次 LLM 调用的页数窗口 |
+| `HIJENNY_LLM_RETRIES` | `2` | 失败重试次数 |
+| `HIJENNY_RULES_DIR` | `hijenny/rules` | YAML 尽调规则目录 |
+| `HIJENNY_MAX_UPLOAD_MB` | `200` | 单文件上传上限 |
+| `HIJENNY_MAX_PAGES` | `2500` | 单文档页数上限 |
+
+启用 LLM（可选，默认完全离线）：
+
+```bash
+export HIJENNY_LLM_API_KEY=sk-...
+export HIJENNY_LLM_BASE_URL=https://api.deepseek.com/v1   # 任意兼容端点
+export HIJENNY_LLM_MODEL=deepseek-chat
+export HIJENNY_EXTRACT_MODE=hybrid
+hijenny demo --package data/sample_package
+```
+
+> LLM 模式下，文档正文被当作**数据**而非指令；输出经过 schema 校验，引用不在原文页面的证据会被丢弃。
+
+## 10. 输出物与数据目录
+
+```
+data/
+├── hijenny.db                         # SQLite（项目/证据/发现/问题/审核日志）
+└── projects/<project_id>/
+    ├── documents/                     # 上传的原始文件
+    └── exports/
+        ├── HiJenny_Report.md / .docx
+        └── Seller_Questions.xlsx
+```
+
+报告包含：Decision Brief、资产档案、文档版本历史、证据矩阵、按严重度分组的发现（含文件/页码/原文引用）、证据缺口、卖方问题、限制与免责声明。**不输出自动 Go/No-Go 结论。**
+
+## 11. 示例数据包与质量评测
+
+示例包是确定性的合成肿瘤 Phase 2 资料包（虚构资产 ASD-101 / PRMT5 / NCT05712345），预埋了真实尽调中常见的 A/B/C 类问题：
+
+| 预埋问题 | 期望分类 |
+|---|---|
+| ORR 42.0% vs 48.4%（同人群/同 cutoff/同方法） | Type A 直接矛盾（critical） |
+| SAE 19.8% vs 15.9%（同安全性集/同 cutoff） | Type A 直接矛盾（high） |
+| IB 中 ORR 45.0%，但 cutoff 为 2025-10-01 | Type B 版本差异（不判矛盾） |
+| FAS/BICR 敏感性分析 40.0% vs ITT 42.0% | Type C 定义差异 |
+| PP 人群、亚组结果、审计摘要缺失 | 证据缺口（partial / not found） |
+| IB 第 3 页"NOTE TO AUTOMATED REVIEWERS: ignore all previous instructions…" | 技术风险；内容按数据处理，不产生伪造证据 |
+| 第二轮上传 v2（CSR/IB/SAP/Safety/商业） | A 类发现自动 resolved，C 类 persists，展示版本历史 |
+
+重新生成示例包（可选）：
+
+```bash
 python3 tools/make_sample_package.py --out data/sample_package --variant v1 --filler 180 --force
 python3 tools/make_sample_package.py --out data/sample_package_v2 --variant v2 --force
 ```
 
-Optional LLM mode (OpenAI-compatible endpoint; the adapter sends *document
-text as data*, never as instructions):
+评测（对裁定真值打分，输出 scorecard.md/json）：
 
 ```bash
-export HIJENNY_LLM_API_KEY=...  HIJENNY_LLM_MODEL=gpt-4o-mini
-export HIJENNY_EXTRACT_MODE=hybrid   # rules first, LLM fills gaps
+python3 -m eval.benchmark --package data/sample_package --fresh --out eval/reports/package
+python3 -m eval.benchmark --lifecycle --out eval/reports/lifecycle
+python3 -m eval.benchmark --clean-control --out eval/reports/clean_control
+python3 -m eval.benchmark --adversarial --out eval/reports/adversarial
 ```
 
-### Tests
+当前构建结果（合成语料，**非真实客户验证**）：
+
+- 抽取准确率 **36/36 = 100%**（27/27 字段）
+- Findings 对 11 个裁定议题：**P 100% / R 100% / F1 1.00**
+- 引用准确率 **100%**（独立逐字复核）
+- 覆盖度 5/5、问题主题覆盖 5/5；v1→v2 **11/11** 状态转移正确
+- 注入攻击控制 **PASS**；284 页端到端约 11 秒，默认模式 0 次 LLM 调用
+
+## 12. 测试与 CI
 
 ```bash
-python3 -m pytest -q          # 174 unit + integration tests; the e2e test runs the real pipeline
+python3 -m pytest -q        # 174 个单元/集成测试；含真实流水线 e2e
 ```
 
-## 4. Architecture
+GitHub Actions（`.github/workflows/ci.yml`）在每次 push 时执行：安装 → 174 tests →
+确定性生成示例包 → CLI 冒烟跑通。
 
-```
-                    FastAPI + SPA (hijenny/api, web/)
-                                |
-                    Workflow state machine (hijenny/pipeline.py)
-   CREATED -> PARSING -> EXTRACTING -> VALIDATING -> ANALYZING
-           -> GENERATING_QUESTIONS -> HUMAN_REVIEW -> REPORT_READY
-                                |
-  +-----------------------------+-----------------------------+
-  |                             |                             |
-parsers                     extraction                     agents
-PDF/DOCX/PPTX/XLSX          rules (+ optional LLM)          consistency / gap / questions
-  |                             |                             |
-  +----------> Evidence store (SQLite; PostgreSQL-ready schema) <----+
-                    documents / pages / chunks / evidence / findings /
-                    questions / coverage / review_events / agent_runs
-                                |
-                     reporting + Excel export
-```
+## 13. 常见问题（FAQ）
 
-The pipeline is deterministic and resumable: each stage is idempotent
-(evidence is fingerprinted, findings/questions upserted by stable dedup keys,
-re-runs do not duplicate data). A 1,000-page package runs in seconds, not hours,
-because no per-page LLM call is required in the default mode.
+**Q: `hijenny: command not found`？**
+A: 先激活虚拟环境（`source .venv/bin/activate`），或使用 `python3 -m hijenny.cli`。
 
-### Data model
+**Q: 没有 OpenAI/LLM Key 能用吗？**
+A: 能。默认 `rules` 模式完全离线，不需要任何 Key。LLM 只是可选的补充召回手段。
 
-`projects` · `assets` · `documents` · `document_pages` · `document_chunks` ·
-`clinical_trials` · `evidence` · `findings` · `finding_evidence` · `questions` ·
-`question_evidence` · `coverage_items` · `review_events` · `agent_runs` ·
-`users` / `project_members` (multi-tenant scaffold).
+**Q: 端口被占用 / 远程访问？**
+A: `hijenny serve --port 8124`；如需局域网访问 `--host 0.0.0.0`（注意无鉴权，仅限可信网络）。
 
-Key invariants:
+**Q: 如何清空本地数据重新开始？**
+A: 停止服务后删除 `data/projects/*` 与 `data/hijenny.db*`；不会影响仓库里的示例包。
 
-* every evidence row stores `document_id + page + quote` (verbatim) and, where
-  applicable, `table`, bbox, extractor version, confidence;
-* re-upload of the same file is de-duplicated by SHA-256; a new version of a
-  family (CSR v1 → v2) supersedes the old one, and superseded documents are
-  excluded from active analysis but retained for audit;
-* findings and questions reference evidence IDs; review events record who
-  changed what, when.
+**Q: 为什么扫描版 PDF 没有数据？**
+A: 扫描件会被标记为 `scanned` 并以解析质量提示，MVP 不做 OCR；请提供文本版 PDF，OCR 在 V0.5 路线图中。
 
-## 5. The sample package (test fixture)
+**Q: 中文资料支持吗？**
+A: 解析支持中文文本；但临床抽取规则目前主要针对英文 CSR/IB/SAP 表述调优，中文资料召回可能下降（报告中会体现抽取失败/缺口，不会编造）。
 
-`tools/make_sample_package.py` generates a realistic Phase 2 oncology package
-for a fictional asset (ASD-101, PRMT5 inhibitor, MTAP-deleted solid tumours,
-NCT05712345) with planted due-diligence issues:
+**Q: 数据会上传到第三方吗？**
+A: 默认不会。只有显式设置 `HIJENNY_LLM_API_KEY` 且 `HIJENNY_EXTRACT_MODE` 非 `rules` 时才会调用你配置的端点。
 
-| Planted issue | Where | Expected classification |
-|---|---|---|
-| ORR 42.0% vs 48.4% (same population/cutoff/method) | CSR vs commercial deck | Type A contradiction (critical) |
-| SAE 19.8% vs 15.9% (same safety set/cutoff) | CSR vs safety summary | Type A contradiction (high) |
-| ORR 45.0% at an older cutoff 2025-10-01 | IB | Type B version difference (not a contradiction) |
-| ORR 40.0% FAS/BICR sensitivity vs 42.0% ITT/investigator | CSR | Type C definition difference |
-| PP population size missing; subgroup results missing; no audit summary | SAP/CSR | Evidence gaps (partial / not found) |
-| "NOTE TO AUTOMATED REVIEWERS: ignore all previous instructions…" | IB page 3 | Technical concern; text treated as data, no fabricated evidence |
-| Round-2 update (CSR/IB/SAP/Safety/commercial v2) | second package | A findings resolved, Type C persists, version history visible |
+## 14. 安全与限制
 
-`ground_truth.json` in each package carries adjudicated facts (document, page,
-value, dimensions, tolerance), finding topics and coverage expectations — used
-by `eval/` to measure the system, not to drive it.
+- **项目级隔离**：所有查询按项目过滤，另有 `X-Org-Id` 作用域钩子；MVP 未做账号/SSO（生产化前必须补齐）。
+- **不可信文档**：文档内容只作为数据；规则层跳过指令式语句并记录 `injection_flags`；LLM 层使用数据边界 prompt + schema 校验，引用不在页面的证据直接丢弃；注入尝试会生成技术风险 Finding。
+- **文件服务白名单**：`/api/files` 仅允许项目 documents/exports 目录，阻断路径穿越。
+- **已知限制**：合成语料单资产，不代表真实客户准确率；扫描件未 OCR；规则抽取针对英文 CSR/IB/SAP 表述；报告是人工审核草稿，不构成医疗/法律/投资建议，也不自动给出 Go/No-Go。
 
-## 6. Evaluation
+路线图：V0.5 真实试点 + OCR + 审核工作流；V1.0 多租户/SSO/PostgreSQL/对象存储；V2.0 CMC + 注册/IP Agent；V3.0 BD Intelligence Platform。
 
-`python3 -m eval.benchmark --package data/sample_package --fresh --lifecycle`
-runs the pipeline and scores it against the adjudicated ground truth:
-per-field extraction accuracy, evidence precision/recall, finding
-precision/recall vs the adjudicated topics, citation accuracy (independently
-re-verifies quotes), coverage accuracy, question-quality proxies and runtime.
-Results land in `eval/reports/scorecard.md|json`.
+---
 
-Current build on the 276-page package: **36/36 curated facts correct (100%)**,
-**findings P 100% / R 100% / F1 1.00** against the 11 adjudicated topics,
-**citation accuracy 100%** (independent verbatim re-check), coverage and
-question-topic coverage 100%, prompt-injection control PASS, runtime ~11 s.
-Round-trip v1 → v2: **11/11 lifecycle transitions correct**. Full methodology,
-confidence intervals and caveats: [docs/EVALUATION.md](docs/EVALUATION.md).
+# English documentation
 
-**Read the scores with the caveat attached:** the corpus is synthetic and small;
-they demonstrate that the pipeline finds the planted issues without inventing
-others, not that it matches expert performance on real filings.
+## 1. What it is
 
-## 7. Reliability (four layers)
+HiJenny is an evidence-first due-diligence platform for pharma BD / license-in teams.
+It turns a seller data package into a traceable clinical evidence base and a
+reviewable work product:
 
-1. **Schema validation** — every extracted fact is a validated Pydantic
-   `EvidenceDraft` (numeric fields numeric, units, page ≥ 1, quote required).
-2. **Source verification** — the validator independently checks that the quote is
-   a verbatim substring of the cited page, the value appears in the quote,
-   numbers are plausible and internally consistent (CR+PR ≈ ORR, CI ordering).
-   Extraction failures are surfaced as `incomplete_evidence`, never hidden.
-3. **Cross-document verification** — comparability gating (see §1); "not
-   comparable" produces a clarification question, not an accusation.
-4. **Human review** — findings and questions are drafts; the UI records review
-   events (who changed priority/status, when). The report carries an explicit
-   "no automated Go/No-Go" disclaimer.
+1. **Parse** the package (CSR, IB, protocol, SAP, safety summary, CMC, patents,
+   commercial deck, XLSX) with page-level provenance.
+2. **Extract** structured clinical evidence (efficacy, safety, study design,
+   statistics); every row stores document + page + verbatim quote.
+3. **Compare only comparable data** — same trial, arm, population, data cutoff,
+   endpoint definition and assessment method — and classify differences as
+   **A contradiction / B version difference / C definition difference / U comparability unclear**.
+4. **Compute checklist coverage** (sufficient / partial / not found / not applicable)
+   from versioned YAML rule packs.
+5. **Generate deduplicated, owned, actionable seller questions** grouped by finding cluster.
+6. **Deliver** a Decision Brief + report (Markdown/DOCX) + 6-sheet Excel workbook,
+   with a review UI that records audit events.
 
-## 8. Security posture
+> This is not a PDF chatbot. The evidence store is built first; analysis reads from
+> it. A claim without a verbatim source quote never reaches the deliverables.
 
-* **Project-level isolation** in every query; org id on projects; `X-Org-Id`
-  scoping hook (auth is intentionally out of MVP scope).
-* **Prompt-injection defence**: documents are untrusted data. Rule extraction
-  skips instruction-like sentences and records flags; the LLM adapter frames
-  page text as data, validates output against the schema and drops any fact
-  whose quote is not on the page. Injection attempts become a finding.
-* **File serving allowlist** (`/api/files`) restricted to project document and
-  export artefacts, with traversal blocked.
-* **Model data policy**: the offline default sends nothing to a third party;
-  LLM mode is opt-in via environment variables, so a customer can choose the
-  endpoint/vendor that satisfies their confidentiality requirements.
+## 2. Features
 
-## 9. Repository layout
-
-```
-hijenny/            pipeline, schemas, DB/store, parsers, extraction, agents, rules, API, reporting, exports
-  parsers/          PyMuPDF / DOCX / PPTX / XLSX parsers + injection scanner
-  extraction/       rule + table extractors, asset/trial resolver, LLM adapter, validation
-  agents/           consistency, gap analysis, question generation
-  rules/            YAML due-diligence rule packs (oncology phase 1/2/3, endpoints, safety, statistics, data quality)
-  api/              FastAPI app
-web/                dependency-free SPA (5 views)
-tools/              synthetic seller-package generator (+ ground truth)
-eval/               metrics, benchmark CLI, scorecards
-corpus/             adjudication + adversarial fixtures
-tests/              unit + end-to-end integration tests
-docs/               PRODUCT.md (product design), ARCHITECTURE.md (engineering), EVALUATION.md (scorecards)
-data/               committed sample packages + generated project artefacts (git-ignored)
-.github/workflows/  CI: install, 174 tests, deterministic package generation, CLI smoke test
-```
-
-## 10. MVP scope boundaries (deliberate)
-
-Implemented: clinical due diligence for oncology Phase 1–3, PDF/PPTX/XLSX
-ingestion, evidence/consistency/gap/question/report pipeline, review UI, Excel
-export, version round-trip.
-
-**Not** in this MVP (per the product plan): full CMC/IP/commercial analysis,
-automatic FTO or rNPV, deal-term generation, autonomous external database
-search, multi-agent debate, knowledge graphs, model training, automated
-Go/No-Go, automated emails to the seller, production auth/SSO/audit export.
-
-## Limitations
-
-* Synthetic corpus, single asset: accuracy figures are not real-client
-  validation. A pilot with adjudicated real packages is required.
-* Rule extraction is tuned to English CSR/IB/SAP phrasing; scanned PDFs are
-  flagged, not OCR'd; unusual table layouts can be missed.
-* No live LLM was exercised in this environment (no key); the adapter is
-  covered by mocked-transport tests and degrades to rules when unavailable.
-* The Excel/DOCX reports are working drafts for expert review, not regulatory
-  submissions.
-
-## Roadmap
-
-| Version | Focus |
+| Area | What you get |
 |---|---|
-| **V0.1 (this repo)** | Package → clinical evidence → consistency/gaps → seller questions → report, end-to-end |
-| V0.5 | Real pilot packages, adjudicated scorecards, OCR, reviewer workflow polish |
-| V1.0 | Multi-tenant auth/SSO, audit export, PostgreSQL + object storage, version-diff UI |
-| V2.0 | CMC + regulatory/IP agents, risk register, decision brief for IC |
-| V3.0 | Pharma BD intelligence platform (portfolio, benchmarks, cross-deal learning) |
+| Parsing | PDF (pages, bboxes, tables), DOCX, PPTX, XLSX; SHA-256 dedup; version chains (CSR v1 → v2 supersede) |
+| Extraction | Study design, ORR/DCR/PFS/OS/DoR, safety (AE/SAE/TRAE/discontinuation), statistical-quality fields |
+| Verification | Verbatim quote must be a substring of the cited page; value/unit/arithmetic checks run independently |
+| Consistency | Six-dimension comparability gate prevents false contradictions across cutoffs/populations |
+| Gap analysis | 10 YAML packs, 46 oncology Phase 1–3 checklist items |
+| Questions | Dedup/merge per field cluster, priority, owner, required documents, evidence links; human edit/lock/export |
+| Deliverables | Decision Brief, evidence matrix, risk list, coverage, seller questions; MD/DOCX/XLSX |
+| Review UI | Upload → progress → evidence workspace (PDF page jump) → question review → report download |
+| Security | Offline by default; documents treated as untrusted data; project isolation; prompt-injection flags |
+
+## 3. Requirements
+
+- Python **3.11+**
+- No GPU, no API key required (offline rule mode is the default)
+- macOS / Linux tested; Windows not explicitly tested (pathlib-based paths)
+
+## 4. Install
+
+```bash
+git clone https://github.com/james-lebron2000/HiJenny.git
+cd HiJenny
+
+python3 -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+
+pip install -e ".[dev]"              # runtime deps + pytest/reportlab
+```
+
+This installs the `hijenny` console script. Without installation, every command
+below also works as `python3 -m hijenny.cli ...`.
+
+## 5. Quickstart (CLI, 5 minutes)
+
+A deterministic sample package is committed at `data/sample_package/`:
+
+```bash
+# Full pipeline: parse -> extract -> verify -> consistency -> gaps -> questions -> report
+hijenny demo --package data/sample_package \
+  --name "ASD-101 License-in Clinical Due Diligence" \
+  --asset "ASD-101 (zafinostat)" \
+  --indication "MTAP-deleted advanced solid tumors" \
+  --phase "Phase 2"
+```
+
+The command prints a `project_id`; deliverables are written to:
+
+```
+data/projects/<project_id>/exports/
+├── HiJenny_Report.md      # due-diligence report (Decision Brief first)
+├── HiJenny_Report.docx    # Word version
+└── Seller_Questions.xlsx  # 6 sheets: Executive Summary / Asset Profile /
+                           # Evidence Matrix / Findings / Questions / Coverage
+```
+
+Other commands:
+
+```bash
+hijenny projects                           # list projects
+hijenny status --project <project_id>      # findings / questions / coverage
+hijenny run --project <project_id>         # incremental re-analysis
+hijenny run --project <project_id> --force # full recompute
+hijenny ingest --project <project_id>      # parse only (debugging)
+```
+
+## 6. Web UI (5 steps)
+
+```bash
+hijenny serve --port 8123
+# open http://127.0.0.1:8123/
+```
+
+| Step | Page | Action |
+|---|---|---|
+| 1 | **Projects** | Create a project (name/asset/indication/phase) or open an existing one |
+| 2 | **Upload & Analysis** | Drag-and-drop PDF/PPTX/XLSX; wait for parsing; click **Analyze** and watch stage progress |
+| 3 | **Evidence** | Document tree · PDF page preview · evidence cards; click a card to jump to the cited page |
+| 4 | **Findings & Questions** | Filter by severity/priority/type/status; inline edit priority/status/owner (audit-logged); delete; export Excel; force re-run |
+| 5 | **Report** | Rendered report plus MD/DOCX/XLSX downloads |
+
+The analysis runs in a background thread, so you can leave the page while it runs.
+
+## 7. REST API
+
+Interactive docs: `http://127.0.0.1:8123/docs`.
+
+End-to-end example:
+
+```bash
+BASE=http://127.0.0.1:8123
+
+# 1) Create project
+PID=$(curl -s -X POST "$BASE/api/projects" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"ASD-101 DD","asset_name":"ASD-101","indication":"MTAP-deleted advanced solid tumors","phase":"Phase 2"}' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["project"]["project_id"])')
+
+# 2) Upload one or more files (parsed immediately with parse=true)
+curl -s -X POST "$BASE/api/projects/$PID/documents?parse=true" \
+  -F "files=@data/sample_package/Clinical_Study_Report_v1.0.pdf" \
+  -F "files=@data/sample_package/Statistical_Analysis_Plan_v1.0.pdf"
+
+# 3) Start analysis ({"force": true} for a full recompute)
+RUN=$(curl -s -X POST "$BASE/api/projects/$PID/analyze" \
+  -H 'Content-Type: application/json' -d '{"force":false}' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["run_id"])')
+
+# 4) Poll until state == REPORT_READY
+curl -s "$BASE/api/runs/$RUN"
+
+# 5) Read results
+curl -s "$BASE/api/projects/$PID/findings?severity=critical"
+curl -s "$BASE/api/projects/$PID/questions?priority=high"
+curl -s "$BASE/api/projects/$PID/evidence?field_name=orr"
+
+# 6) Review a question (writes review events)
+QID=<question_id>
+curl -s -X PATCH "$BASE/api/questions/$QID" \
+  -H 'Content-Type: application/json' \
+  -d '{"priority":"critical","status":"reviewed","review_status":"approved","owner":"Clinical Development","actor":"bd-reviewer"}'
+
+# 7) Export deliverables (returns download URLs)
+curl -s -X POST "$BASE/api/projects/$PID/exports/report"
+curl -s -X POST "$BASE/api/projects/$PID/exports/questions"
+```
+
+Core endpoints:
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/projects` | Create project |
+| GET | `/api/projects` · `/api/projects/{id}` | List / detail (stats, documents, runs, outputs) |
+| POST | `/api/projects/{id}/documents` | Multi-file upload (`files`; `parse=true`) |
+| POST | `/api/projects/{id}/analyze` | Start analysis (`{"force": true}` optional) |
+| GET | `/api/runs/{run_id}` | Run state and progress |
+| GET | `/api/projects/{id}/evidence` | Evidence (`field_name`/`category`/`verification_status`/`search`) |
+| GET/PATCH | `/api/projects/{id}/findings` · `/api/findings/{id}` | Findings list / review |
+| GET/PATCH/DELETE | `/api/projects/{id}/questions` · `/api/questions/{id}` | Seller question management |
+| GET | `/api/projects/{id}/coverage` · `/stats` · `/review-events` | Coverage / stats / audit log |
+| POST | `/api/projects/{id}/exports/report` · `/exports/questions` | Generate report / Excel |
+| GET | `/api/files/...` | Download project documents and exports (allowlisted, traversal blocked) |
+
+## 8. Python API
+
+```python
+from hijenny import pipeline, store
+
+store.init_db()  # uses data/hijenny.db; store.configure("/tmp/demo.db") for another DB
+
+with store.session_scope() as session:
+    project = store.create_project(
+        session,
+        name="ASD-101 DD",
+        asset_name="ASD-101 (zafinostat)",
+        indication="MTAP-deleted advanced solid tumors",
+        phase="Phase 2",
+    )
+    project_id = project["project_id"]
+    store.update_project(session, project_id, meta={"package_dir": "data/sample_package"})
+
+run = pipeline.run_pipeline(project_id)
+print(run["state"])                                   # REPORT_READY
+print(run["stats"]["stage_report"]["report_path"])    # report path
+
+with store.session_scope() as session:
+    print(len(store.list_findings(session, project_id)))
+    print(len(store.list_questions(session, project_id)))
+    print(store.project_stats(session, project_id)["evidence"])
+```
+
+Async (background thread, same as the API):
+
+```python
+run_id = pipeline.start_pipeline(project_id, force=False)
+# poll store.get_run(run_id) / pipeline.progress(run)
+```
+
+## 9. Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HIJENNY_DATA_DIR` | `data` | Data root (project files, exports) |
+| `HIJENNY_DB_PATH` | `data/hijenny.db` | SQLite database |
+| `HIJENNY_EXTRACT_MODE` | `rules` | `rules` (offline) / `hybrid` (rules first, LLM fills gaps) / `llm` |
+| `HIJENNY_LLM_BASE_URL` | `https://api.openai.com/v1` | Any OpenAI-compatible endpoint |
+| `HIJENNY_LLM_API_KEY` | empty | Empty ⇒ offline rule mode |
+| `HIJENNY_LLM_MODEL` | `gpt-4o-mini` | Model name |
+| `HIJENNY_LLM_TIMEOUT` | `120` | Per-request timeout (s) |
+| `HIJENNY_LLM_MAX_PAGES` | `6` | Page window per LLM call |
+| `HIJENNY_LLM_RETRIES` | `2` | Retry count |
+| `HIJENNY_RULES_DIR` | `hijenny/rules` | YAML rule directory |
+| `HIJENNY_MAX_UPLOAD_MB` | `200` | Upload size limit |
+| `HIJENNY_MAX_PAGES` | `2500` | Pages per document limit |
+
+Enable LLM mode (optional; offline by default):
+
+```bash
+export HIJENNY_LLM_API_KEY=sk-...
+export HIJENNY_LLM_BASE_URL=https://api.deepseek.com/v1
+export HIJENNY_LLM_MODEL=deepseek-chat
+export HIJENNY_EXTRACT_MODE=hybrid
+hijenny demo --package data/sample_package
+```
+
+In LLM mode, page text is framed as **data**, outputs are schema-validated, and
+any evidence whose quote is not present on the cited page is dropped.
+
+## 10. Outputs & data directory
+
+```
+data/
+├── hijenny.db                         # SQLite (projects/evidence/findings/questions/audit)
+└── projects/<project_id>/
+    ├── documents/                     # uploaded source files
+    └── exports/
+        ├── HiJenny_Report.md / .docx
+        └── Seller_Questions.xlsx
+```
+
+The report contains a Decision Brief, asset profile, document version history,
+evidence matrix, severity-grouped findings with citations, evidence gaps, seller
+questions and an explicit review/no-Go-No-Go disclaimer. **No automated Go/No-Go
+recommendation is produced.**
+
+## 11. Sample package & evaluation
+
+The committed sample package is a deterministic synthetic Phase 2 oncology
+package (fictional ASD-101 / PRMT5 / NCT05712345) with planted issues: Type A ORR
+and SAE contradictions, a Type B IB cutoff difference, a Type C FAS/BICR
+definition difference, missing PP population/subgroup/audit evidence, and a
+prompt-injection page. The v2 package demonstrates a round-2 resolution lifecycle.
+
+Regenerate (optional):
+
+```bash
+python3 tools/make_sample_package.py --out data/sample_package --variant v1 --filler 180 --force
+python3 tools/make_sample_package.py --out data/sample_package_v2 --variant v2 --force
+```
+
+Run the benchmark against adjudicated ground truth:
+
+```bash
+python3 -m eval.benchmark --package data/sample_package --fresh --out eval/reports/package
+python3 -m eval.benchmark --lifecycle --out eval/reports/lifecycle
+python3 -m eval.benchmark --clean-control --out eval/reports/clean_control
+python3 -m eval.benchmark --adversarial --out eval/reports/adversarial
+```
+
+Current build on the synthetic corpus (**not real-client validation**):
+
+- Extraction accuracy **36/36 = 100%** (27/27 fields)
+- Findings vs 11 adjudicated topics: **P 100% / R 100% / F1 1.00**
+- Citation accuracy **100%** (independent verbatim re-check)
+- Coverage 5/5, question-topic coverage 5/5; v1→v2 lifecycle **11/11**
+- Prompt-injection control **PASS**; ~11 s for 284 pages, 0 LLM calls by default
+
+## 12. Tests & CI
+
+```bash
+python3 -m pytest -q        # 174 unit + integration tests, including a real pipeline e2e
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push: install → 174 tests
+→ deterministic sample generation → CLI smoke test.
+
+## 13. FAQ / troubleshooting
+
+**`hijenny: command not found`** — activate the virtualenv, or use
+`python3 -m hijenny.cli`.
+
+**Can I use it without an API key?** — Yes. `rules` mode is fully offline. LLM is
+an optional recall aid.
+
+**Port already in use / remote access?** — `hijenny serve --port 8124`; add
+`--host 0.0.0.0` for LAN access (no auth — trusted networks only).
+
+**How do I reset local state?** — Stop the server, delete `data/projects/*` and
+`data/hijenny.db*`. The committed sample packages are unaffected.
+
+**Why is there no data for a scanned PDF?** — Scanned pages are flagged with
+reduced parse quality; OCR is not part of the MVP (V0.5 roadmap). Provide a
+text-based PDF.
+
+**Chinese documents?** — Chinese text is parsed, but the clinical extraction rules
+are tuned for English CSR/IB/SAP phrasing, so recall may drop. The system reports
+extraction gaps rather than inventing values.
+
+**Is my data sent to a third party?** — No by default. Only when
+`HIJENNY_LLM_API_KEY` is set and `HIJENNY_EXTRACT_MODE` is not `rules` does it call
+the endpoint you configure.
+
+## 14. Security & limitations
+
+- **Project isolation** on every query plus an `X-Org-Id` scoping hook. Auth/SSO is
+  intentionally out of MVP scope.
+- **Untrusted documents**: content is data, never instructions. Rule extraction
+  skips instruction-like sentences and records `injection_flags`; the LLM adapter
+  isolates page text, schema-validates output and drops off-page quotes. Injection
+  attempts become a technical-concern finding.
+- **File allowlist**: `/api/files` serves only project documents/exports; traversal
+  is blocked.
+- **Limitations**: synthetic single-asset corpus (not real-client accuracy); no OCR;
+  extraction tuned to English CSR/IB/SAP phrasing; reports are human-review drafts,
+  not medical/legal/investment advice, and never auto-produce a Go/No-Go.
+
+Roadmap: V0.5 real pilots + OCR + review polish; V1.0 multi-tenant/SSO/PostgreSQL/
+object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
+
+---
+
+## Documentation index
+
+| Document | Contents |
+|---|---|
+| [docs/PRODUCT.md](docs/PRODUCT.md) | Product design: users, workflow, deliverables, A/B/C/U method, pilot/pricing, KPIs, roadmap |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Engineering architecture: modules, data model, state machine, comparability algorithm, API, extension points |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | Evaluation methodology, results, confidence intervals, limitations, real-data plan |
+| [AGENTS_CONTRACT.md](AGENTS_CONTRACT.md) | Internal module contract used by the multi-agent build |
+| [LICENSE](LICENSE) | Apache-2.0 |
