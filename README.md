@@ -21,7 +21,8 @@ list and a reviewable report — every claim linked to document + page + verbati
 >
 > **产品设计 / Product design:** [docs/PRODUCT.md](docs/PRODUCT.md) ·
 > **架构 / Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
-> **评测 / Evaluation:** [docs/EVALUATION.md](docs/EVALUATION.md)
+> **评测 / Evaluation:** [docs/EVALUATION.md](docs/EVALUATION.md) ·
+> **输入/输出样例 / IO examples:** [docs/IO_EXAMPLES.md](docs/IO_EXAMPLES.md)
 
 ---
 
@@ -697,5 +698,6 @@ object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
 | [docs/PRODUCT.md](docs/PRODUCT.md) | Product design: users, workflow, deliverables, A/B/C/U method, pilot/pricing, KPIs, roadmap |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Engineering architecture: modules, data model, state machine, comparability algorithm, API, extension points |
 | [docs/EVALUATION.md](docs/EVALUATION.md) | Evaluation methodology, results, confidence intervals, limitations, real-data plan |
+| [docs/IO_EXAMPLES.md](docs/IO_EXAMPLES.md) | Real input/output samples: package manifest, source page excerpts, Evidence/Finding/Question JSON, report & Excel rows, v1→v2 lifecycle |
 | [AGENTS_CONTRACT.md](AGENTS_CONTRACT.md) | Internal module contract used by the multi-agent build |
 | [LICENSE](LICENSE) | Apache-2.0 |
