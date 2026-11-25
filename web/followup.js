@@ -31,7 +31,7 @@ async function renderFollowup(seq) {
   function cells(row) { return cols.map(k => `<td>${esc(row[k] || '待核')}</td>`).join(''); }
   setView(`<section class="card bd"><div class="card-head"><h2>问题与来源</h2></div>
     <select id="bd-question" aria-label="选择尽调问题">${questions.map(x => option(x.question_id,id,x.question)).join('')}</select>
-    <p>${esc(q.question)}</p>${quote ? `<blockquote>${esc(quote.quote)} · ${evidenceLink(quote)}</blockquote>` : ''}<details><summary>查看关联证据（${sources.length}）</summary>${sources.map(e => '<p>'+evidenceLink(e)+'</p>').join('')}</details></section>
+    <p>${esc(q.question)}</p><a class="btn sm" href="#/valuation?project=${encodeURIComponent(project)}&question=${encodeURIComponent(id)}">评估此问题对交易估值的影响</a>${quote ? `<blockquote>${esc(quote.quote)} · ${evidenceLink(quote)}</blockquote>` : ''}<details><summary>查看关联证据（${sources.length}）</summary>${sources.map(e => '<p>'+evidenceLink(e)+'</p>').join('')}</details></section>
     <section class="card bd"><h2>可比资产表</h2><div class="bd-scroll"><table><thead><tr>${Object.values(bdColumns).map(x=>'<th>'+x+'</th>').join('')}<th>来源</th></tr></thead><tbody>
     ${reference ? '<tr>'+cells(reference)+'<td>'+evidenceLink(quote)+'</td></tr>' : ''}
     ${rows.map(r=>'<tr>'+cells(r)+'<td>'+sourceLink(r)+'</td></tr>').join('')}</tbody></table></div></section>

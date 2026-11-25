@@ -46,6 +46,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 2.8 20h18.4L12 3z"/><path d="M12 9v5M12 17.5v.5"/></svg>
           <span>Findings &amp; Questions</span><span class="badge" id="badge-findings">0</span>
         </button>
+        <button class="nav-item" data-nav="valuation" type="button">交易估值</button>
         <button class="nav-item" data-nav="followup" type="button"><span>BD 复核</span></button>
         <button class="nav-item" data-nav="report" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
@@ -70,7 +71,7 @@
         <select id="mobile-nav" aria-label="工作区导航" onchange="nav(this.value)">
           <option value="research">医药检索</option><option value="study">IIT / RWE</option><option value="medical">医学交流</option><option value="clinical">临床设计</option><option value="watch">试验关注</option><option value="brief">研究底稿</option><option value="projects">尽调项目</option><option value="overview">资产概览</option>
           <option value="upload">资料分析</option><option value="evidence">证据</option><option value="findings">风险与问题</option>
-          <option value="followup">BD 复核</option><option value="report">报告</option>
+          <option value="valuation">交易估值</option><option value="followup">BD 复核</option><option value="report">报告</option>
         </select>
         <div class="project-select">
           <label for="project-select">Project</label>
@@ -87,6 +88,7 @@
   </div>
 
   <div id="toasts" aria-live="polite"></div>
+  <script src="/static/valuation.js"></script>
   <script src="/static/followup.js"></script>
   <script src="/static/study.js"></script>
   <script src="/static/medical.js"></script>

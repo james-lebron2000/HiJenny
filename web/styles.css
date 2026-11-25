@@ -953,3 +953,7 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 #medical-meeting blockquote { margin:10px 0; padding-left:12px; border-left:2px solid #a6bcc1; overflow-wrap:anywhere; }
 
 #study-workspace label { display:block; margin:12px 0; }
+
+#valuation label { display:block; margin:10px 0; }
+#valuation td, #valuation th { padding:8px; text-align:left; }
+.sidebar .nav { min-height:0; overflow-y:auto; }

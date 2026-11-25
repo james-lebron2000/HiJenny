@@ -180,7 +180,7 @@ function currentView() {
   const hash = (location.hash || '').replace(/^#\/?/, '');
   const view = hash.split('?')[0];
   if (!view) return 'research';
-  return ['research', 'brief', 'watch', 'clinical', 'medical', 'study', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
+  return ['research', 'brief', 'watch', 'clinical', 'medical', 'study', 'valuation', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
 }
 
 function hashParams() {
@@ -235,6 +235,7 @@ function updateTopbar() {
     brief: ['研究底稿', '多来源检索与证据复核'],
     research: ['HiJenny Agent', '公开医药证据检索'],
     projects: ['Projects', 'Due-diligence packages'],
+    valuation: ['交易估值', '买方情景与假设'],
     overview: ['Asset 360', '药物资产发现与资产评估 · Discovery & Evaluation'],
     upload: ['Upload & Analysis', 'Documents, parsing and pipeline runs'],
     evidence: ['Evidence Workspace', 'Every number traced to document, page and quote'],
@@ -323,7 +324,8 @@ async function renderView() {
     return;
   }
   try {
-    if (state.view === 'upload') await renderUpload(seq);
+    if (state.view === 'valuation') await renderValuation(seq);
+    else if (state.view === 'upload') await renderUpload(seq);
     else if (state.view === 'evidence') await renderEvidence(seq);
     else if (state.view === 'findings') await renderFindings(seq);
     else if (state.view === 'followup') await renderFollowup(seq);
@@ -665,6 +667,7 @@ function overviewHtml(data) {
   <div class="page-head ov-page-head">
     <div><h1>Asset 360</h1><div class="sub">药物资产发现与资产评估 · Drug asset discovery & evaluation</div></div>
     <div class="actions">
+      <a class="btn sm" href="#/valuation?project=${encodeURIComponent(projectId)}">交易估值</a>
       <a class="btn sm" href="#/evidence?project=${encodeURIComponent(projectId)}">Evidence</a>
       <a class="btn sm" href="#/findings?project=${encodeURIComponent(projectId)}">Findings & Questions</a>
       <a class="btn sm" href="#/report?project=${encodeURIComponent(projectId)}">Report</a>

@@ -22,6 +22,9 @@ jobs:
       - name: Tests (unit + end-to-end)
         run: python -m pytest -q
 
+      - name: Verify valuation arithmetic
+        run: node --test tests/valuation.test.cjs
+
       - name: Generate sample package (deterministic)
         run: python tools/make_sample_package.py --out /tmp/sample_package --variant v1 --force
 
