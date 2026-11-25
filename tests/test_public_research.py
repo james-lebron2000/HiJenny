@@ -15,6 +15,7 @@ def test_pubmed_keeps_abstract_labels_and_inline_text():
         assert request.url.params["id"] == "123"
         return httpx.Response(200, text="""<PubmedArticleSet><PubmedArticle><MedlineCitation>
             <PMID>123</PMID><Article><ArticleTitle>A <i>study</i></ArticleTitle>
+            <AuthorList><Author><LastName>Example</LastName><Initials>AB</Initials></Author></AuthorList>
             <Abstract><AbstractText Label="RESULTS">Evidence <i>here</i>.</AbstractText></Abstract>
             </Article></MedlineCitation></PubmedArticle></PubmedArticleSet>""")
 
@@ -22,6 +23,7 @@ def test_pubmed_keeps_abstract_labels_and_inline_text():
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
             total, items = await pubmed(client, "study")
             assert total == 1 and items[0]["title"] == "A study"
+            assert items[0]["authors"] == ["AB Example"]
             assert items[0]["passages"] == [{"label": "RESULTS", "text": "Evidence here."}]
     asyncio.run(check())
 

@@ -948,3 +948,6 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 .design-options fieldset { min-width:0; }
 #design-form label { display:block; margin:12px 0; }
 .source-snapshot { white-space:pre-wrap; overflow-wrap:anywhere; }
+#medical-meeting label { display:block; margin:12px 0; }
+#medical-meeting input[type=checkbox] { width:auto; }
+#medical-meeting blockquote { margin:10px 0; padding-left:12px; border-left:2px solid #a6bcc1; overflow-wrap:anywhere; }

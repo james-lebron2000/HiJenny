@@ -1,0 +1,116 @@
+'use strict';
+
+let medicalBriefId;
+const meetingPrefix = 'hijenny.meeting.';
+const meetingFields = {expert:'讨论对象或专业方向', question:'外部医学问题', answer:'拟答复要点',
+  discussion:'需要专家讨论的问题', action:'会后行动', owner:'行动负责人', due:'预计完成日期', reviewer:'医学复核人'};
+
+function medicalSources(run) {
+  return run.steps.flatMap(step => (step.result?.items || []).filter(item => run.review[item.id] === '纳入')
+    .map(item => ({id:item.id, title:item.title, date:item.date, authors:item.authors || [], passages:item.passages || [], retrieved:step.retrieved})));
+}
+
+function meetingText(v) {
+  const lines = ['医学交流简报', '版本 '+v.id, '底稿版本 '+v.briefId, '医学复核确认时间 '+v.created];
+  for (const [key,label] of Object.entries(meetingFields)) lines.push('',label,v[key] || '待补充');
+  lines.push('', '支持本次答复的证据');
+  for (const ref of v.refs) {
+    lines.push('',ref.title,sourceLink(ref), '来源日期 '+(ref.date || '未提供'), '检索时间 '+ref.retrieved,ref.label,ref.quote);
+  }
+  return lines.join('\n');
+}
+
+async function renderMedical() {
+  setView('<section id="medical-meeting" class="research-home"><h1>准备专家会简报</h1><div id="meeting-body">正在读取本机底稿…</div></section>');
+  const body = $('#meeting-body');
+  let runs, saved;
+  try {
+    runs = (await briefStore('readonly', store=>store.getAll())).filter(r=>medicalSources(r).length)
+      .sort((a,b)=>b.created.localeCompare(a.created));
+    saved = Object.keys(localStorage).filter(k=>k.startsWith(meetingPrefix))
+      .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>b.created.localeCompare(a.created));
+  } catch (err) { body.textContent = '读取资料失败：'+err.message; return; }
+  if (!body.isConnected) return;
+  const fromBrief = runs.find(r=>r.id===medicalBriefId);
+  medicalBriefId = null;
+  let version = fromBrief ? null : saved[0];
+  let run = fromBrief || runs.find(r=>r.id===version?.briefId) || runs[0];
+  let dirty = false;
+  function draw() {
+    dirty = false;
+    const sourceRecords = version?.sourceRecords || (run ? medicalSources(run) : []);
+    const selected = new Map((version?.refs || []).map(ref=>[ref.id,ref]));
+    const selectedIndex = r => Math.max(0,r.passages.findIndex(p=>p.text===selected.get(r.id)?.quote && p.label===selected.get(r.id)?.label));
+    body.innerHTML = `<p>从已纳入的来源中挑选支持答复的原文，记录专家会要讨论的问题、医学复核意见和后续行动。</p>
+      <button class="btn" data-nav="brief">打开研究底稿</button>
+      <label>历史简报 <select id="meeting-history"><option value="">新草稿</option>
+        ${saved.map(v=>option(v.id,version?.id,fmtDate(v.created)+' · '+v.question)).join('')}</select></label>
+      <label>选用底稿并新建简报 <select id="meeting-source"><option value="">选择有纳入记录的研究底稿</option>
+        ${runs.map(r=>option(r.id,version ? '' : run?.id,r.question+' · '+fmtDate(r.created))).join('')}</select></label>
+      ${sourceRecords.length ? `<form id="meeting-form">
+      <fieldset class="card"><legend>支持本次答复的原文</legend>
+      ${sourceRecords.map((r,i)=>`<section><label><input type="checkbox" data-cite="${i}" ${selected.has(r.id)?'checked':''}> ${esc(r.title)}</label>
+        <a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.id)} · 核对原始记录</a>
+        ${r.authors?.length ? `<details><summary>论文署名作者（${r.authors.length}）</summary><p>${esc(r.authors.join('，'))}</p></details>` : ''}
+        ${r.passages.length ? `<label>引文片段<select data-passage="${i}">
+          ${r.passages.map((p,j)=>option(String(j),String(selectedIndex(r)),p.label+' · '+p.text.slice(0,95))).join('')}</select></label>
+          <blockquote data-excerpt="${i}">${esc(r.passages[selectedIndex(r)].text)}</blockquote>` : '<p>此条记录缺少摘要，暂不能用作答复引文。</p>'}</section>`).join('')}</fieldset>
+      ${Object.entries(meetingFields).map(([key,label])=>`<label>${label}
+        <textarea rows="${['answer','discussion','action'].includes(key)?3:1}" maxlength="8000" data-meeting="${key}">${esc(version?.[key] || (key==='question'?run?.question:'') || '')}</textarea></label>`).join('')}
+      <label><input id="meeting-confirm" type="checkbox"> 我已核对本版答复和所选来源</label>
+      <div><button class="btn" type="submit">保存草稿版本</button>
+      <button class="btn primary" type="button" id="meeting-release">确认并导出简报</button>
+      ${version?.confirmed ? '<button class="btn" type="button" id="meeting-original">下载已确认原版</button>' : ''}</div>
+      <p role="status" id="meeting-status">${version ? esc((version.confirmed?'已确认':'草稿')+' · '+fmtDate(version.created)) : ''}</p></form>`
+      : '<p>请先在研究底稿标记并保存至少一项纳入记录。</p>'}`;
+    function switchAllowed() { return !dirty || confirm('放弃本页未保存的修改？'); }
+    $('#meeting-history',body).onchange = event => {
+      if (!switchAllowed()) { event.target.value=version?.id || ''; return; }
+      version = saved.find(v=>v.id===event.target.value);
+      run = runs.find(r=>r.id===version?.briefId) || runs[0]; draw();
+    };
+    $('#meeting-source',body).onchange = event => {
+      if (!switchAllowed()) { event.target.value=version?'':run?.id || ''; return; }
+      version = null; run = runs.find(r=>r.id===event.target.value); draw();
+    };
+    const form = $('#meeting-form',body);
+    if (!form) return;
+    form.oninput = event => { if (event.target.id !== 'meeting-confirm') $('#meeting-confirm',form).checked=false;
+      dirty=true; $('#meeting-status',body).textContent='有未保存的修改'; };
+    for (const select of $$('[data-passage]',form)) select.onchange = () => {
+      const index=select.dataset.passage;
+      form.querySelector('[data-excerpt="'+index+'"]').textContent=sourceRecords[index].passages[Number(select.value)].text;
+    };
+    function download(v) {
+      const url=URL.createObjectURL(new Blob([meetingText(v)],{type:'text/plain;charset=utf-8'}));
+      const a=document.createElement('a'); a.href=url; a.download='HiJenny-专家会-'+v.id+'.txt'; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+    function save(confirmed) {
+      const fields=Object.fromEntries($$('[data-meeting]',form).map(el=>[el.dataset.meeting,el.value.trim()]));
+      const refs=[];
+      for (const box of $$('[data-cite]:checked',form)) {
+        const index=box.dataset.cite, r=sourceRecords[index];
+        const selected=form.querySelector('[data-passage="'+index+'"]');
+        if (!selected) continue;
+        const passage=r.passages[Number(selected.value)];
+        refs.push({id:r.id,title:r.title,date:r.date,retrieved:r.retrieved,label:passage.label,quote:passage.text});
+      }
+      const status=$('#meeting-status',body);
+      if (!fields.question || !refs.length) { status.textContent='请填写医学问题，并选择至少一个有原文的来源。'; return; }
+      if (confirmed && (!fields.answer || !fields.reviewer || !$('#meeting-confirm',form).checked)) {
+        status.textContent='导出前请填写答复、医学复核人，并确认已核对本版来源。'; return;
+      }
+      const v={...fields,id:crypto.randomUUID(),parent:version?.id || null,briefId:version?.briefId || run.id,
+        created:new Date().toISOString(),sourceRecords,refs,confirmed};
+      try { localStorage.setItem(meetingPrefix+v.id,JSON.stringify(v)); }
+      catch { status.textContent='无法保存本机版本，请检查浏览器存储空间。'; return; }
+      saved.unshift(v); version=v; if (confirmed) download(v); draw();
+    }
+    form.onsubmit=event=>{event.preventDefault();save(false);};
+    $('#meeting-release',body).onclick=()=>save(true);
+    const original=$('#meeting-original',body);
+    if (original) original.onclick=()=>download(version);
+  }
+  draw();
+}

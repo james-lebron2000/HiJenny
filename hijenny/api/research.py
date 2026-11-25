@@ -44,7 +44,13 @@ async def pubmed(client, query):
         date = " ".join(pubdate.itertext()).strip() if pubdate is not None else ""
         passages = [{"label": node.get("Label") or "Abstract", "text": "".join(node.itertext()).strip()}
                     for node in article.findall("Abstract/AbstractText")]
-        items.append({"id": pmid, "title": "".join(title.itertext()) if title is not None else pmid,
+        authors = []
+        for author in article.findall("AuthorList/Author"):
+            surname = author.findtext("LastName")
+            if surname:
+                name = " ".join(filter(None, (author.findtext("ForeName") or author.findtext("Initials"), surname)))
+                authors.append(name)
+        items.append({"authors": authors, "id": pmid, "title": "".join(title.itertext()) if title is not None else pmid,
                       "date": " ".join(date.split()), "detail": article.findtext("Journal/Title", ""),
                       "passages": passages, "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"})
     return int(search["count"]), items

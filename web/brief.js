@@ -117,9 +117,18 @@ async function renderBrief() {
       <label for="brief-note">审核意见、相互矛盾的证据与未解决问题</label>
       <textarea id="brief-note" rows="4" maxlength="16000" ${busy?'disabled':''}>${esc(run.note)}</textarea>
       <div><button id="brief-save" class="btn" ${busy?'disabled':''}>保存审核意见</button>
+      <button id="brief-medical" class="btn" ${busy?'disabled':''}>用纳入证据准备专家会</button>
       <button id="brief-export" class="btn" ${busy?'disabled':''}>导出当前底稿</button>
       ${run.steps.some(s=>!s.result) ? '<button class="btn primary" id="brief-resume">继续未完成的检索</button>' : ''}
       </div>`;
+    $('#brief-medical', home).onclick = async () => {
+      try {
+        await saveReview();
+        if (!medicalSources(run).length) { toast('请先将相关记录标为「纳入」。'); return; }
+        medicalBriefId = run.id;
+        nav('medical');
+      } catch (err) { fail(err); }
+    };
     $('#brief-copy', home).onclick = () => {
       $('#brief-question', form).value = run.question;
       for (const step of run.steps) $('#brief-' + step.source, form).value = step.query;
