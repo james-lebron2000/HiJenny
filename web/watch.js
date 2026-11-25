@@ -43,12 +43,67 @@ async function refreshWatchedTrial(id) {
   });
 }
 
+function milestoneDate(field) {
+  const [date, kind] = String(field || '').split(' · ');
+  if (!/^\d{4}-(0[1-9]|1[0-2])(-\d{2})?$/.test(date)) return null;
+  const precise = date.length===10;
+  if (precise) {
+    const parsed = new Date(date+'T00:00:00Z');
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0,10)!==date) return null;
+  }
+  return {date,kind:kind || '类型未提供',precise};
+}
+
+function watchedMilestones(rows) {
+  const events=[];
+  for (const row of rows) {
+    for (const [key,label] of [['primary','主要完成日期'],['completion','研究完成日期']]) {
+      const when=milestoneDate(row.fields[label]);
+      if (!when) continue;
+      const history=row.changes.flatMap(c=>c.fields.filter(f=>f.name===label));
+      const before=milestoneDate(history[0]?.before);
+      // A month-only date and a day within that month are not evidence of a delay.
+      const precision=before ? Math.min(before.date.length,when.date.length) : 0;
+      const delayed=when.kind==='预计' && before?.kind==='预计' &&
+        when.date.slice(0,precision)>before.date.slice(0,precision);
+      events.push({...when,id:row.id,title:row.title,key,label,updated:row.updated,
+        revision:history.length,status:delayed?'预计延期':when.kind,previous:before?.date});
+    }
+  }
+  return events.sort((a,b)=>a.date.localeCompare(b.date) || a.id.localeCompare(b.id) || a.key.localeCompare(b.key));
+}
+
+function watchCalendar(events, now=new Date()) {
+  const text=value=>String(value).replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n')
+    .replace(/,/g,'\\,').replace(/;/g,'\\;').replace(/[\x00-\x08\x0b-\x1f\x7f]/g,'');
+  const stamp=now.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//HiJenny//Trial Watch//ZH'];
+  for (const e of events.filter(e=>e.precise)) {
+    lines.push('BEGIN:VEVENT','UID:'+e.id+'-'+e.key+'@hijenny','DTSTAMP:'+stamp,'SEQUENCE:'+e.revision,
+      'DTSTART;VALUE=DATE:'+e.date.replaceAll('-',''),'TRANSP:TRANSPARENT',
+      'SUMMARY:'+text(e.status+' · '+e.label+' · '+e.id),
+      'DESCRIPTION:'+text(e.title+'\n登记更新 '+(e.updated || '未提供')+(e.previous?'\n上次登记日期 '+e.previous:'')),
+      'URL:https://clinicaltrials.gov/study/'+e.id,'END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  const encoder=new TextEncoder();
+  return lines.map(line=>{
+    let folded='', bytes=0;
+    for (const ch of line) {
+      const size=encoder.encode(ch).length;
+      if (bytes+size>75) {folded+='\r\n ';bytes=1;}
+      folded+=ch;bytes+=size;
+    }
+    return folded;
+  }).join('\r\n')+'\r\n';
+}
+
 function renderWatch() {
   setView(`<section id="trial-watch" class="research-home"><h1>试验关注列表</h1>
     <p>查看已关注试验的预计与实际完成日期。点击更新后，从 ClinicalTrials.gov 核对登记变化。</p>
     <button class="btn" data-nav="research">查找并关注试验</button>
     <button class="btn primary" id="update-watch">更新全部</button>
-    <p id="watch-status" role="status"></p><div id="watch-entries"></div></section>`);
+    <p id="watch-status" role="status"></p><section id="watch-calendar"></section><div id="watch-entries"></div></section>`);
   const root = $('#trial-watch');
   const entries = $('#watch-entries',root);
   const status = $('#watch-status',root);
@@ -59,6 +114,20 @@ function renderWatch() {
     const rows = Object.keys(localStorage).filter(k => k.startsWith(watchPrefix))
       .map(k => JSON.parse(localStorage.getItem(k))).sort((a,b)=>a.id.localeCompare(b.id));
     refresh.disabled = running || !rows.length;
+    const events=watchedMilestones(rows);
+    const calendar=$('#watch-calendar',root);
+    calendar.innerHTML=events.length?`<h2>试验里程碑日历</h2>
+      <p>按登记日期排序。日期精确到日的项目可导入日历；仅披露月份的项目在此保留月份。</p>
+      <ol>${events.map(e=>`<li><time datetime="${esc(e.date)}">${esc(e.date)}</time> · ${esc(e.status)} · ${esc(e.label)}
+        <a href="${esc(sourceLink(e))}" target="_blank" rel="noopener noreferrer">${esc(e.id)} · ${esc(e.title)}</a>
+        ${e.status==='预计延期'?'<small>上次预计 '+esc(e.previous)+'</small>':''}</li>`).join('')}</ol>
+      <button class="btn" id="watch-export" ${running || !events.some(e=>e.precise)?'disabled':''}>下载日历（${events.filter(e=>e.precise).length} 个全天事件）</button>`:'';
+    const download=$('#watch-export',root);
+    if (download) download.onclick=()=>{
+      const url=URL.createObjectURL(new Blob([watchCalendar(events)],{type:'text/calendar;charset=utf-8'}));
+      const a=document.createElement('a');a.href=url;a.download='HiJenny-试验里程碑.ics';a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    };
     entries.innerHTML = rows.map(row => `<article class="card"><h2>${esc(row.title)}</h2>
       <a href="${esc(sourceLink(row))}" target="_blank" rel="noopener noreferrer">${esc(row.id)} · 登记原文</a>
       <p>${esc(row.fields['登记状态'])} · 登记更新 ${esc(row.updated || '未提供')} · 本机核查 ${esc(fmtDate(row.checked))}</p>
