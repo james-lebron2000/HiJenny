@@ -180,7 +180,7 @@ function currentView() {
   const hash = (location.hash || '').replace(/^#\/?/, '');
   const view = hash.split('?')[0];
   if (!view) return 'research';
-  return ['research', 'brief', 'watch', 'clinical', 'medical', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
+  return ['research', 'brief', 'watch', 'clinical', 'medical', 'study', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
 }
 
 function hashParams() {
@@ -228,6 +228,7 @@ function statStrip(items) {
 /* ---------------------------------------------------------------- topbar */
 function updateTopbar() {
   const titles = {
+    study: ['IIT / RWE', '研究概念书与数据可行性'],
     medical: ['医学交流', '专家会与证据答复'],
     clinical: ['临床设计', '研究方案比较与评审'],
     watch: ['试验关注', '登记日期与变更记录'],
@@ -247,7 +248,7 @@ function updateTopbar() {
   if (titleEl) titleEl.textContent = title;
   if (subEl) subEl.textContent = sub;
 
-  const publicView = ['research', 'brief', 'watch', 'clinical', 'medical'].includes(currentView());
+  const publicView = ['research', 'brief', 'watch', 'clinical', 'medical', 'study'].includes(currentView());
   for (const el of $$('.project-select, #project-status, #btn-analyze-topbar')) el.hidden = publicView;
   $('#mobile-nav').value = currentView();
   const select = $('#project-select');
@@ -309,6 +310,7 @@ async function renderView() {
   const seq = ++state.renderSeq;
   updateTopbar();
 
+  if (state.view === 'study') { renderStudy(); return; }
   if (state.view === 'medical') { await renderMedical(); return; }
   if (state.view === 'clinical') { renderClinical(); return; }
   if (state.view === 'watch') { renderWatch(); return; }
