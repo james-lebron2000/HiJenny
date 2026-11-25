@@ -90,3 +90,20 @@ def test_csr_preserves_source_precision_zero_and_missing_values():
     assert client.post("/api/clinical/csr.docx", json=data).status_code == 422
     report.update(source="源表v1", table=raw.rsplit(",", 2)[0])
     assert client.post("/api/clinical/csr.docx", json=data).status_code == 422
+
+
+def test_ib_requires_sources_for_authored_sections_and_keeps_evidence_gaps():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    section = {"summary": "合成资料摘要", "source": "示例文档 V2 第三页"}
+    data = dict(id=str(uuid4()), question="示例研究", options=[{}, {}], references=[],
+                ib=dict(product="演练产品", cutoff="2025-01-31", sections={"clinical": section}))
+    result = client.post("/api/clinical/ib.docx", json=data)
+    assert result.status_code == 200
+    paragraphs = [p.text for p in Document(BytesIO(result.content)).paragraphs]
+    assert paragraphs.count("尚缺本章摘要，待补证") == 5
+    assert section["summary"] in paragraphs and any(section["source"] in p for p in paragraphs)
+    assert any(data["id"] in p and "2025-01-31" in p for p in paragraphs)
+    section["source"] = " "
+    assert client.post("/api/clinical/ib.docx", json=data).status_code == 422

@@ -18,6 +18,8 @@ const protocolFields = {
   data:'数据采集、质量控制与管理', ethics:'知情同意、伦理与隐私安排'
 };
 
+const ibSections={product:'研究用产品概况与制剂信息',nonclinical:'非临床研究摘要',kinetics:'人体药代与药效资料',
+  clinical:'既往人体研究与临床经验',safety:'安全性资料与已识别风险',guidance:'供研究者参考的资料与待解问题'};
 const csrFields={conduct:'实际实施与偏离方案',cutoff:'数据截止日期',source:'源表名称与版本',
   table:'结果表（CSV 文本）',interpretation:'结果解释与限制'};
 const csrHeader='类别,分析集,组别,指标,评价时间,报告值,单位,分母,出处';
@@ -51,6 +53,12 @@ function changedSections(before, after) {
   for (const choice of ['A','B']) {
     if (Object.keys(csrFields).some(key=>(before.csr?.[choice]?.[key] || '') !== (after.csr?.[choice]?.[key] || '')))
       changes.push('CSR '+choice+' · 报告内容或统计表版本已更改，需核对结果及出处');
+  }
+  if (['product','cutoff'].some(k=>(before.ib?.[k] || '') !== (after.ib?.[k] || '')))
+    changes.push('IB · 产品名称或资料截止日期已更改，需复核资料范围');
+  for (const [key,label] of Object.entries(ibSections)) {
+    if (['summary','source'].some(k=>(before.ib?.sections?.[key]?.[k] || '') !== (after.ib?.sections?.[key]?.[k] || '')))
+      changes.push('IB · '+label+'内容或出处已更改，需复核本章');
   }
   return changes;
 }
@@ -93,6 +101,14 @@ function renderClinical() {
       ${['A','B'].map(choice=>`<fieldset data-protocol-choice="${choice}"><legend>设计 ${choice} 的方案正文</legend>
       ${Object.entries(protocolFields).map(([key,label])=>`<label>${label}<textarea data-protocol="${key}" maxlength="6000" rows="2">${esc(version.protocol?.[choice]?.[key] || '')}</textarea></label>`).join('')}</fieldset>`).join('')}
       <button type="button" class="btn" id="protocol-export">保存并导出 Protocol 草稿</button></details>
+      <details id="ib-editor"><summary>起草研究者手册（IB）</summary>
+      <p>按产品汇总截至指定日期的资料。填写章节摘要时，请同时记录资料名称、版本及页码或表号。</p>
+      <label>研究用产品名称<input id="ib-product" maxlength="6000" value="${esc(version.ib?.product || '')}"></label>
+      <label>资料截止日期<input id="ib-cutoff" type="date" value="${esc(version.ib?.cutoff || '')}"></label>
+      ${Object.entries(ibSections).map(([key,title])=>`<fieldset data-ib="${key}"><legend>${title}</legend>
+      <label>资料摘要<textarea data-ib-field="summary" maxlength="6000">${esc(version.ib?.sections?.[key]?.summary || '')}</textarea></label>
+      <label>资料名称、版本及定位<textarea data-ib-field="source" maxlength="6000">${esc(version.ib?.sections?.[key]?.source || '')}</textarea></label></fieldset>`).join('')}
+      <button type="button" class="btn" id="ib-export">保存并导出 IB 草稿</button></details>
       <details id="csr-editor"><summary>起草临床研究报告（CSR）</summary>
       <p>按选中方案粘贴已复核的汇总表。类别可填「受试者处置」「疗效」「安全性」；出处填写原始表号与行号。保留原始数值精度，缺失值留空。</p>
       <button type="button" class="btn" id="csr-template">下载空白结果表（CSV）</button><p>CSV 表头 <code>${csrHeader}</code></p>
@@ -197,6 +213,11 @@ function renderClinical() {
         next.protocol[section.dataset.protocolChoice]=Object.fromEntries(
           $$('[data-protocol]',section).map(el=>[el.dataset.protocol,el.value]));
       }
+      next.ib={product:$('#ib-product',form).value.trim(),cutoff:$('#ib-cutoff',form).value || null,sections:{}};
+      for (const section of $$('[data-ib]',form)) {
+        next.ib.sections[section.dataset.ib]=Object.fromEntries(
+          $$('[data-ib-field]',section).map(el=>[el.dataset.ibField,el.value]));
+      }
       next.csr={};
       for (const section of $$('[data-csr-choice]',form)) {
         next.csr[section.dataset.csrChoice]=Object.fromEntries(
@@ -210,7 +231,18 @@ function renderClinical() {
     }
     form.onsubmit = event => { event.preventDefault(); save(); };
     async function exportDocument(kind, label) {
-      if (kind!=='synopsis' && !choiceInput.value) {$('#design-status').textContent='请先选择用于 '+label+' 的候选设计 A 或 B。';return;}
+      if (!['synopsis','ib'].includes(kind) && !choiceInput.value) {$('#design-status').textContent='请先选择用于 '+label+' 的候选设计 A 或 B。';return;}
+      if (kind==='ib') {
+        const required=[$('#ib-product',form),$('#ib-cutoff',form)];
+        for (const section of $$('[data-ib]',form)) {
+          if ($('[data-ib-field="summary"]',section).value.trim()) required.push($('[data-ib-field="source"]',section));
+        }
+        const missing=required.find(el=>!el.value.trim());
+        if (missing) {
+          missing.focus();$('#design-status').textContent='请填写产品名称、截止日期和已有摘要的章节出处。';
+          missing.setCustomValidity('导出 IB 前请填写此项');missing.reportValidity();missing.setCustomValidity('');return;
+        }
+      }
       if (!save()) return;
       const id = version.id;
       try {
@@ -226,6 +258,7 @@ function renderClinical() {
     }
     $('#design-export').onclick=()=>exportDocument('synopsis','方案摘要');
     $('#protocol-export').onclick=()=>exportDocument('protocol','Protocol');
+    $('#ib-export').onclick=()=>exportDocument('ib','IB');
     $('#csr-export').onclick=()=>exportDocument('csr','CSR');
     $('#sap-export').onclick=()=>exportDocument('sap','SAP');
   }

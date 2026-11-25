@@ -75,6 +75,25 @@ class StudyReport(BaseModel):
     interpretation: Text = ""
 
 
+IBSection = Literal["product", "nonclinical", "kinetics", "clinical", "safety", "guidance"]
+IB_TITLES = {
+    "product": "研究用产品概况与制剂信息", "nonclinical": "非临床研究摘要",
+    "kinetics": "人体药代与药效资料", "clinical": "既往人体研究与临床经验",
+    "safety": "安全性资料与已识别风险", "guidance": "供研究者参考的资料与待解问题",
+}
+
+
+class SourcedSection(BaseModel):
+    summary: Text = ""
+    source: Text = ""
+
+
+class InvestigatorBrochure(BaseModel):
+    product: Text = ""
+    cutoff: date | None = None
+    sections: dict[IBSection, SourcedSection] = Field(default_factory=dict)
+
+
 class Synopsis(BaseModel):
     id: UUID
     question: str = Field(min_length=1, max_length=400)
@@ -83,11 +102,12 @@ class Synopsis(BaseModel):
     rationale: Text = ""
     pending: Text = ""
     references: list[TrialReference] = Field(max_length=4)
+    ib: InvestigatorBrochure = Field(default_factory=InvestigatorBrochure)
     csr: dict[Literal["A", "B"], StudyReport] = Field(default_factory=dict)
     sap: StatisticalPlan = Field(default_factory=StatisticalPlan)
     protocol: dict[Literal["A", "B"], ProtocolSections] = Field(default_factory=dict)
     reviews: list[DesignReview] = Field(default_factory=list)
-    changes: list[Text] = Field(default_factory=list, max_length=48)
+    changes: list[Text] = Field(default_factory=list, max_length=64)
 
     @model_validator(mode="after")
     def reviews_belong_to_this_version(self):
@@ -285,3 +305,25 @@ def export_csr(plan: SelectedDesign):
     append_changes(document, plan)
     append_review_and_sources(document, plan)
     return word_download(document, f"HiJenny-CSR-{plan.id}.docx")
+
+@router.post("/api/clinical/ib.docx")
+def export_ib(plan: Synopsis):
+    ib = plan.ib
+    if not ib.product.strip() or not ib.cutoff:
+        raise HTTPException(422, "请填写研究用产品名称及资料截止日期")
+    for key, entry in ib.sections.items():
+        if entry.summary.strip() and not entry.source.strip():
+            raise HTTPException(422, f"请补充「{IB_TITLES[key]}」的来源、版本与定位")
+    document = Document()
+    document.add_heading("研究者手册（IB）· 评审草稿", 0)
+    document.add_paragraph(clean(ib.product))
+    document.add_paragraph(f"资料截止日期 {ib.cutoff} · 工作区设计版本 {plan.id}")
+    document.add_paragraph(f"关联研究问题：{clean(plan.question)}")
+    for key, title in IB_TITLES.items():
+        entry = ib.sections.get(key, SourcedSection())
+        document.add_heading(title, 1)
+        document.add_paragraph(clean(entry.summary.strip()) or "尚缺本章摘要，待补证")
+        document.add_paragraph("资料名称、版本及定位：" + (clean(entry.source.strip()) or "待提供"))
+    append_changes(document, plan)
+    append_review_and_sources(document, plan)
+    return word_download(document, f"HiJenny-IB-{plan.id}.docx")
