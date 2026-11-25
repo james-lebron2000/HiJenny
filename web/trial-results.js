@@ -129,3 +129,69 @@ function bindTrialResultButtons(output) {
     finally {button.disabled=false;}
   };
 }
+
+// Outcome indices belong to a specific registry snapshot, even when two titles match.
+function comparisonFields(measure) {
+  const {rows, denoms}=measureRows(measure);
+  return [
+    ['登记终点',measure.title],['终点类别',measure.type],['终点定义',measure.description],
+    ['评价时间',measure.timeFrame],['分析人群',measure.populationDescription],
+    ['统计量',measure.paramType],['单位',measure.unitOfMeasure],['离散量或区间类型',measure.dispersionType],
+    ['组别定义',(measure.groups || []).map(g=>[g.id,g.title,g.description].filter(Boolean).join(' · ')).join('\n')],
+    ['分析分母',[denomHeaders,...denoms]],['测量结果',[outcomeHeaders,...rows]]
+  ];
+}
+
+function comparePostedResults(panel, records) {
+  if (records.length<2 || records.length>4) {panel.textContent='请选择 2 至 4 项试验。';return;}
+  panel.innerHTML='<h2>公布终点对照</h2><p>为每项试验选取要讨论的终点，核对定义、人群、时间窗与分母。跨试验数据仅作描述性对照。</p><div data-pickers></div><div data-matrix></div>';
+  const controls=panel.querySelector('[data-pickers]'), matrix=panel.querySelector('[data-matrix]');
+  const columns=records.map(item=>({item, snapshot:null, measure:null}));
+  function draw() {
+    const selected=columns.filter(c=>c.measure);
+    if (!selected.length) {matrix.replaceChildren();return;}
+    const fieldSets=selected.map(c=>[['登记更新',c.snapshot.updated],['检索时间',c.snapshot.retrieved],...comparisonFields(c.measure)]);
+    matrix.innerHTML=`<p>已选择终点的试验：${selected.length} / ${records.length}</p>
+      <div class="comparison-scroll" tabindex="0"><table><thead><tr><th scope="col">对照项</th>${selected.map(c=>`<th scope="col"><a href="${esc(sourceLink({id:c.item.id,postedResult:true}))}" target="_blank" rel="noopener noreferrer">${esc(c.item.id)}</a></th>`).join('')}</tr></thead>
+      <tbody>${fieldSets[0].map(([label],i)=>`<tr><th scope="row">${esc(label)}</th>${fieldSets.map(fields=>{
+        const value=fields[i][1];
+        const content=Array.isArray(value)?registryTable(value[0],value.slice(1)):esc(registryValue(value)).replaceAll('\n','<br>');
+        return '<td>'+content+'</td>';
+      }).join('')}</tr>`).join('')}</tbody></table></div>
+      ${selected.length===columns.length?'<button class="btn" type="button" data-export-comparison>下载所选终点与来源</button>':''}`;
+    const download=matrix.querySelector('[data-export-comparison]');
+    if (download) download.onclick=()=>{
+      const payload=selected.map(({snapshot,measure, index})=>({id:snapshot.id,title:snapshot.title,
+        updated:snapshot.updated,retrieved:snapshot.retrieved,url:sourceLink({id:snapshot.id,postedResult:true}),
+        outcome_index:index,outcome:measure}));
+      const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
+      const a=document.createElement('a');a.href=url;a.download='HiJenny-trial-outcomes.json';a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    };
+  }
+  for (const col of columns) {
+    const box=document.createElement('fieldset');
+    controls.appendChild(box);
+    const heading='<legend>'+esc(col.item.id)+' · '+esc(col.item.title)+'</legend>';
+    async function load() {
+      box.innerHTML=heading+'<p role="status">正在读取登记结果…</p>';
+      try {
+        const snapshot=await api('/api/research/trials/'+encodeURIComponent(col.item.id)+'/results');
+        if (!box.isConnected) return;
+        col.snapshot=snapshot;
+        box.innerHTML=heading+'<p>检索时间 '+esc(fmtDate(snapshot.retrieved))+'</p>'+
+          (snapshot.outcomes.length?`<label>选择公布的终点<select><option value="">请选择</option>${snapshot.outcomes.map((m,i)=>option(String(i),'',[m.type,m.title].filter(Boolean).join(' · '))).join('')}</select></label>`:
+            '<p>'+ (snapshot.has_results?'此记录无已发布的终点测量表。':'此记录尚未公布试验结果。')+'</p>');
+        const choice=box.querySelector('select');
+        if (choice) choice.onchange=()=>{
+          col.index=choice.value===''?null:Number(choice.value);
+          col.measure=snapshot.outcomes[col.index] || null;draw();
+        };
+      } catch(err) {
+        box.innerHTML=heading+'<p role="status">'+esc(err.message)+'</p><button class="btn" type="button">重试此试验</button>';
+        box.querySelector('button').onclick=load;
+      }
+    }
+    load();
+  }
+}

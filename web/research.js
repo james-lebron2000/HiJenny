@@ -42,18 +42,19 @@ function renderResearch() {
     <button class="btn" type="button" id="make-brief">用这个主题整理多来源底稿 →</button>
     <div id="research-output" aria-live="polite"></div>
     <details id="public-library"><summary>我的公开资料收藏（本浏览器）</summary>
-    <label>筛选收藏 <input id="library-filter" type="search"></label><ul id="library-list"></ul></details>
+    <label>筛选收藏 <input id="library-filter" type="search"></label><ul id="library-list"></ul><button class="btn" type="button" id="library-compare">对照已选试验的公布终点</button><div id="library-outcomes" aria-live="polite"></div></details>
     <button data-nav="projects" class="btn" type="button">进入资料包尽调工作区 →</button></section>`);
   $('#make-brief').onclick = () => { briefSeed = $('#research-query').value.trim(); nav('brief'); };
   const source = $('#research-source');
   source.value = researchSession.source;
   const output = $('#research-output');
+  const chosenTrials = new Set();
   function renderLibrary() {
     const filter = $('#library-filter').value.trim().toLowerCase();
     const list = $('#library-list');
     const entries = readPublicLibrary().filter(item =>
       [item.title, item.detail, item.query, item.id].join(' ').toLowerCase().includes(filter));
-    list.innerHTML = entries.map(item => `<li><a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
+    list.innerHTML = entries.map(item => `<li>${/^NCT[0-9]{8}$/.test(item.id)?`<label><input type="checkbox" data-compare-id="${esc(item.id)}" ${chosenTrials.has(item.id)?"checked":""}> ${esc(item.id)}</label>`:""}<a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
       <button class="btn sm" type="button" data-remove="${esc(item.id)}">移除</button></li>`).join('') || '<li>暂无匹配记录</li>';
   }
   function persist(entries) {
@@ -66,8 +67,19 @@ function renderResearch() {
   $('#library-filter').oninput = renderLibrary;
   $('#library-list').onclick = event => {
     const id = event.target.closest('[data-remove]')?.dataset.remove;
-    if (id) persist(readPublicLibrary().filter(item => item.id !== id));
+    if (id && persist(readPublicLibrary().filter(item => item.id !== id))) {
+      chosenTrials.delete(id);$('#library-compare').textContent='对照已选试验的公布终点（'+chosenTrials.size+'）';$('#library-outcomes').replaceChildren();
+    }
   };
+  $('#library-list').onchange = event=>{
+    const input=event.target.closest('[data-compare-id]');
+    if (!input) return;
+    if (input.checked) chosenTrials.add(input.dataset.compareId); else chosenTrials.delete(input.dataset.compareId);
+    $('#library-outcomes').replaceChildren();
+    $('#library-compare').textContent='对照已选试验的公布终点（'+chosenTrials.size+'）';
+  };
+  $('#library-compare').onclick=()=>comparePostedResults($('#library-outcomes'),
+    readPublicLibrary().filter(item=>chosenTrials.has(item.id)));
   renderLibrary();
   function show(data) {
     output.innerHTML = researchResults(data);
@@ -99,7 +111,9 @@ function renderResearch() {
         ${records.map(item=>`<th scope="col"><a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.id)}</a></th>`).join('')}
         </tr></thead><tbody>${fields.map(field=>`<tr><th scope="row">${esc(field)}</th>
         ${records.map(item=>`<td>${esc(cell(item.comparison[field]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+        <button type="button" id="results-from-trials" class="btn">对照公布终点</button><div data-compared-results></div>
         <button type="button" id="design-from-trials" class="btn primary">用这组试验起草研究设计</button>`;
+      $('#results-from-trials',panel).onclick=()=>comparePostedResults($('[data-compared-results]',panel),records);
       $('#design-from-trials', panel).onclick = () => {
         clinicalSeed = records.map(item => ({
           id:item.id, title:item.title, date:item.date,

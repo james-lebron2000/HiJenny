@@ -27,3 +27,17 @@ test('unreported safety counts remain missing while reported zero is displayed',
   assert.equal(registryValue(rows[0][2]),'0');
   assert.equal(registryValue(undefined),'未提供');
 });
+
+test('selected outcome comparison retains analysis context, missing fields and grouped values',()=>{
+  const fields=runInNewContext(source+'\ncomparisonFields');
+  const outcome={title:'Response',timeFrame:'Week 8',populationDescription:'Evaluable',
+    paramType:'Number',unitOfMeasure:'Participants',groups:[{id:'A',title:'Arm A',description:'Assigned treatment'}],
+    classes:[{categories:[{measurements:[{groupId:'A',value:'0'}]}]}]};
+  const byLabel=new Map(fields(outcome));
+  assert.equal(byLabel.get('评价时间'),'Week 8');
+  assert.equal(byLabel.get('分析人群'),'Evaluable');
+  assert.equal(byLabel.get('组别定义'),'A · Arm A · Assigned treatment');
+  assert.equal(byLabel.get('测量结果')[1][2],'0');
+  assert.equal(byLabel.get('分析分母').length,1);
+  assert.equal(byLabel.get('离散量或区间类型'),undefined);
+});
