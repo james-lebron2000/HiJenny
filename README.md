@@ -36,6 +36,8 @@ list and a reviewable report — every claim linked to document + page + verbati
 
 # 中文文档
 
+启动工作台后，首页可直接检索 **PubMed 文献和 ClinicalTrials.gov 临床试验**。选择数据库，输入公开药物名（例如 imatinib），即可查看原文摘要或登记终点、打开来源、收藏及下载记录。检索时向所选数据库发送检索词；资料包尽调继续使用独立的项目工作区。收藏保存在当前浏览器。选择 2–4 项试验可以并排核对登记设计。点击「用这个主题整理多来源底稿」可调整两库检索词、保留独立版本、记录纳入／排除和审核意见，并下载含原始链接的文本。检索中断后可从「研究底稿」继续未完成的来源。选择「进入资料包尽调工作区」可继续原有流程。
+
 ## 1. 这是什么
 
 HiJenny 面向药企 BD / License-in 团队，自动完成创新药临床尽调的**初筛与问题清单**：
@@ -738,3 +740,7 @@ object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
 | [docs/assets/bd_followup.gif](docs/assets/bd_followup.gif) | BD follow-up loop: comparable asset → seller reply → review → Decision Brief |
 | [AGENTS_CONTRACT.md](AGENTS_CONTRACT.md) | Internal module contract used by the multi-agent build |
 | [LICENSE](LICENSE) | Apache-2.0 |
+
+### Linux 用户服务部署
+
+部署单元位于 [deploy/hijenny.service](deploy/hijenny.service)。用户目录下的 `~/.local/share/hijenny/current` 指向一个独立版本目录，`runtime-py312` 放置 Python 3.12 虚拟环境，`state` 保存运行数据。用户服务启用后，以 `systemctl --user status hijenny` 查看状态。服务监听用户私有目录中的 Unix socket；SSH 转发可将它接入本机浏览器。试验检索中可勾选记录加入「试验关注」，按需更新预计或实际完成日期并查看逐字段变更。

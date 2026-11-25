@@ -179,7 +179,8 @@ function relativeFileUrl(path) {
 function currentView() {
   const hash = (location.hash || '').replace(/^#\/?/, '');
   const view = hash.split('?')[0];
-  return ['projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
+  if (!view) return 'research';
+  return ['research', 'brief', 'watch', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
 }
 
 function hashParams() {
@@ -227,6 +228,9 @@ function statStrip(items) {
 /* ---------------------------------------------------------------- topbar */
 function updateTopbar() {
   const titles = {
+    watch: ['试验关注', '登记日期与变更记录'],
+    brief: ['研究底稿', '多来源检索与证据复核'],
+    research: ['HiJenny Agent', '公开医药证据检索'],
     projects: ['Projects', 'Due-diligence packages'],
     overview: ['Asset 360', '药物资产发现与资产评估 · Discovery & Evaluation'],
     upload: ['Upload & Analysis', 'Documents, parsing and pipeline runs'],
@@ -241,6 +245,9 @@ function updateTopbar() {
   if (titleEl) titleEl.textContent = title;
   if (subEl) subEl.textContent = sub;
 
+  const publicView = ['research', 'brief', 'watch'].includes(currentView());
+  for (const el of $$('.project-select, #project-status, #btn-analyze-topbar')) el.hidden = publicView;
+  $('#mobile-nav').value = currentView();
   const select = $('#project-select');
   if (select) {
     const current = state.projectId || '';
@@ -300,6 +307,9 @@ async function renderView() {
   const seq = ++state.renderSeq;
   updateTopbar();
 
+  if (state.view === 'watch') { renderWatch(); return; }
+  if (state.view === 'brief') { await renderBrief(); return; }
+  if (state.view === 'research') { renderResearch(); return; }
   if (state.view === 'projects') { await renderProjects(seq); return; }
   if (state.view === 'overview') { await renderOverview(seq); return; }
   if (!state.projectId) {

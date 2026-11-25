@@ -20,6 +20,9 @@
 
       <nav class="nav" aria-label="Main navigation">
         <div class="nav-label">Workspace</div>
+        <button class="nav-item" data-nav="research" type="button">医药检索</button>
+        <button class="nav-item" data-nav="watch" type="button">试验关注</button>
+        <button class="nav-item" data-nav="brief" type="button">研究底稿</button>
         <button class="nav-item" data-nav="projects" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
           <span>Projects</span><span class="badge" id="badge-projects">0</span>
@@ -61,6 +64,11 @@
           <div class="topbar-sub" id="topbar-sub">Select a project to begin</div>
         </div>
         <div class="topbar-spacer"></div>
+        <select id="mobile-nav" aria-label="工作区导航" onchange="nav(this.value)">
+          <option value="research">医药检索</option><option value="watch">试验关注</option><option value="brief">研究底稿</option><option value="projects">尽调项目</option><option value="overview">资产概览</option>
+          <option value="upload">资料分析</option><option value="evidence">证据</option><option value="findings">风险与问题</option>
+          <option value="followup">BD 复核</option><option value="report">报告</option>
+        </select>
         <div class="project-select">
           <label for="project-select">Project</label>
           <select id="project-select"></select>
@@ -77,6 +85,9 @@
 
   <div id="toasts" aria-live="polite"></div>
   <script src="/static/followup.js"></script>
+  <script src="/static/watch.js"></script>
+  <script src="/static/brief.js"></script>
+  <script src="/static/research.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

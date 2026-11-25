@@ -1,0 +1,21 @@
+[Unit]
+Description=HiJenny pharmaceutical research and diligence workspace
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/hijenny/current
+Environment=HIJENNY_DATA_DIR=%h/.local/share/hijenny/state
+Environment=HIJENNY_EXTRACT_MODE=rules
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+RuntimeDirectory=hijenny
+RuntimeDirectoryMode=0700
+ExecStart=%h/.local/share/hijenny/runtime-py312/bin/python -m uvicorn hijenny.api.main:app --uds %t/hijenny/agent.sock
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

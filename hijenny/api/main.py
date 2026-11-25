@@ -475,6 +475,8 @@ def create_app() -> FastAPI:
         description="Evidence-first pharma BD due-diligence API and review UI.",
         lifespan=_lifespan,
     )
+    from .research import router as research_router
+    app.include_router(research_router)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

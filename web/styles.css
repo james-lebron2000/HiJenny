@@ -923,3 +923,24 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 .bd form label { display: grid; gap: 5px; margin-bottom: 9px; }
 .bd form textarea { min-height: 64px; }
 .bd-grid { display: grid; gap: 0 12px; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); }
+
+[hidden] { display: none !important; }
+#mobile-nav { display: none; }
+.research-home { max-width: 800px; margin: 24px auto; }
+.research-home h1 { font-size: clamp(26px, 4vw, 40px); }
+.research-home .card { display: grid; gap: 12px; margin: 24px 0; padding: 24px; }
+.research-home .card button { justify-self: start; }
+.research-home input, .research-home select { padding: 10px; width: 100%; }
+.research-results li { padding: 12px 4px; }
+.research-results a { overflow-wrap: anywhere; }
+#research-output:not(:empty) { padding: 12px 0 24px; }
+@media (max-width: 900px) { #mobile-nav { display: block; max-width: 120px; } }
+.research-results input[type=checkbox] { width: auto; }
+.research-home details { margin: 12px 0; }
+.research-home summary { cursor: pointer; }
+#public-library { margin: 20px 0; }
+#library-list li { margin: 8px 0; }
+.comparison-scroll { overflow-x: auto; max-width: 100%; }
+.comparison-scroll table { border-collapse: collapse; width: 100%; }
+.comparison-scroll th, .comparison-scroll td { min-width: 8rem; max-width: 24rem; padding: 10px; vertical-align: top; white-space: normal; }
+.research-home textarea { width: 100%; font: inherit; }
