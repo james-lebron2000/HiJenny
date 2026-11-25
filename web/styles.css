@@ -967,3 +967,6 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 .trial-posted { min-width:0; overflow-wrap:anywhere; }
 .trial-posted:not(:empty) { margin-block:14px; }
 .trial-posted select { max-width:100%; }
+
+.pilot-source img { display: block; width: 100%; max-width: 54rem; height: auto; margin: .6rem 0; border: 1px solid #cbd5e1; }
+.pilot-source, .pilot-math { margin: .75rem 0; }

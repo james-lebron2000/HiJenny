@@ -33,3 +33,19 @@ def test_pilot_receipt_survives_simultaneous_retries_and_only_cli_can_list(tmp_p
         assert len(rows) == 1 and rows[0]["email"] == request["email"]
         assert rows[0]["progress"][0]["stage"] == "已报价"
     assert client.get("/api/pilot/sample-report").content.startswith(b"# ASD-101")
+
+
+def test_sample_source_downloads_match_files_used_to_render_previews():
+    from hashlib import sha256
+
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    # Updating these pinned synthetic sources also requires refreshing the matching page images.
+    for source, digest in [
+        ("csr", "0aed7bb9d6c29a447a4ff3fc2c2696fd9d54165160ca1f33c987d399e711e255"),
+        ("forecast", "5a5783823bd3fc7ed7c7a33172a5ee29c7d2142a35c5cf11bc68ed05e7bdd77d"),
+    ]:
+        response = client.get(f"/api/pilot/sources/{source}")
+        assert response.status_code == 200 and sha256(response.content).hexdigest() == digest
+    assert client.get("/api/pilot/sources/projects").status_code == 422

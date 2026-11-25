@@ -35,3 +35,11 @@ def submit(request: PilotRequest):
 def sample_report():
     return FileResponse(config.REPO_ROOT / "docs/sample_output/HiJenny_Report.md",
                         media_type="text/markdown", filename="HiJenny-Synthetic-Diligence-Report.md")
+
+
+@router.get("/api/pilot/sources/{source}")
+def pilot_source(source: Literal["csr", "forecast"]):
+    filenames = {"csr": "Clinical_Study_Report_v1.0.pdf", "forecast": "Commercial_Forecast_v1.pptx"}
+    name = filenames[source]
+    # Only the committed synthetic package belongs in this unauthenticated demonstration.
+    return FileResponse(config.REPO_ROOT / "data/sample_package" / name, filename=name)
