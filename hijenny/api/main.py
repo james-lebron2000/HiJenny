@@ -487,6 +487,8 @@ def create_app() -> FastAPI:
     app.include_router(clinical_router)
     from .medical import router as medical_router
     app.include_router(medical_router)
+    from .study import router as study_router
+    app.include_router(study_router)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
