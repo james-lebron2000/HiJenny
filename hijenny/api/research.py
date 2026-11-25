@@ -14,8 +14,28 @@ NCBI = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
 
 class SearchRequest(BaseModel):
-    query: str = Field(min_length=1, max_length=400)
+    query: str = Field(min_length=1, max_length=800)
     source: Literal["pubmed", "trials", "guidelines"]
+    article_type: Literal["", "Clinical Trial", "Randomized Controlled Trial", "Systematic Review", "Meta-Analysis", "Review"] = ""
+    year_from: int | None = Field(default=None, ge=1000, le=9999)
+    year_to: int | None = Field(default=None, ge=1000, le=9999)
+
+
+def effective_search(request, query):
+    if request.source == "trials" and (request.article_type or request.year_from or request.year_to):
+        raise HTTPException(422, "文献类型和发表年份仅适用于 PubMed。")
+    if request.year_from and request.year_to and request.year_from > request.year_to:
+        raise HTTPException(422, "起始年份应早于或等于结束年份。")
+    filters = []
+    if request.source == "guidelines":
+        if request.article_type:
+            raise HTTPException(422, "指南检索已限定文献类型。")
+        filters.append("(Guideline[pt] OR Practice Guideline[pt])")
+    elif request.article_type:
+        filters.append(f'"{request.article_type}"[pt]')
+    if request.year_from or request.year_to:
+        filters.append(f"{request.year_from or 1000}:{request.year_to or 9999}[dp]")
+    return " AND ".join([f"({query})", *filters]) if filters else query
 
 
 async def pubmed(client, query):
@@ -58,7 +78,7 @@ async def pubmed(client, query):
 
 
 async def guidelines(client, query):
-    return await pubmed(client, f"({query}) AND (Guideline[pt] OR Practice Guideline[pt])")
+    return await pubmed(client, effective_search(SearchRequest(query=query, source="guidelines"), query))
 
 
 async def trials(client, query):
@@ -118,17 +138,18 @@ async def search_public_records(request: SearchRequest):
     query = request.query.strip()
     if not query:
         raise HTTPException(422, "请输入公开的药物名、适应症或检索式。")
-    retrieve = {"pubmed": pubmed, "trials": trials, "guidelines": guidelines}[request.source]
+    term = effective_search(request, query)
+    retrieve = trials if request.source == "trials" else pubmed
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             try:
-                total, items = await retrieve(client, query)
+                total, items = await retrieve(client, term)
             except (httpx.ConnectError, httpx.ConnectTimeout):
                 await asyncio.sleep(0.4)
-                total, items = await retrieve(client, query)
+                total, items = await retrieve(client, term)
     except (httpx.HTTPError, ElementTree.ParseError, ValueError, KeyError, TypeError) as exc:
         raise HTTPException(502, "暂时无法读取所选数据库，请稍后重试。") from exc
-    return {"query": query, "source": request.source, "total": total, "items": items}
+    return {"query": query, "effective_query": term, "source": request.source, "total": total, "items": items}
 
 
 def registry_result_snapshot(record, retrieved):

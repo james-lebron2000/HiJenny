@@ -1,6 +1,6 @@
 'use strict';
 
-const researchSession = { query: '', source: 'pubmed', response: null };
+const researchSession = { query: '', source: 'pubmed', articleType:'', yearFrom:'', yearTo:'', response: null };
 
 function readPublicLibrary() {
   try {
@@ -17,13 +17,15 @@ function sourceLink(item) {
 }
 
 function researchResults(data) {
-  if (!data.items.length) return '<p>没有找到记录。可尝试药物通用名、英文适应症或更短的检索式。</p>';
+
   return `<h2>${esc(data.query)}</h2><p>${data.source === 'guidelines' ? 'PubMed 指南文献' : (data.source === 'pubmed' ? 'PubMed' : 'ClinicalTrials.gov')} · 共 ${esc(data.total)} 条，展示 ${data.items.length} 条</p>
     ${data.source === 'guidelines' ? '<p>范围为 PubMed 标注的指南及实践指南。适用地区、更新状态和推荐级别请核对发布方原文。</p>' : ''}
+    ${data.effective_query && data.effective_query!==data.query ? `<p>实际检索式 <code>${esc(data.effective_query)}</code></p><button class="btn" type="button" id="filtered-brief">带入研究底稿</button>`:''}
     <button id="save-search" class="btn" type="button">下载检索记录</button>
+    ${!data.items.length?'<p>没有找到记录。可调整年份、文献类型或检索词。</p>':''}
     <ol class="research-results">${data.items.map(item => `<li><label><input type="checkbox" class="pick-record" value="${esc(item.id)}"> 选择</label> <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
     <p>${esc([item.id, item.detail, item.date].filter(Boolean).join(' · '))}</p>
-    ${data.source === 'guidelines' ? '<p>文献类型 · '+esc((item.publication_types || []).join(' / ') || '未提供')+'</p>' : ''}
+    ${data.source !== 'trials' ? '<p>文献类型 · '+esc((item.publication_types || []).join(' / ') || '未提供')+'</p>' : ''}
     <details><summary>查看来源片段</summary>${item.passages.length ? item.passages.map(p =>
       `<p><strong>${esc(p.label)}</strong><br>${esc(p.text)}</p>`).join('') : '<p>该记录未提供摘要。</p>'}</details>
     ${data.source === 'trials' ? `<button type="button" class="btn" data-load-results="${esc(item.id)}">查看公布结果与安全性</button><section class="trial-posted" aria-live="polite"></section>` : ''}</li>`).join('')}</ol><button id="keep-records" type="button" class="btn">收藏勾选记录</button>
@@ -37,7 +39,11 @@ function renderResearch() {
     <input id="research-query" required maxlength="400" placeholder="例如 imatinib 或 NCT00115739" value="${esc(researchSession.query)}">
     <label for="research-source">数据来源</label><select id="research-source"><option value="pubmed">PubMed 文献</option>
     <option value="guidelines">PubMed 指南文献</option><option value="trials">ClinicalTrials.gov 临床试验</option></select>
-    <p>点击检索后，仅检索词会发送至所选公共数据库。请使用公开信息。</p>
+    <fieldset id="pubmed-filters"><legend>文献筛选</legend>
+    <label>文献类型<select id="article-type">${[['','全部类型'],['Clinical Trial','临床试验'],['Randomized Controlled Trial','随机对照试验'],['Systematic Review','系统综述'],['Meta-Analysis','荟萃分析'],['Review','综述']].map(([v,label])=>option(v,researchSession.articleType,label)).join('')}</select></label>
+    <label>发表起始年<input type="number" min="1000" max="9999" id="year-from" value="${esc(researchSession.yearFrom)}"></label>
+    <label>发表结束年<input type="number" min="1000" max="9999" id="year-to" value="${esc(researchSession.yearTo)}"></label></fieldset>
+    <p>检索词和筛选条件将发送至所选公共数据库。请使用公开信息。</p>
     <button class="btn primary" type="submit">检索公开记录</button></form>
     <button class="btn" type="button" id="make-brief">用这个主题整理多来源底稿 →</button>
     <div id="research-output" aria-live="polite"></div>
@@ -47,6 +53,13 @@ function renderResearch() {
   $('#make-brief').onclick = () => { briefSeed = $('#research-query').value.trim(); nav('brief'); };
   const source = $('#research-source');
   source.value = researchSession.source;
+  const filters=$('#pubmed-filters'), articleType=$('#article-type'), yearFrom=$('#year-from'), yearTo=$('#year-to');
+  function updateFilters() {
+    filters.hidden=filters.disabled=source.value==='trials';
+    articleType.disabled=source.value!=='pubmed';
+    articleType.parentElement.hidden=source.value==='guidelines';
+  }
+  source.onchange=updateFilters;updateFilters();
   const output = $('#research-output');
   const chosenTrials = new Set();
   function renderLibrary() {
@@ -84,6 +97,10 @@ function renderResearch() {
   function show(data) {
     output.innerHTML = researchResults(data);
     bindTrialResultButtons(output);
+    const filteredBrief=$('#filtered-brief',output);
+    if (filteredBrief) filteredBrief.onclick=()=>{
+      briefSeed={question:data.query,pubmed:data.effective_query,trials:data.query};nav('brief');
+    };
     const follow = $('#follow-trials', output);
     if (follow) follow.onclick = async () => {
       const picked = new Set($$('.pick-record:checked', output).map(el => el.value));
@@ -129,13 +146,13 @@ function renderResearch() {
       if (!picked.size) { toast('请先勾选需要收藏的记录。'); return; }
       const entries = new Map(readPublicLibrary().map(item => [item.id, item]));
       for (const item of data.items.filter(item => picked.has(item.id))) {
-        entries.set(item.id, {id:item.id, title:item.title, detail:item.detail, query:data.query});
+        entries.set(item.id, {id:item.id, title:item.title, detail:item.detail, query:data.effective_query || data.query});
       }
       if (persist([...entries.values()])) toast('记录已加入本浏览器收藏。');
     };
     const save = $('#save-search', output);
     if (save) save.onclick = () => {
-      const lines = [data.query, data.source, data.retrieved, '', ...data.items.map(i =>
+      const lines = [data.query, data.source, data.retrieved, '实际检索式 '+(data.effective_query || data.query), '数据库命中 '+data.total+' · 取回 '+data.items.length, '', ...data.items.map(i =>
         [i.title, [i.id, i.date, i.detail].filter(Boolean).join(' · '), i.url, ''].join('\n'))];
       const url = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/plain;charset=utf-8'}));
       const link = document.createElement('a');
@@ -150,13 +167,23 @@ function renderResearch() {
     const button = form.querySelector('button');
     const query = $('#research-query').value.trim();
     if (!query || button.disabled) return;
+    if (!filters.disabled && yearFrom.value && yearTo.value && +yearFrom.value>+yearTo.value) {
+      toast('起始年份应早于或等于结束年份。','err');return;
+    }
+    Object.assign(researchSession,{articleType:articleType.value,yearFrom:yearFrom.value,yearTo:yearTo.value});
+    const payload={query,source:source.value};
+    if (!filters.disabled) {
+      if (!articleType.disabled) payload.article_type=articleType.value;
+      if (yearFrom.value) payload.year_from=Number(yearFrom.value);
+      if (yearTo.value) payload.year_to=Number(yearTo.value);
+    }
     researchSession.query = query;
     researchSession.source = source.value;
     researchSession.response = null;
     button.disabled = true;
     output.textContent = '正在读取数据库…';
     try {
-      const result = await api('/api/research/search', jsonOptions('POST', {query, source:source.value}));
+      const result = await api('/api/research/search', jsonOptions('POST', payload));
       if (!form.isConnected) return;
       result.retrieved = new Date().toISOString();
       researchSession.response = result;

@@ -73,7 +73,7 @@ async function renderBrief() {
     <h1>整理研究底稿</h1><p>分别检索文献与试验登记，逐条核对来源，再导出会议或研究用的证据底稿。</p>
     <form id="brief-plan" class="card"><label for="brief-question">你希望回答什么问题？</label>
     <input id="brief-question" required maxlength="400" placeholder="例如：伊马替尼有哪些已发表的临床研究？">
-    <label for="brief-pubmed">PubMed 检索式</label><input id="brief-pubmed" required maxlength="400" placeholder="imatinib AND clinical trial">
+    <label for="brief-pubmed">PubMed 检索式</label><input id="brief-pubmed" required maxlength="800" placeholder="imatinib AND clinical trial">
     <label for="brief-trials">ClinicalTrials.gov 检索词</label><input id="brief-trials" required maxlength="400" placeholder="imatinib">
     <small>两条检索式分别发送至对应数据库。研究问题、来源快照与审核意见保存在本浏览器。</small>
     <button class="btn primary" type="submit">运行并保存新版本</button></form>
@@ -84,7 +84,7 @@ async function renderBrief() {
   const report = $('#brief-report', home);
   const form = $('#brief-plan', home);
   if (briefSeed) {
-    for (const input of form.querySelectorAll('input')) input.value = briefSeed;
+    for (const input of form.querySelectorAll('input')) input.value = typeof briefSeed==='string' ? briefSeed : briefSeed[input.id.slice(6)];
     briefSeed = '';
   }
   let run;

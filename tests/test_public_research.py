@@ -106,3 +106,20 @@ def test_guideline_search_applies_publication_type_to_whole_query():
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
             assert await guidelines(client, "asthma OR COPD") == (0, [])
     asyncio.run(check())
+
+
+def test_filtered_pubmed_queries_preserve_boolean_scope_and_date_range():
+    from hijenny.api.research import effective_search
+
+    def build(source, **filters):
+        request = SearchRequest(source=source, query="asthma OR COPD", **filters)
+        return effective_search(request, request.query)
+
+    assert build("pubmed") == "asthma OR COPD"
+    assert build("pubmed", article_type="Systematic Review", year_from=2018, year_to=2020) == (
+        '(asthma OR COPD) AND "Systematic Review"[pt] AND 2018:2020[dp]')
+    assert build("guidelines", year_to=2019).endswith("AND 1000:2019[dp]")
+    with pytest.raises(HTTPException):
+        build("pubmed", year_from=2024, year_to=2023)
+    with pytest.raises(HTTPException):
+        build("trials", year_from=2018)
