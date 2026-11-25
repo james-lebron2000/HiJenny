@@ -70,3 +70,23 @@ def test_protocol_keeps_the_selected_operational_plan_and_same_version_sap():
     body = "\n".join(p.text for p in Document(BytesIO(response.content)).paragraphs)
     assert all(x in body for x in [data["id"], "乙终点", "乙访视", "本版分析集", "待研究团队补充"])
     assert "甲访视" not in body
+
+
+def test_csr_preserves_source_precision_zero_and_missing_values():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    raw = '类别,分析集,组别,指标,评价时间,报告值,单位,分母,出处\n疗效,演练,A,模拟终点,周末,0.00,%,0,"表1,行2"'
+    report = dict(source="源表v1", cutoff="2025-01-01", table=raw)
+    data = dict(id=str(uuid4()), question="演练", choice="A", options=[{}, {}], references=[], csr={"A": report})
+    res = client.post("/api/clinical/csr.docx", json=data)
+    assert res.status_code == 200
+    doc = Document(BytesIO(res.content))
+    cells = [c.text for c in doc.tables[0].rows[1].cells]
+    assert cells[2] == "报告值：0.00\n单位：%\n分母：0"
+    assert cells[3] == "出处：表1,行2"
+    assert "未提供该类统计结果" in [p.text for p in doc.paragraphs]
+    report["source"] = ""
+    assert client.post("/api/clinical/csr.docx", json=data).status_code == 422
+    report.update(source="源表v1", table=raw.rsplit(",", 2)[0])
+    assert client.post("/api/clinical/csr.docx", json=data).status_code == 422

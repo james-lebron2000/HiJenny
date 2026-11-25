@@ -18,6 +18,10 @@ const protocolFields = {
   data:'数据采集、质量控制与管理', ethics:'知情同意、伦理与隐私安排'
 };
 
+const csrFields={conduct:'实际实施与偏离方案',cutoff:'数据截止日期',source:'源表名称与版本',
+  table:'结果表（CSV 文本）',interpretation:'结果解释与限制'};
+const csrHeader='类别,分析集,组别,指标,评价时间,报告值,单位,分母,出处';
+
 function changedSections(before, after) {
   if (!before) return [];
   const changes = [];
@@ -43,6 +47,10 @@ function changedSections(before, after) {
       if ((before.protocol?.[choice]?.[key] || '') !== (after.protocol?.[choice]?.[key] || ''))
         changes.push('Protocol '+choice+' · '+label+'已更改，需临床复核');
     }
+  }
+  for (const choice of ['A','B']) {
+    if (Object.keys(csrFields).some(key=>(before.csr?.[choice]?.[key] || '') !== (after.csr?.[choice]?.[key] || '')))
+      changes.push('CSR '+choice+' · 报告内容或统计表版本已更改，需核对结果及出处');
   }
   return changes;
 }
@@ -85,6 +93,14 @@ function renderClinical() {
       ${['A','B'].map(choice=>`<fieldset data-protocol-choice="${choice}"><legend>设计 ${choice} 的方案正文</legend>
       ${Object.entries(protocolFields).map(([key,label])=>`<label>${label}<textarea data-protocol="${key}" maxlength="6000" rows="2">${esc(version.protocol?.[choice]?.[key] || '')}</textarea></label>`).join('')}</fieldset>`).join('')}
       <button type="button" class="btn" id="protocol-export">保存并导出 Protocol 草稿</button></details>
+      <details id="csr-editor"><summary>起草临床研究报告（CSR）</summary>
+      <p>按选中方案粘贴已复核的汇总表。类别可填「受试者处置」「疗效」「安全性」；出处填写原始表号与行号。保留原始数值精度，缺失值留空。</p>
+      <button type="button" class="btn" id="csr-template">下载空白结果表（CSV）</button><p>CSV 表头 <code>${csrHeader}</code></p>
+      ${['A','B'].map(choice=>`<fieldset data-csr-choice="${choice}"><legend>设计 ${choice} 的研究报告</legend>
+      <label>从 UTF-8 CSV 文件填入结果表<input type="file" data-csr-file accept=".csv,text/csv"></label>
+      ${Object.entries(csrFields).map(([key,label])=>`<label>${label}${key==='cutoff'?`<input type="date" data-csr="cutoff" value="${esc(version.csr?.[choice]?.cutoff || '')}">`:
+        `<textarea data-csr="${key}" maxlength="${key==='table'?120000:6000}" rows="${key==='table'?5:2}">${esc(version.csr?.[choice]?.[key] || '')}</textarea>`}</label>`).join('')}</fieldset>`).join('')}
+      <button type="button" class="btn" id="csr-export">保存并导出 CSR 草稿</button></details>
       <details id="sap-editor"><summary>起草统计分析计划（SAP）</summary>
       <p>从倾向方案带入人群、对照、终点和评价时间。以下内容由统计人员填写，空缺会标入 Word 草稿。</p>
       ${Object.entries(sapFields).map(([key,label])=>`<label>${label}<textarea data-sap="${key}" maxlength="6000" rows="2">${esc(version.sap?.[key] || '')}</textarea></label>`).join('')}
@@ -104,13 +120,34 @@ function renderClinical() {
     const form = $('#design-form');
     const choiceInput=$('#design-choice',form);
     function displayProtocol() {
-      for (const section of $$('[data-protocol-choice]',form)) {
-        section.hidden=section.disabled=section.dataset.protocolChoice!==choiceInput.value;
+      for (const section of $$('[data-protocol-choice],[data-csr-choice]',form)) {
+        section.hidden=section.disabled=(section.dataset.protocolChoice || section.dataset.csrChoice)!==choiceInput.value;
       }
     }
     choiceInput.addEventListener('change',displayProtocol);
     displayProtocol();
     let dirty = false;
+    $('#csr-template',form).onclick=()=>{
+      const url=URL.createObjectURL(new Blob(['\ufeff'+csrHeader+'\r\n'],{type:'text/csv;charset=utf-8'}));
+      const a=document.createElement('a');a.href=url;a.download='HiJenny-CSR-结果表模板.csv';a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    };
+    for (const input of $$('[data-csr-file]',form)) input.onchange=async ()=>{
+      const file=input.files[0];
+      if (!file) return;
+      const section=input.closest('[data-csr-choice]');
+      const table=$('[data-csr="table"]',section);
+      if (table.value && !confirm('使用文件内容替换当前编辑的结果表？')) {input.value='';return;}
+      try {
+        if (file.size>480000) throw new Error('结果表超过大小上限');
+        const text=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer());
+        if (text.length>120000) throw new Error('结果表超过 120000 字符');
+        if (!input.isConnected || input.files[0]!==file) return;
+        table.value=text;dirty=true;
+        $('#design-status').textContent='已填入 '+file.name+'，请核对数据截止日期及源表版本。';
+      } catch(err) {toast('CSV 读取失败：'+err.message,'err');}
+      finally {input.value='';}
+    };
     let reviewDirty = false;
     const reviewForm=$('#design-review-form');
     function paintReviews() {
@@ -160,6 +197,11 @@ function renderClinical() {
         next.protocol[section.dataset.protocolChoice]=Object.fromEntries(
           $$('[data-protocol]',section).map(el=>[el.dataset.protocol,el.value]));
       }
+      next.csr={};
+      for (const section of $$('[data-csr-choice]',form)) {
+        next.csr[section.dataset.csrChoice]=Object.fromEntries(
+          $$('[data-csr]',section).map(el=>[el.dataset.csr,el.dataset.csr==='cutoff'?(el.value || null):el.value]));
+      }
       next.sap=Object.fromEntries($$('[data-sap]',form).map(el=>[el.dataset.sap,el.value]));
       next.changes = changedSections(version.id ? version : null,next);
       try { localStorage.setItem(prefix+next.id,JSON.stringify(next)); }
@@ -173,7 +215,10 @@ function renderClinical() {
       const id = version.id;
       try {
         const res = await fetch('/api/clinical/'+kind+'.docx',jsonOptions('POST',{...version,reviews:reviewsFor(id)}));
-        if (!res.ok) throw new Error('导出失败，已保存的版本可重新导出。');
+        if (!res.ok) {
+          const failure=await res.json().catch(()=>({}));
+          throw new Error(typeof failure.detail==='string'?failure.detail:'导出失败，已保存的版本可重新导出。');
+        }
         const url = URL.createObjectURL(await res.blob());
         const link = document.createElement('a'); link.href = url; link.download = ('HiJenny-'+label+'-')+id+'.docx'; link.click();
         setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -181,6 +226,7 @@ function renderClinical() {
     }
     $('#design-export').onclick=()=>exportDocument('synopsis','方案摘要');
     $('#protocol-export').onclick=()=>exportDocument('protocol','Protocol');
+    $('#csr-export').onclick=()=>exportDocument('csr','CSR');
     $('#sap-export').onclick=()=>exportDocument('sap','SAP');
   }
   draw();

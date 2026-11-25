@@ -1,11 +1,13 @@
 """Produce an editable protocol synopsis from a clinician's saved design decisions."""
-from datetime import datetime
-from io import BytesIO
+import csv
+import hashlib
+from datetime import date, datetime
+from io import BytesIO, StringIO
 from typing import Annotated, Literal
 from uuid import UUID
 
 from docx import Document
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
 from .brief import clean
 from pydantic import BaseModel, Field, model_validator
 
@@ -65,6 +67,14 @@ class ProtocolSections(BaseModel):
     ethics: Text = ""
 
 
+class StudyReport(BaseModel):
+    cutoff: date | None = None
+    source: Text = ""
+    table: str = Field(default="", max_length=120000)
+    conduct: Text = ""
+    interpretation: Text = ""
+
+
 class Synopsis(BaseModel):
     id: UUID
     question: str = Field(min_length=1, max_length=400)
@@ -73,6 +83,7 @@ class Synopsis(BaseModel):
     rationale: Text = ""
     pending: Text = ""
     references: list[TrialReference] = Field(max_length=4)
+    csr: dict[Literal["A", "B"], StudyReport] = Field(default_factory=dict)
     sap: StatisticalPlan = Field(default_factory=StatisticalPlan)
     protocol: dict[Literal["A", "B"], ProtocolSections] = Field(default_factory=dict)
     reviews: list[DesignReview] = Field(default_factory=list)
@@ -209,3 +220,68 @@ def export_protocol(plan: SelectedDesign):
     append_changes(document, plan)
     append_review_and_sources(document, plan)
     return word_download(document, f"HiJenny-Protocol-{plan.id}.docx")
+
+
+CSR_COLUMNS = ("类别", "分析集", "组别", "指标", "评价时间", "报告值", "单位", "分母", "出处")
+CSR_CATEGORIES = ("受试者处置", "疗效", "安全性")
+
+
+def csr_rows(raw):
+    if not raw.strip():
+        return []
+    try:
+        reader = csv.DictReader(StringIO(raw.lstrip("\ufeff"), newline=""), strict=True)
+        if tuple(reader.fieldnames or ()) != CSR_COLUMNS:
+            raise ValueError("结果表的表头或列顺序与模板不符")
+        rows = []
+        for row in reader:
+            if len(rows) >= 1000:
+                raise ValueError("单张结果表最多 1000 行")
+            if None in row or any(v is None for v in row.values()):
+                raise ValueError(f"第 {reader.line_num} 行列数有误")
+            if row["类别"] not in CSR_CATEGORIES or not row["指标"].strip() or not row["出处"].strip():
+                raise ValueError(f"第 {reader.line_num} 行请核对类别、指标及出处")
+            rows.append(row)
+        return rows
+    except (csv.Error, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/api/clinical/csr.docx")
+def export_csr(plan: SelectedDesign):
+    report = plan.csr.get(plan.choice, StudyReport())
+    rows = csr_rows(report.table)
+    if rows and not (report.cutoff and report.source.strip()):
+        raise HTTPException(422, "有结果行时请填写数据截止日期与源表名称、版本")
+    document = Document()
+    document.add_heading("临床研究报告（CSR）· 评审草稿", 0)
+    document.add_paragraph(clean(plan.question))
+    document.add_paragraph(f"设计版本 {plan.id} · 候选设计 {plan.choice}")
+    append_selected_design(document, plan)
+    document.add_heading("实际实施与偏离方案", 1)
+    document.add_paragraph(clean(report.conduct) or "待补充实际实施情况")
+    document.add_heading("统计结果来源", 1)
+    document.add_paragraph(f"数据截止日期：{report.cutoff or '未提供'}")
+    document.add_paragraph(f"源表名称与版本：{clean(report.source) or '未提供'}")
+    if report.table:
+        fingerprint = hashlib.sha256(report.table.encode("utf-8")).hexdigest()
+        document.add_paragraph(f"录入表文本 SHA-256：{fingerprint}")
+    for category in CSR_CATEGORIES:
+        document.add_heading(category, 1)
+        evidence = [r for r in rows if r["类别"] == category]
+        if not evidence:
+            document.add_paragraph("未提供该类统计结果")
+            continue
+        table = document.add_table(rows=1, cols=4)
+        table.style = "Table Grid"
+        for cell, label in zip(table.rows[0].cells, ["分析集与组别", "指标与评价时间", "报告值、单位及分母", "源表定位"]):
+            cell.text = label
+        for row in evidence:
+            cells = table.add_row().cells
+            for cell, keys in zip(cells, [("分析集", "组别"), ("指标", "评价时间"), ("报告值", "单位", "分母"), ("出处",)]):
+                cell.text = "\n".join(f"{k}：{clean(row[k]) or '未提供'}" for k in keys)
+    document.add_heading("结果解释与限制 · 人工填写", 1)
+    document.add_paragraph(clean(report.interpretation) or "待专业人员解释")
+    append_changes(document, plan)
+    append_review_and_sources(document, plan)
+    return word_download(document, f"HiJenny-CSR-{plan.id}.docx")
