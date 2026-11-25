@@ -957,3 +957,8 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 #valuation label { display:block; margin:10px 0; }
 #valuation td, #valuation th { padding:8px; text-align:left; }
 .sidebar .nav { min-height:0; overflow-y:auto; }
+@media (max-width: 720px) {
+  .topbar { flex:0 0 auto; flex-wrap:wrap; height:auto; gap:8px; padding-block:8px; }
+  .topbar .project-select { flex:1 1 100%; min-width:0; }
+  .topbar .project-select select { flex:1; min-width:0; width:0; }
+}
