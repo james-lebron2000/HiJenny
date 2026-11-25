@@ -57,6 +57,13 @@ const pilotEvidence=[
 function renderPilot() {
   const requested=hashParams().get('lang') || sessionStorage.getItem('hijenny.pilot.lang');
   let lang=Object.hasOwn(pilotCopy,requested)?requested:'zh';
+  const sessionKey='hijenny.pilot.session';
+  const analytics={session_id:sessionStorage.getItem(sessionKey) || crypto.randomUUID(),sample_version:'asd101-v1'};
+  sessionStorage.setItem(sessionKey,analytics.session_id);
+  function track(event) {
+    fetch('/api/pilot/events',{...jsonOptions('POST',{...analytics,event}),keepalive:true}).catch(()=>{});
+  }
+  track('pilot_open');
   function draw(values={},expanded=false) {
     const t=pilotCopy[lang];
     const select=key=>`<label>${t[key]}<select name="${key}" required><option value="">${t.select}</option>
@@ -70,7 +77,7 @@ function renderPilot() {
         <a href="/api/pilot/sources/${e.source}">${t.original} · ${e.source==='csr'?'PDF':'PowerPoint'}</a></details>`).join('')}
       <details class="pilot-math"><summary>${t.recheck}</summary>${pilotEvidence.map((e,i)=>`<p>${t.sources[i]} · ${t.reported} ${e.reported}% · ${t.computed} ${e.responders} ÷ ${e.total} × 100 = <strong>${(100*e.responders/e.total).toFixed(1)}%</strong></p>`).join('')}
         <p>${t.finding}</p></details><p>${t.question}</p>
-      <a href="/api/pilot/sample-report">${t.download}</a></details>
+      <a href="/api/pilot/sample-report?${new URLSearchParams(analytics)}">${t.download}</a></details>
       <form id="pilot-form" class="card"><h2>${t.quote}</h2>
       <label>${t.email}<input name="email" type="email" required maxlength="254" autocomplete="email"></label>
       ${select('stage')}${select('pages')}<label>${t.meeting}<input type="date" name="meeting" required></label>${select('deployment')}
@@ -78,6 +85,10 @@ function renderPilot() {
     $('#topbar-title').textContent=t.quote;$('#topbar-sub').textContent='HiJenny';
     const form=$('#pilot-form'), status=$('#pilot-receipt'), button=form.querySelector('button');
     form.elements.email.value=values.email || '';form.elements.meeting.value=values.meeting || '';
+    const example=form.parentElement.querySelector('details');
+    example.ontoggle=()=>{if (example.open) track('sample_open');};
+    for (const panel of example.querySelectorAll('.pilot-source'))
+      panel.ontoggle=()=>{if (panel.open) track('source_open');};
     const change=$('#pilot-language');
     change.onchange=()=>{
       lang=change.value;sessionStorage.setItem('hijenny.pilot.lang',lang);
@@ -98,7 +109,7 @@ function renderPilot() {
         const key='hijenny.pilot.'+Array.from(new Uint8Array(hash),v=>v.toString(16).padStart(2,'0')).join('');
         data.request_key=sessionStorage.getItem(key) || crypto.randomUUID();
         sessionStorage.setItem(key,data.request_key);
-        const saved=await api('/api/pilot/inquiries',jsonOptions('POST',data));
+        const saved=await api('/api/pilot/inquiries',jsonOptions('POST',{...data,analytics}));
         show(saved.receipt);sessionStorage.setItem('hijenny.pilot.receipt',saved.receipt);
       } catch(err) {status.textContent=t.error;}
       finally {button.disabled=change.disabled=false;}

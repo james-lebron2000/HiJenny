@@ -303,3 +303,11 @@ class PilotProgress(Base):
     stage: Mapped[str] = mapped_column(String(40))
     reference: Mapped[str] = mapped_column(String(300))
     recorded_at: Mapped[str] = mapped_column(String(40))
+
+
+class PilotEngagement(Base):
+    __tablename__ = "pilot_engagement"
+    session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    sample_version: Mapped[str] = mapped_column(String(48), primary_key=True)
+    event: Mapped[str] = mapped_column(String(32), primary_key=True)
+    first_seen: Mapped[str] = mapped_column(String(40))

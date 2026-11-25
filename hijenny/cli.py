@@ -10,6 +10,7 @@ Examples
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import json
 import shutil
 import subprocess
@@ -290,6 +291,12 @@ def cmd_pilot_progress(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pilot_metrics(args: argparse.Namespace) -> int:
+    with store.session_scope() as session:
+        print(json.dumps(store.pilot_metrics(session, args.since), ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_pilot_inquiries(args: argparse.Namespace) -> int:
     with store.session_scope() as session:
         records = store.list_pilot_inquiries(session, args.receipt)
@@ -342,6 +349,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     projects = sub.add_parser("projects", help="list projects")
     projects.set_defaults(func=cmd_projects)
+
+    metrics = sub.add_parser("pilot-metrics", help="show cumulative anonymous usage and distinct sales receipt counts")
+    metrics.add_argument("--since", type=date.fromisoformat, help="UTC cohort entry date (YYYY-MM-DD), inclusive")
+    metrics.set_defaults(func=cmd_pilot_metrics)
 
     inquiries = sub.add_parser("pilot-inquiries", help="review pilot inquiries in this server database")
     inquiries.add_argument("--receipt", help="look up one intake receipt")

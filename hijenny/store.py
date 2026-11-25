@@ -1334,3 +1334,41 @@ def record_pilot_progress(session, receipt, stage, reference):
     if not 1 <= len(reference.strip()) <= 300:
         raise ValueError("请提供 1–300 字的跟进或凭据编号")
     session.add(PilotProgress(receipt=receipt, stage=stage, reference=reference.strip(), recorded_at=utcnow()))
+
+
+def record_pilot_engagement(session, session_id, sample_version, event):
+    from sqlalchemy.dialects.sqlite import insert
+    from hijenny.db import PilotEngagement
+
+    session.execute(insert(PilotEngagement).values(
+        session_id=session_id, sample_version=sample_version, event=event, first_seen=utcnow()
+    ).on_conflict_do_nothing(index_elements=["session_id", "sample_version", "event"]))
+
+
+def pilot_metrics(session, since=None):
+    from hijenny.db import PilotEngagement, PilotInquiry, PilotProgress
+
+    # Anchor each cohort at entry so a later stage stays attached to its original cohort.
+    counts = select(PilotEngagement.sample_version, PilotEngagement.event, func.count())
+    receipts = select(func.count()).select_from(PilotInquiry)
+    stages = select(PilotProgress.stage, func.count(func.distinct(PilotProgress.receipt))).join(
+        PilotInquiry, PilotInquiry.receipt == PilotProgress.receipt)
+    if since:
+        from sqlalchemy.orm import aliased
+
+        entry = aliased(PilotEngagement)
+        counts = counts.where(select(entry.session_id).where(
+            entry.session_id == PilotEngagement.session_id,
+            entry.sample_version == PilotEngagement.sample_version,
+            entry.event == "pilot_open", entry.first_seen >= since.isoformat()).exists())
+        receipts = receipts.where(PilotInquiry.created_at >= since.isoformat())
+        stages = stages.where(PilotInquiry.created_at >= since.isoformat())
+    by_sample = {}
+    for version, event, count in session.execute(counts.group_by(PilotEngagement.sample_version, PilotEngagement.event)):
+        by_sample.setdefault(version, {})[event] = count
+    return {
+        "匿名会话数（按样例版本，每项事件去重）": by_sample,
+        "受理编号数": session.scalar(receipts),
+        "到达各销售阶段的受理编号数": dict(session.execute(stages.group_by(PilotProgress.stage)).all()),
+        "入组起始日（UTC，按首次打开或受理日）": since.isoformat() if since else "全部",
+    }
