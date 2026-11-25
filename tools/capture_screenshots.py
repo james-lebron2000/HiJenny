@@ -25,7 +25,7 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-VIEWS = ["projects", "upload", "evidence", "findings", "report"]
+VIEWS = ["overview", "projects", "upload", "evidence", "findings", "report"]
 SHOT_WIDTH, SHOT_HEIGHT = 1600, 1000
 
 
@@ -90,6 +90,7 @@ def main() -> int:
     profile = Path(tempfile.mkdtemp(prefix="hijenny_chrome_"))
 
     urls = {
+        "overview": f"{args.base}/#/overview?project={project_id}",
         "projects": f"{args.base}/#/projects?project={project_id}",
         "upload": f"{args.base}/#/upload?project={project_id}",
         "findings": f"{args.base}/#/findings?project={project_id}",
@@ -103,10 +104,11 @@ def main() -> int:
     else:
         urls["evidence"] = f"{args.base}/#/evidence?project={project_id}"
 
+    names = {"overview": "00_asset360"}
     for index, view in enumerate(VIEWS, start=1):
         if view not in urls:
             continue
-        dest = out / f"{index:02d}_{view}.png"
+        dest = out / f"{names.get(view, f'{index:02d}_{view}')}.png"
         capture(args.chrome, urls[view], dest, profile)
         print(f"captured {dest} ({dest.stat().st_size} bytes)")
 
@@ -117,7 +119,7 @@ def main() -> int:
                 "project_id": project_id,
                 "base": args.base,
                 "views": {
-                    view: f"{index:02d}_{view}.png" for index, view in enumerate(VIEWS, start=1)
+                    view: f"{names.get(view, f'{index:02d}_{view}')}.png" for index, view in enumerate(VIEWS, start=1)
                 },
             },
             indent=2,

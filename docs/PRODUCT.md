@@ -115,7 +115,7 @@ Project → Asset / Trial
 
 | 原始需求 | 本 MVP 交付 |
 |---|---|
-| Asset Profile | 报告 §3 + Excel「Asset Profile」+ UI |
+| Asset Profile | 报告 §3 + Excel「Asset Profile」+ **Asset 360 仪表盘**（资产发现与评估） |
 | Evidence Matrix | 报告 §4 + Excel「Evidence Matrix」（136 行，含页码/引用/校验状态） |
 | Consistency Report | 报告 Findings 章（按严重度分组，A/B/C/U，附证据引用） |
 | Evidence Gap Report | 报告 Gap 章 + Excel「Coverage」（46 项检查清单状态） |

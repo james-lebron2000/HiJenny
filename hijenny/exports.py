@@ -357,9 +357,12 @@ def collect_export_data(session, project_id: str) -> dict:
         if not ev.get("trial_key") and ev.get("trial_id"):
             ev["trial_key"] = trial_names.get(ev["trial_id"], "")
 
+    from hijenny.overview import build_overview
+
     return {
         "project": project,
         "stats": stats,
+        "overview": build_overview(session, project_id),
         "documents": documents,
         "assets": assets,
         "trials": trials,
@@ -947,6 +950,80 @@ def _sheet_coverage(wb, data: dict) -> None:
     )
 
 
+def _sheet_asset_evaluation(wb, data: dict) -> None:
+    overview = data.get("overview") or {}
+    evaluation = overview.get("evaluation") or {}
+    overall = evaluation.get("overall") or {}
+    risk = evaluation.get("risk") or {}
+    consistency = evaluation.get("consistency") or {}
+    rows: list[list[Any]] = []
+    for dim in evaluation.get("dimensions") or []:
+        rows.append([
+            _txt(dim.get("label_zh")),
+            _txt(dim.get("label_en")),
+            dim.get("score"),
+            dim.get("weight"),
+            _txt(dim.get("basis")),
+        ])
+    rows.append([
+        "尽调就绪度 / Diligence readiness",
+        _txt(overall.get("title_en")),
+        overall.get("score"),
+        1.0,
+        f"等级 {overall.get('label_zh')}；"
+        + (f"因 {overall.get('critical_contradictions')} 项 critical 矛盾封顶 {overall.get('readiness_cap')}；" if overall.get("readiness_cap") else "")
+        + "规则化汇总，不构成投资建议",
+    ])
+    rows.append(["风险暴露 / Risk exposure", _txt(risk.get("label_zh")), risk.get("weighted_score"), "", f"active findings {risk.get('active_findings', 0)}；按严重度加权"])
+    rows.append([
+        "一致性 / Consistency A/B/C/U",
+        "comparability classes",
+        f"{consistency.get('A', 0)}/{consistency.get('B', 0)}/{consistency.get('C', 0)}/{consistency.get('U', 0)}",
+        "",
+        "A 直接矛盾 / B 版本差异 / C 定义差异 / U 可比性不明",
+    ])
+    _table_sheet(
+        wb,
+        "Asset Evaluation",
+        ["Dimension (ZH)", "Dimension (EN)", "Score (0-100)", "Weight", "Basis"],
+        rows,
+        {1: 30, 2: 30, 3: 14, 4: 10, 5: 80},
+        tab_color="C00000",
+        wrap_cols=(5,),
+    )
+
+
+def _sheet_asset_discovery(wb, data: dict) -> None:
+    overview = data.get("overview") or {}
+    disc = overview.get("discovery") or {}
+    rows: list[list[Any]] = []
+    for attr in disc.get("attributes") or []:
+        source = "asset registry"
+        if attr.get("document"):
+            source = f"{attr.get('document')} p.{attr.get('page') or '—'}"
+        rows.append(["Asset", f"{_txt(attr.get('label_zh'))} / {_txt(attr.get('label_en'))}", _txt(attr.get("value")), source])
+    for fact in disc.get("key_facts") or []:
+        meta = " · ".join(str(v) for v in (fact.get("population"), fact.get("cutoff"), fact.get("assessment_method")) if v)
+        rows.append([
+            "Key clinical fact",
+            _txt(fact.get("label_zh")),
+            f"{_txt(fact.get('value_display'))} ({meta or '—'})",
+            f"{fact.get('document')} p.{fact.get('page') or '—'} (evidence {fact.get('evidence_id')})",
+        ])
+    docs = disc.get("documents") or {}
+    for row in docs.get("by_type") or []:
+        rows.append(["Document inventory", _txt(row.get("doc_type")), f"{row.get('documents')} docs · {row.get('pages')} pages", "active documents"])
+    _table_sheet(
+        wb,
+        "Discovery",
+        ["Section", "Item", "Value", "Source"],
+        rows,
+        {1: 20, 2: 34, 3: 48, 4: 46},
+        tab_color="2E75B6",
+        wrap_cols=(3, 4),
+    )
+
+
 def build_workbook(data: dict, out_path: str | Path | None = None) -> Path:
     """Render the six-sheet styled workbook from a data snapshot. Returns path."""
     data = sanitize_data(data)
@@ -958,6 +1035,8 @@ def build_workbook(data: dict, out_path: str | Path | None = None) -> Path:
     wb = Workbook()
     _sheet_executive_summary(wb, data)
     _sheet_asset_profile(wb, data)
+    _sheet_asset_evaluation(wb, data)
+    _sheet_asset_discovery(wb, data)
     _sheet_evidence_matrix(wb, data)
     _sheet_findings(wb, data)
     _sheet_questions(wb, data)
@@ -1351,6 +1430,95 @@ def decision_brief_data(data: dict) -> dict:
         "missing_findings": missing_findings,
         "disclaimer": DECISION_DISCLAIMER,
     }
+
+
+def _md_overview_appendix(overview: dict) -> list[str]:
+    """Human-readable appendix for the interactive Asset 360 dashboard."""
+    if not overview:
+        return []
+    disc = overview.get("discovery") or {}
+    evaluation = overview.get("evaluation") or {}
+    overall = evaluation.get("overall") or {}
+    lines: list[str] = []
+    add = lines.append
+    add("")
+    add("## Appendix A. Asset Discovery & Evaluation")
+    add("")
+    add(
+        "> 药物资产发现与评估汇总。评估分数由证据完整度、可核验性、一致性、覆盖度与数据成熟度规则化计算；"
+        "**不构成投资建议，也不自动给出 Go/No-Go 结论**。"
+    )
+    add("")
+    add("### A.1 Discovered asset")
+    add("")
+    add("| Field | Value | Source |")
+    add("|---|---|---|")
+    for attr in disc.get("attributes") or []:
+        source = "—"
+        if attr.get("document"):
+            source = f"{_md_cell(attr['document'])} p.{attr.get('page') or '—'}"
+        elif attr.get("source") == "asset_registry":
+            source = "asset registry"
+        add(
+            f"| {_md_cell(attr.get('label_zh'))} / {_md_cell(attr.get('label_en'))} "
+            f"| {_md_cell(attr.get('value'))} | {source} |"
+        )
+    add("")
+    add("### A.2 Key clinical facts")
+    add("")
+    add("| Fact | Value | Population / cutoff / method | Source |")
+    add("|---|---|---|---|")
+    for fact in disc.get("key_facts") or []:
+        meta = " · ".join(
+            str(v) for v in (fact.get("population"), fact.get("cutoff"), fact.get("assessment_method")) if v
+        ) or "—"
+        add(
+            f"| {_md_cell(fact.get('label_zh'))} | {_md_cell(fact.get('value_display'))} "
+            f"| {_md_cell(meta)} | {_md_cell(fact.get('document'))} p.{fact.get('page') or '—'} |"
+        )
+    add("")
+    add("### A.3 Evaluation scorecard")
+    add("")
+    add("| Dimension | Score / 100 | Weight | Basis |")
+    add("|---|---:|---:|---|")
+    for dim in evaluation.get("dimensions") or []:
+        add(
+            f"| {_md_cell(dim.get('label_zh'))} / {_md_cell(dim.get('label_en'))} "
+            f"| {dim.get('score')} | {dim.get('weight')} | {_md_cell(dim.get('basis'), 180)} |"
+        )
+    add(
+        f"| **{_md_cell(overall.get('title_zh'))}** | **{overall.get('score')}** | **1.00** "
+        f"| **{_md_cell(overall.get('label_zh'))}** |"
+    )
+    add("")
+    cap = overall.get("readiness_cap")
+    if cap:
+        add(
+            f"> 由于存在 {overall.get('critical_contradictions')} 项 critical 跨文件矛盾，"
+            f"尽调就绪度封顶为 {cap}。"
+        )
+        add("")
+    add(
+        f"风险暴露：**{_md_cell((evaluation.get('risk') or {}).get('label_zh'))}**"
+        f"（A/B/C/U 分类：{(evaluation.get('consistency') or {}).get('A', 0)}/"
+        f"{(evaluation.get('consistency') or {}).get('B', 0)}/"
+        f"{(evaluation.get('consistency') or {}).get('C', 0)}/"
+        f"{(evaluation.get('consistency') or {}).get('U', 0)}）。"
+    )
+    add("")
+    add("### A.4 Document inventory")
+    add("")
+    add("| Document type | Documents | Pages |")
+    add("|---|---:|---:|")
+    for row in (disc.get("documents") or {}).get("by_type") or []:
+        add(f"| {_md_cell(row.get('doc_type'))} | {row.get('documents')} | {row.get('pages')} |")
+    add("")
+    add(
+        "Nonclinical / regulatory / patent / commercial documents are listed as unstructured "
+        "previews on the dashboard and are not part of the extracted evidence matrix."
+    )
+    add("")
+    return lines
 
 
 def render_markdown_report(data: dict) -> str:
@@ -1755,6 +1923,7 @@ def render_markdown_report(data: dict) -> str:
         "the authoritative record."
     )
     add("")
+    lines.extend(_md_overview_appendix(data.get("overview") or {}))
     return "\n".join(lines)
 
 
@@ -2287,6 +2456,39 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
         )
     else:
         doc.add_paragraph("No seller questions have been generated yet.")
+
+    # -- Appendix A. Asset discovery & evaluation --------------------------
+    overview = data.get("overview") or {}
+    if overview:
+        evaluation = overview.get("evaluation") or {}
+        overall = evaluation.get("overall") or {}
+        disc = overview.get("discovery") or {}
+        doc.add_heading("Appendix A. Asset Discovery & Evaluation", level=1)
+        doc.add_paragraph(
+            "Rule-based summary of the discovered asset and the diligence-readiness dimensions. "
+            "The score is not an investment rating and no Go/No-Go recommendation is produced."
+        )
+        doc.add_heading("A.1 Discovered asset", level=2)
+        attr_rows = [
+            [attr.get("label_zh"), _txt(attr.get("value")),
+             (f"{attr.get('document')} p.{attr.get('page')}" if attr.get("document") else "asset registry")]
+            for attr in (disc.get("attributes") or [])[:6]
+        ]
+        if attr_rows:
+            _docx_table(doc, ["Field", "Value", "Source"], attr_rows, widths=(1.5, 3.0, 2.2), font_size=8)
+        doc.add_heading("A.2 Evaluation scorecard", level=2)
+        dim_rows = [
+            [dim.get("label_zh"), dim.get("score"), dim.get("weight"), _txt(dim.get("basis"))]
+            for dim in (evaluation.get("dimensions") or [])
+        ]
+        dim_rows.append([overall.get("title_zh"), overall.get("score"), 1.0, _txt(overall.get("label_zh"))])
+        _docx_table(doc, ["Dimension", "Score / 100", "Weight", "Basis"], dim_rows,
+                    widths=(1.5, 0.8, 0.7, 3.2), font_size=7.5)
+        doc.add_paragraph(
+            f"Risk exposure: {_txt((evaluation.get('risk') or {}).get('label_zh'))}. "
+            "Findings and scores require expert review; no automated Go/No-Go conclusion is made."
+        )
+        doc.add_paragraph("")
 
     # -- 7. Review + limitations -------------------------------------------
     doc.add_heading("8. Human Review & Limitations", level=1)

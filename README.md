@@ -7,7 +7,7 @@
 **医药资产交易智能尽调系统 · Evidence-first pharmaceutical BD due diligence platform**
 
 把卖方临床资料包（PDF / PPTX / XLSX）变成一份**每条结论都能点回原文**的尽调工作底稿：
-证据库 → 跨文件一致性 → 证据缺口 → 卖方问题清单 → 可审核报告。
+证据库 → 跨文件一致性 → 证据缺口 → 卖方问题清单 → 可审核报告，并在 **Asset 360** 一屏汇总“药物资产发现 + 资产评估”。
 
 Turn a seller data package into a traceable due-diligence work product: a clinical
 evidence base, cross-document consistency findings, evidence gaps, a seller question
@@ -15,7 +15,7 @@ list and a reviewable report — every claim linked to document + page + verbati
 
 [中文文档](#中文文档) · [English documentation](#english-documentation)
 
-![HiJenny Evidence Workspace](docs/assets/screenshots/03_evidence.png)
+![HiJenny Asset 360 — discovery & evaluation dashboard](docs/assets/screenshots/00_asset360.png)
 
 > **一键演示 / One-command demo:** `./scripts/demo.sh` → http://127.0.0.1:8123/
 > · [演示指南 / Demo guide](docs/DEMO_GUIDE.md) ·
@@ -24,7 +24,7 @@ list and a reviewable report — every claim linked to document + page + verbati
 > [截图 / Screenshots](docs/assets/screenshots/)
 >
 > **状态 / Status:** MVP 端到端可运行 / end-to-end MVP. 示例包 13 份文档、284 页；
-> 136 条证据全部通过原文校验；11 条 active findings；6 条卖方问题；174 个自动化测试。
+> 136 条证据全部通过原文校验；11 条 active findings；6 条卖方问题；176 个自动化测试。
 > 合成语料，非真实客户性能验证 — 见 [限制](#14-安全与限制) / [Limitations](#14-security--limitations)。
 >
 > **产品设计 / Product design:** [docs/PRODUCT.md](docs/PRODUCT.md) ·
@@ -45,7 +45,7 @@ HiJenny 面向药企 BD / License-in 团队，自动完成创新药临床尽调�
 3. 只对"同试验、同人群、同 cutoff、同终点定义、同评价方法"的数据做数值比对，区分 **A 直接矛盾 / B 版本差异 / C 定义差异 / U 可比性不明**；
 4. 按可版本化的 YAML 尽调清单计算**证据覆盖度**（充分/部分/未发现/不适用）；
 5. 将发现和缺口合并成**去重、可分派、可导出**的卖方问题清单；
-6. 生成 **Decision Brief + 尽调报告（MD/DOCX）+ 6-Sheet Excel**，并提供审核 UI。
+6. 生成 **Decision Brief + 尽调报告（MD/DOCX）+ 8-Sheet Excel（含 Asset Evaluation / Discovery）**，并提供审核 UI。
 
 > 这不是 PDF 聊天机器人：先建证据库，再做分析。没有原文引用的结论不会进入交付物。
 
@@ -60,6 +60,7 @@ HiJenny 面向药企 BD / License-in 团队，自动完成创新药临床尽调�
 | 缺口分析 | 10 个 YAML 规则包、46 条肿瘤 Phase 1–3 尽调检查项 |
 | 卖方问题 | 按 finding 簇合并、优先级、责任部门、所需文件、证据链接；支持人工编辑/锁定/导出 |
 | 交付物 | Decision Brief、证据矩阵、风险清单、覆盖度、问题清单；MD/DOCX/XLSX |
+| **Asset 360 仪表盘** | 一屏汇总**药物资产发现**（资产档案/试验/关键临床事实/文件构成）与**资产评估**（8 维就绪度、A/B/C/U、风险与问题、版本），可点击钻取原文 |
 | 审核工作台 | 上传 → 分析进度 → 证据工作区（跳转 PDF 页码）→ 问题审核 → 报告下载 |
 | 安全 | 默认完全离线；文档视为不可信数据；项目级隔离；提示注入检测与标记 |
 
@@ -110,8 +111,9 @@ hijenny demo --package data/sample_package \
 data/projects/<project_id>/exports/
 ├── HiJenny_Report.md      # 尽调报告（Decision Brief 在最前）
 ├── HiJenny_Report.docx    # Word 版
-└── Seller_Questions.xlsx  # 6 个 Sheet：Executive Summary / Asset Profile /
-                           # Evidence Matrix / Findings / Questions / Coverage
+└── Seller_Questions.xlsx  # 8 个 Sheet：Executive Summary / Asset Profile /
+                           # Asset Evaluation / Discovery / Evidence Matrix /
+                           # Findings / Questions / Coverage
 ```
 
 常用命令：
@@ -329,10 +331,10 @@ python3 -m eval.benchmark --adversarial --out eval/reports/adversarial
 ## 12. 测试与 CI
 
 ```bash
-python3 -m pytest -q        # 174 个单元/集成测试；含真实流水线 e2e
+python3 -m pytest -q        # 176 个单元/集成测试；含真实流水线 e2e
 ```
 
-GitHub Actions（`.github/workflows/ci.yml`）在每次 push 时执行：安装 → 174 tests →
+GitHub Actions（`.github/workflows/ci.yml`）在每次 push 时执行：安装 → 176 tests →
 确定性生成示例包 → CLI 冒烟跑通。
 
 ## 13. 常见问题（FAQ）
@@ -454,8 +456,9 @@ The command prints a `project_id`; deliverables are written to:
 data/projects/<project_id>/exports/
 ├── HiJenny_Report.md      # due-diligence report (Decision Brief first)
 ├── HiJenny_Report.docx    # Word version
-└── Seller_Questions.xlsx  # 6 sheets: Executive Summary / Asset Profile /
-                           # Evidence Matrix / Findings / Questions / Coverage
+└── Seller_Questions.xlsx  # 8 sheets: Executive Summary / Asset Profile /
+                           # Asset Evaluation / Discovery / Evidence Matrix /
+                           # Findings / Questions / Coverage
 ```
 
 Other commands:
@@ -662,10 +665,10 @@ Current build on the synthetic corpus (**not real-client validation**):
 ## 12. Tests & CI
 
 ```bash
-python3 -m pytest -q        # 174 unit + integration tests, including a real pipeline e2e
+python3 -m pytest -q        # 176 unit + integration tests, including a real pipeline e2e
 ```
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push: install → 174 tests
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push: install → 176 tests
 → deterministic sample generation → CLI smoke test.
 
 ## 13. FAQ / troubleshooting

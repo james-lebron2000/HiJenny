@@ -179,7 +179,7 @@ function relativeFileUrl(path) {
 function currentView() {
   const hash = (location.hash || '').replace(/^#\/?/, '');
   const view = hash.split('?')[0];
-  return ['projects', 'upload', 'evidence', 'findings', 'report'].includes(view) ? view : 'projects';
+  return ['projects', 'overview', 'upload', 'evidence', 'findings', 'report'].includes(view) ? view : 'projects';
 }
 
 function hashParams() {
@@ -228,6 +228,7 @@ function statStrip(items) {
 function updateTopbar() {
   const titles = {
     projects: ['Projects', 'Due-diligence packages'],
+    overview: ['Asset 360', '药物资产发现与资产评估 · Discovery & Evaluation'],
     upload: ['Upload & Analysis', 'Documents, parsing and pipeline runs'],
     evidence: ['Evidence Workspace', 'Every number traced to document, page and quote'],
     findings: ['Findings & Questions', 'Consistency, gaps, seller questions and review'],
@@ -299,6 +300,7 @@ async function renderView() {
   updateTopbar();
 
   if (state.view === 'projects') { await renderProjects(seq); return; }
+  if (state.view === 'overview') { await renderOverview(seq); return; }
   if (!state.projectId) {
     setView(`<div class="card">${emptyPanel('No project selected', 'Create or select a project to continue.', '<button class="btn primary" data-nav="projects">Go to Projects</button>')}</div>`);
     return;
@@ -418,6 +420,347 @@ async function renderProjects(seq) {
         </table></div>` : emptyPanel('No projects yet', 'Create a project, upload the due-diligence package, then run the analysis pipeline.',
           '<button class="btn primary" data-action="toggle-create-project">+ Create the first project</button>')}
       </div>`);
+  } catch (error) {
+    if (seq === state.renderSeq) setView(errorPanel(error));
+  }
+}
+
+/* --------------------------------------------------------------- overview */
+const OV_COLORS = {
+  teal: '#1e7d4f', blue: '#2e75b6', amber: '#9a6700', red: '#b3261e',
+  grey: '#8a97a8', navy: '#1f3864', line: '#dbe2ec',
+};
+const OV_SEVERITY = { critical: OV_COLORS.red, high: OV_COLORS.amber, medium: OV_COLORS.blue, low: OV_COLORS.grey, info: '#b8c4d2' };
+
+function ovColor(score) {
+  const s = Number(score || 0);
+  if (s >= 80) return OV_COLORS.teal;
+  if (s >= 65) return OV_COLORS.blue;
+  if (s >= 50) return OV_COLORS.amber;
+  return OV_COLORS.red;
+}
+
+function ovRing(score, size) {
+  const s = clamp(Number(score || 0), 0, 100);
+  const dim = size || 170;
+  const stroke = 14;
+  const r = (dim - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const dash = (s / 100) * c;
+  return `<svg class="ov-ring" width="${dim}" height="${dim}" viewBox="0 0 ${dim} ${dim}" role="img" aria-label="Diligence readiness ${Math.round(s)}">
+    <circle cx="${dim / 2}" cy="${dim / 2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${stroke}"></circle>
+    <circle cx="${dim / 2}" cy="${dim / 2}" r="${r}" fill="none" stroke="${ovColor(s)}" stroke-width="${stroke}"
+      stroke-linecap="round" stroke-dasharray="${dash} ${c - dash}"
+      transform="rotate(-90 ${dim / 2} ${dim / 2})"></circle>
+    <text x="${dim / 2}" y="${dim / 2 + 2}" text-anchor="middle" dominant-baseline="middle"
+      font-size="36" font-weight="750" fill="${ovColor(s)}">${Math.round(s)}</text>
+    <text x="${dim / 2}" y="${dim / 2 + 28}" text-anchor="middle" font-size="10" fill="var(--muted)">/100</text>
+  </svg>`;
+}
+
+function ovDonut(segments, size) {
+  const dim = size || 168;
+  const stroke = 22;
+  const r = (dim - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const total = segments.reduce((sum, seg) => sum + Number(seg.value || 0), 0) || 1;
+  let offset = 0;
+  const circles = segments.filter((seg) => Number(seg.value) > 0).map((seg) => {
+    const value = Number(seg.value || 0);
+    const dash = (value / total) * c;
+    const el = `<circle class="chart-slice" cx="${dim / 2}" cy="${dim / 2}" r="${r}" fill="none"
+      stroke="${seg.color}" stroke-width="${stroke}"
+      stroke-dasharray="${dash} ${c - dash}" stroke-dashoffset="${-offset}"
+      transform="rotate(-90 ${dim / 2} ${dim / 2})"
+      ${seg.key ? `data-action="overview-filter" data-severity="${esc(seg.key)}"` : ''}>
+      <title>${esc(seg.label)}: ${value}</title></circle>`;
+    offset += dash;
+    return el;
+  }).join('');
+  return `<svg class="ov-donut" width="${dim}" height="${dim}" viewBox="0 0 ${dim} ${dim}" role="img">
+    <circle cx="${dim / 2}" cy="${dim / 2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${stroke}"></circle>
+    ${circles}
+    <text x="${dim / 2}" y="${dim / 2 - 2}" text-anchor="middle" dominant-baseline="middle"
+      font-size="30" font-weight="700" fill="var(--navy)">${total}</text>
+    <text x="${dim / 2}" y="${dim / 2 + 22}" text-anchor="middle" font-size="9" fill="var(--muted)">findings</text>
+  </svg>`;
+}
+
+function ovBars(items, unitLabel) {
+  const maxValue = Math.max(1, ...items.map((item) => Number(item.value || 0)));
+  return items.map((item) => {
+    const pct = Math.max(1, Math.round((Number(item.value || 0) / maxValue) * 100));
+    return `<div class="ov-bar-row">
+      <div class="ov-bar-label">${esc(item.label)}</div>
+      <div class="ov-bar-track"><div class="ov-bar-fill" style="width:${pct}%;background:${item.color || OV_COLORS.blue}"></div></div>
+      <div class="ov-bar-value">${Number(item.value || 0).toLocaleString()}${unitLabel ? ' ' + esc(unitLabel) : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function ovStack(segments) {
+  const total = segments.reduce((sum, seg) => sum + Number(seg.value || 0), 0) || 1;
+  const bars = segments.filter((seg) => Number(seg.value) > 0).map((seg) => {
+    const pct = (Number(seg.value) / total) * 100;
+    return `<div class="ov-stack-seg" style="width:${pct}%;background:${seg.color}"
+      title="${esc(seg.label)}: ${seg.value} (${pct.toFixed(1)}%)"></div>`;
+  }).join('');
+  const legend = segments.map((seg) => `<span class="ov-legend-item"><span class="ov-dot" style="background:${seg.color}"></span>${esc(seg.label)} <strong>${seg.value}</strong></span>`).join('');
+  return `<div class="ov-stack">${bars}</div><div class="ov-legend">${legend}</div>`;
+}
+
+function ovHref(item, projectId) {
+  if (!item || !item.evidence_id) return '#';
+  const params = new URLSearchParams({ project: projectId, preview: 'text', evidence: item.evidence_id });
+  if (item.document_id) params.set('doc', item.document_id);
+  if (item.page) params.set('page', item.page);
+  return `#/evidence?${params.toString()}`;
+}
+
+function ovCard(titleZh, titleEn, body, className) {
+  return `<section class="ov-card ${className || ''}">
+    <div class="ov-card-head"><h3>${esc(titleZh)}<span>${esc(titleEn)}</span></h3></div>
+    ${body}
+  </section>`;
+}
+
+function ovKpi(label, value, sub, tone) {
+  return `<div class="ov-kpi ${tone || ''}">
+    <div class="ov-kpi-value">${value}</div>
+    <div class="ov-kpi-label">${esc(label)}</div>
+    <div class="ov-kpi-sub">${sub || ''}</div>
+  </div>`;
+}
+
+function overviewHtml(data) {
+  const project = data.project || {};
+  const projectId = project.project_id;
+  const disc = data.discovery || {};
+  const ev = data.evaluation || {};
+  const overall = ev.overall || {};
+  const risk = ev.risk || {};
+  const dims = ev.dimensions || [];
+  const facts = disc.key_facts || [];
+  const docs = disc.documents || {};
+  const riskCounts = risk.by_severity || {};
+  const consistency = ev.consistency || {};
+  const coverageCounts = (ev.coverage || {}).counts || {};
+  const asset = (disc.assets || [])[0] || {};
+  const trial = (disc.trials || [])[0] || {};
+  const versions = data.versions || {};
+  const findings = data.findings || [];
+  const questions = data.questions || [];
+
+  const efficacy = facts.filter((f) => ['orr', 'dcr', 'pfs', 'os', 'dor'].includes(f.field));
+  const safety = facts.filter((f) => ['any_ae', 'grade3_ae', 'sae', 'treatment_related_death', 'discontinuation'].includes(f.field));
+  const criticalHigh = (riskCounts.critical || 0) + (riskCounts.high || 0);
+  const coverageApplicable = Number((ev.coverage || {}).applicable || 0);
+  const coverageSufficient = Number(coverageCounts.sufficient || 0);
+  const coveragePct = coverageApplicable ? Math.round((coverageSufficient / coverageApplicable) * 100) : 0;
+
+  const attrRows = (disc.attributes || []).map((attr) => {
+    const src = attr.evidence_id
+      ? `<a href="${ovHref(attr, projectId)}" title="${esc(attr.quote || '')}">${esc(attr.document || 'evidence')}${attr.page ? ' p.' + attr.page : ''}</a>`
+      : (attr.source === 'missing' ? '<span class="muted">缺失</span>' : '<span class="muted">资产登记</span>');
+    const value = attr.value === null || attr.value === undefined || attr.value === '' ? '—' : attr.value;
+    return `<tr><th>${esc(attr.label_zh)}<span class="en">${esc(attr.label_en)}</span></th>
+      <td>${esc(String(value))}</td><td class="ov-src">${src}</td></tr>`;
+  }).join('');
+
+  const factCard = (fact) => `<a class="ov-fact" href="${ovHref(fact, projectId)}" title="${esc(fact.quote || '')}">
+    <div class="ov-fact-top"><span class="ov-fact-label">${esc(fact.label_zh)}</span>
+      ${chip(fact.verification_status === 'verified' ? 'verified' : (fact.verification_status || 'pending'), fact.verification_status === 'verified' ? 'green' : 'amber')}</div>
+    <div class="ov-fact-value">${esc(fact.value_display)}</div>
+    <div class="ov-fact-meta">${[fact.population, fact.cutoff, fact.assessment_method].filter(Boolean).map(esc).join(' · ') || '—'}</div>
+    <div class="ov-fact-src">${esc(fact.document || '')} p.${esc(String(fact.page || ''))}${fact.alternatives ? ' · 另有 ' + fact.alternatives + ' 处报告' : ''}</div>
+  </a>`;
+
+  const factCards = [...efficacy, ...safety].map(factCard).join('');
+  const expextedChips = (docs.expected || []).map((row) =>
+    `<span class="ov-doc-chip ${row.present ? 'ok' : 'miss'}" title="${esc(row.label_en)}">${row.present ? '✓' : '✗'} ${esc(row.doc_type)}</span>`
+  ).join('');
+  const docBars = (docs.by_type || []).map((row) => ({
+    label: `${row.doc_type} · ${row.documents}`, value: row.pages, color: OV_COLORS.blue,
+  }));
+  const highlights = (disc.document_highlights || []).map((hl) => `<div class="ov-hl">
+    <div class="ov-hl-head"><span class="chip blue">${esc(hl.doc_type)}</span><span class="muted">${esc(hl.filename)} p.${hl.page}</span></div>
+    <div class="ov-hl-text">${esc(hl.excerpt)}</div>
+  </div>`).join('');
+
+  const dimRows = dims.map((dim) => {
+    const score = Number(dim.score || 0);
+    const missing = (dim.missing || []).length
+      ? `<div class="ov-dim-missing">缺失：${dim.missing.map(esc).join('、')}</div>` : '';
+    return `<div class="ov-dim">
+      <div class="ov-dim-head"><div><strong>${esc(dim.label_zh)}</strong><span class="en">${esc(dim.label_en)}</span></div>
+        <div class="ov-dim-score" style="color:${ovColor(score)}">${score.toFixed(1)}</div></div>
+      <div class="ov-dim-track"><div class="ov-dim-fill" style="width:${clamp(score, 0, 100)}%;background:${ovColor(score)}"></div></div>
+      <div class="ov-dim-basis">${esc(dim.basis)}</div>${missing}
+    </div>`;
+  }).join('');
+
+  const sevSegments = Object.entries(riskCounts)
+    .filter(([key, value]) => Number(value) > 0 && key !== 'info')
+    .map(([key, value]) => ({ label: key, value: Number(value), color: OV_SEVERITY[key] || OV_COLORS.grey, key }));
+  const riskDonut = ovDonut(sevSegments, 168);
+
+  const consMeta = {
+    A: { label: 'A 直接矛盾', color: OV_COLORS.red, type: 'data_inconsistency' },
+    B: { label: 'B 版本差异', color: OV_COLORS.grey, type: 'version_difference' },
+    C: { label: 'C 定义差异', color: OV_COLORS.amber, type: 'definition_difference' },
+    U: { label: 'U 可比性不明', color: '#b8c4d2', type: 'comparability_unclear' },
+  };
+  const consTiles = Object.entries(consMeta).map(([key, meta]) =>
+    `<a class="ov-cons-tile" href="#/findings?project=${encodeURIComponent(projectId)}&type=${meta.type}" style="border-top-color:${meta.color}">
+      <div class="ov-cons-key" style="color:${meta.color}">${key}</div>
+      <div class="ov-cons-value">${Number(consistency[key] || 0)}</div>
+      <div class="ov-cons-label">${esc(meta.label)}</div>
+    </a>`).join('');
+
+  const covSegments = [
+    { label: 'sufficient', value: Number(coverageCounts.sufficient || 0), color: OV_COLORS.teal },
+    { label: 'partial', value: Number(coverageCounts.partial || 0), color: OV_COLORS.amber },
+    { label: 'not found', value: Number(coverageCounts.not_found || 0), color: OV_COLORS.red },
+    { label: 'not applicable', value: Number(coverageCounts.not_applicable || 0), color: OV_COLORS.grey },
+    { label: 'not reviewed', value: Number(coverageCounts.not_reviewed || 0), color: '#c9d3df' },
+  ];
+
+  const riskRows = findings.slice(0, 6).map((finding) => `<a class="ov-risk-row" href="#/findings?project=${encodeURIComponent(projectId)}&severity=${encodeURIComponent(finding.severity)}">
+    <span class="ov-sev-dot" style="background:${OV_SEVERITY[finding.severity] || OV_COLORS.grey}"></span>
+    <div class="ov-risk-main"><div class="ov-risk-title">${esc(finding.title)}</div>
+      <div class="muted">${esc(finding.finding_type)} · ${esc(finding.domain || '')} · 证据 ${finding.evidence_count}</div></div>
+    ${chip(finding.severity, finding.severity === 'critical' ? 'red' : finding.severity === 'high' ? 'amber' : finding.severity === 'medium' ? 'blue' : 'grey')}
+  </a>`).join('');
+  const questionRows = questions.slice(0, 5).map((question) => `<div class="ov-q-row">
+    <span class="ov-sev-dot" style="background:${OV_SEVERITY[question.priority] || OV_COLORS.grey}"></span>
+    <div class="ov-q-main"><div class="ov-q-text">${esc(question.question)}</div>
+      <div class="muted">${esc(question.owner)} · ${esc(question.priority)} · ${esc(question.status)}</div></div>
+  </div>`).join('');
+
+  const latest = (versions.latest || []).length;
+  const superseded = (versions.superseded || []).length;
+  const capNote = overall.readiness_cap
+    ? `<div class="ov-note">因存在 ${overall.critical_contradictions} 项 critical 跨文件矛盾，尽调就绪度封顶为 ${overall.readiness_cap}。</div>`
+    : '';
+
+  return `
+  <div class="page-head ov-page-head">
+    <div><h1>Asset 360</h1><div class="sub">药物资产发现与资产评估 · Drug asset discovery & evaluation</div></div>
+    <div class="actions">
+      <a class="btn sm" href="#/evidence?project=${encodeURIComponent(projectId)}">Evidence</a>
+      <a class="btn sm" href="#/findings?project=${encodeURIComponent(projectId)}">Findings & Questions</a>
+      <a class="btn sm" href="#/report?project=${encodeURIComponent(projectId)}">Report</a>
+      <button class="btn primary sm" data-action="refresh-view">Refresh</button>
+    </div>
+  </div>
+
+  <div class="ov-hero">
+    <div class="ov-asset">
+      <div class="ov-eyebrow">DRUG ASSET · DISCOVERED FROM PACKAGE</div>
+      <h2>${esc(asset.name || project.asset_name || '—')} <span class="ov-phase">${esc(asset.phase || project.phase || '')}</span></h2>
+      <div class="ov-asset-sub">${esc(asset.mechanism || '—')} · ${esc(asset.modality || '—')}</div>
+      <div class="ov-asset-meta">
+        <span><b>靶点</b> ${esc(asset.target || '—')}</span>
+        <span><b>适应症</b> ${esc(asset.indication || project.indication || '—')}</span>
+        <span><b>试验</b> ${esc(trial.nct_id || '—')}${trial.internal_id ? ' · ' + esc(trial.internal_id) : ''}</span>
+        <span><b>样本量</b> ${esc(String(trial.sample_size || '—'))}</span>
+        <span><b>数据截止</b> ${esc(trial.data_cutoff || '—')}</span>
+      </div>
+      <div class="ov-asset-actions">
+        <a class="ov-inline-link" href="#/evidence?project=${encodeURIComponent(projectId)}">查看 ${Number((ev.evidence || {}).total || 0)} 条证据 →</a>
+        <a class="ov-inline-link" href="#/findings?project=${encodeURIComponent(projectId)}">查看 ${findings.length} 条 active findings →</a>
+        <a class="ov-inline-link" href="#/report?project=${encodeURIComponent(projectId)}">报告与导出 →</a>
+      </div>
+    </div>
+    <div class="ov-score-panel">
+      <div class="ov-score-ring">${ovRing(overall.score, 168)}</div>
+      <div class="ov-score-copy">
+        <div class="ov-score-title">${esc(overall.title_zh || '尽调就绪度')}</div>
+        <div class="ov-score-level" style="color:${ovColor(overall.score)}">${esc(overall.label_zh || '')} · ${Number(overall.score || 0).toFixed(1)} / 100</div>
+        <div class="ov-risk-line">风险暴露：<strong>${esc(risk.label_zh || '—')}</strong> · ${risk.active_findings || 0} 条 active findings</div>
+        <div class="ov-score-note">${esc(overall.disclaimer || '')}</div>
+        ${capNote}
+      </div>
+    </div>
+  </div>
+
+  <div class="ov-kpis">
+    ${ovKpi('证据 / Evidence', Number((ev.evidence || {}).total || 0), `${(ev.evidence || {}).verified || 0} 条已核验（${Number((ev.evidence || {}).verified_pct || 0).toFixed(1)}%）`)}
+    ${ovKpi('发现 / Findings', findings.length, `critical ${riskCounts.critical || 0} · high ${riskCounts.high || 0}`, 'danger')}
+    ${ovKpi('卖方问题 / Questions', questions.length, '可直接发卖方·可审核')}
+    ${ovKpi('检查覆盖 / Coverage', coveragePct + '%', `${coverageSufficient}/${coverageApplicable} 适用项充分`, 'ok')}
+    ${ovKpi('资料包 / Package', (docs.total_documents || 0) + ' docs', (docs.total_pages || 0) + ' pages · ' + (docs.present_count || 0) + '/' + (docs.expected_count || 0) + ' 类关键文档')}
+    ${ovKpi('版本 / Versions', latest + ' latest', superseded ? `${superseded} 份已被 v2 替代` : '当前无替代版本')}
+  </div>
+
+  <div class="ov-section-head"><h2>药物资产发现 <span>Asset Discovery</span></h2>
+    <div class="muted">从资料包中识别资产、试验、关键临床事实与文件构成；点击任一卡片回到原文</div></div>
+
+  <div class="ov-grid ov-grid-2">
+    ${ovCard('资产档案', 'Asset profile', `<table class="ov-attr-table"><tbody>${attrRows}</tbody></table>`)}
+    ${ovCard('关键临床事实', 'Key clinical facts', `<div class="ov-facts">${factCards || '<div class="muted">暂无可展示的临床事实</div>'}</div>`)}
+  </div>
+
+  <div class="ov-grid ov-grid-2">
+    ${ovCard('文件构成', 'Document inventory', `
+      <div class="ov-bars">${ovBars(docBars)}</div>
+      <div class="ov-subhead">关键文档覆盖</div>
+      <div class="ov-chips">${expextedChips}</div>
+      <div class="ov-subhead">非临床 / 监管 / 专利 / 商业文件预览 <span class="muted">（未结构化抽取，仅供参考）</span></div>
+      <div class="ov-highlights">${highlights || '<div class="muted">暂无</div>'}</div>`)}
+    ${ovCard('试验与版本', 'Trial & versions', `
+      <table class="ov-attr-table"><tbody>
+        <tr><th>试验编号<span class="en">Trial / NCT</span></th><td>${esc(trial.nct_id || '—')}</td></tr>
+        <tr><th>研究编号<span class="en">Internal ID</span></th><td>${esc(trial.internal_id || '—')}</td></tr>
+        <tr><th>阶段 / 设计<span class="en">Phase / design</span></th><td>${esc((trial.phase || '') + (trial.design ? ' · ' + trial.design : '')) || '—'}</td></tr>
+        <tr><th>主要终点<span class="en">Primary endpoint</span></th><td>${esc(trial.primary_endpoint || '—')}</td></tr>
+        <tr><th>文档版本<span class="en">Versions</span></th><td>${latest} 份 latest${superseded ? ` · ${superseded} 份 superseded` : ''}</td></tr>
+      </tbody></table>
+      <div class="ov-subhead">版本历史 <span class="muted">（v1 → v2 自动替代）</span></div>
+      <div class="ov-versions">
+        ${(versions.superseded || []).slice(0, 6).map((v) => `<span class="ov-doc-chip miss" title="superseded">↺ ${esc(v.filename)} v${esc(v.version)}</span>`).join('') || '<span class="muted">当前无 superseded 文档</span>'}
+      </div>`)}
+  </div>
+
+  <div class="ov-section-head"><h2>药物资产评估 <span>Asset Evaluation</span></h2>
+    <div class="muted">按证据完整度、可核验性、一致性、覆盖度与成熟度计算的规则化就绪度；不构成投资建议</div></div>
+
+  <div class="ov-grid ov-grid-2">
+    ${ovCard('评估维度', 'Evaluation dimensions', `<div class="ov-dims">${dimRows}</div>`)}
+    ${ovCard('风险与一致性', 'Risk & consistency', `
+      <div class="ov-chart-row">
+        <div class="ov-chart-block"><div class="ov-chart-title">发现严重度分布 <span>Severity mix</span></div>${riskDonut}
+          <div class="ov-chart-caption">点击扇区筛选 findings</div></div>
+        <div class="ov-chart-block ov-cons-block"><div class="ov-chart-title">一致性分类 <span>Comparability classes</span></div>
+          <div class="ov-cons-grid">${consTiles}</div></div>
+      </div>
+      <div class="ov-subhead">检查清单覆盖 <span class="muted">${coverageSufficient} sufficient · ${coverageCounts.partial || 0} partial · ${coverageCounts.not_found || 0} not found</span></div>
+      ${ovStack(covSegments)}`)}
+  </div>
+
+  <div class="ov-grid ov-grid-2">
+    ${ovCard('Top 风险', 'Top open risks', `<div class="ov-risk-list">${riskRows || '<div class="muted">暂无 active findings</div>'}</div>`)}
+    ${ovCard('Top 卖方问题', 'Top seller questions', `<div class="ov-q-list">${questionRows || '<div class="muted">暂无问题</div>'}</div>`)}
+  </div>
+
+  <div class="ov-foot">
+    数据来自项目 <span class="mono">${esc(projectId)}</span> 的最新文档；评估为规则化汇总，需专家复核。
+    生成于 ${esc(fmtDate(data.latest_run && data.latest_run.finished_at))}。
+  </div>`;
+}
+
+async function renderOverview(seq) {
+  setView(loadingBlock('Building asset overview…'));
+  try {
+    const data = await api(`/api/projects/${state.projectId}/overview`);
+    if (seq !== state.renderSeq) return;
+    state.overview = data;
+    state.project = data.project;
+    state.stats = data.stats;
+    updateSidebarBadges();
+    setView(overviewHtml(data));
+    const nav = $$('.nav-item[data-nav]');
+    nav.forEach((btn) => btn.classList.toggle('active', btn.dataset.nav === 'overview'));
   } catch (error) {
     if (seq === state.renderSeq) setView(errorPanel(error));
   }
@@ -991,6 +1334,10 @@ function findingsViewHtml() {
 }
 
 async function renderFindings(seq) {
+  const params = hashParams();
+  if (params.get('severity')) state.filters.findings.severity = params.get('severity');
+  if (params.get('type')) state.filters.findings.finding_type = params.get('type');
+  if (params.get('priority')) state.filters.questions.priority = params.get('priority');
   setView(loadingBlock('Loading findings…'));
   try {
     const [findingsRes, questionsRes] = await Promise.all([
@@ -1165,6 +1512,13 @@ function renderReportView() {
 /* --------------------------------------------------------------- actions */
 async function handleAction(action, el) {
   try {
+    if (action === 'overview-filter') {
+      const params = new URLSearchParams({ project: state.projectId });
+      if (el.dataset.severity) params.set('severity', el.dataset.severity);
+      if (el.dataset.type) params.set('type', el.dataset.type);
+      location.hash = `#/findings?${params.toString()}`;
+      return;
+    }
     if (action === 'toggle-create-project') { state.showCreateForm = !state.showCreateForm; renderView(); return; }
     if (action === 'open-project') {
       state.projectId = el.dataset.id;
@@ -1172,7 +1526,7 @@ async function handleAction(action, el) {
       state.project = null; state.documents = []; state.evidenceAll = []; state.findings = []; state.questions = [];
       state.previewDocId = null; state.selectedEvidenceId = null; state.outputs = null;
       await ensureProjectLoaded();
-      nav('upload');
+      nav('overview');
       return;
     }
     if (action === 'refresh-view') { await renderView(); return; }

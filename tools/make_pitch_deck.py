@@ -147,7 +147,7 @@ def picture_slide(prs, kicker, title_zh, title_en, image: Path, caption: str, pa
         pic_w = 11.2
         pic_h = pic_w / 1.6
         slide.shapes.add_picture(str(image), Inches(0.95), Inches(1.5), Inches(pic_w), Inches(pic_h))
-    textbox(slide, 0.65, 6.72, 12.0, 0.3, caption, 10, False, MUTED)
+    textbox(slide, 0.65, 6.84, 12.0, 0.26, caption, 9.5, False, MUTED)
     footer(slide, page, total)
     return slide
 
@@ -158,7 +158,7 @@ def build(out: Path) -> Path:
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
-    total = 13
+    total = 14
 
     # 1 — Cover
     slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -229,42 +229,49 @@ def build(out: Path) -> Path:
             13, False, TEXT)
     footer(slide, 4, total)
 
-    # 5 — Product: projects/upload
-    picture_slide(prs, "PRODUCT", "从资料包到可运行的分析任务", "From package to a governed run",
-                  shots / "02_upload.png",
-                  "13 documents · 284 pages · 7-stage pipeline · parsed types and versions",
+    # 5 — Asset 360 dashboard
+    picture_slide(prs, "ASSET 360", "一屏汇总：资产发现 + 资产评估", "Discovery and evaluation in one view",
+                  shots / "00_asset360.png",
+                  "Asset profile · key clinical facts · 8-dimension readiness · A/B/C/U · top risks & questions",
                   5, total,
+                  ["资产档案与试验", "关键疗效/安全事实", "8 维就绪度评分", "A/B/C/U 一致性", "Top 风险与问题"])
+
+    # 6 — Product: projects/upload
+    picture_slide(prs, "PRODUCT", "从资料包到可运行的分析任务", "From package to a governed run",
+                  shots / "03_upload.png",
+                  "13 documents · 284 pages · 7-stage pipeline · parsed types and versions",
+                  6, total,
                   ["文档类型/版本/页数自动识别", "SHA-256 去重 + supersede", "7 阶段进度可见", "离线默认，无 API key"])
 
     # 6 — Evidence workspace
     picture_slide(prs, "TRACEABILITY", "每个数字都能点回原文", "Every number traced to page + quote",
-                  shots / "03_evidence.png",
+                  shots / "04_evidence.png",
                   "Click ORR 42.0% → CSR page 11 → verbatim quote highlighted; population/cutoff/method shown",
-                  6, total,
+                  7, total,
                   ["逐字引用校验", "人群/cutoff/方法六维可比性", "人工确认状态", "可分享的深链接"])
 
     # 7 — Findings
     picture_slide(prs, "ANALYSIS", "矛盾、版本、定义、缺口自动分类", "Consistency and gap analysis",
-                  shots / "04_findings.png",
+                  shots / "05_findings.png",
                   "Type A ORR (42.0 vs 48.4), Type A SAE, Type B cutoff, Type C FAS/BICR, gaps, injection",
-                  7, total,
+                  8, total,
                   ["A 直接矛盾", "B 版本差异", "C 定义差异", "证据缺口", "注入风险"])
 
     # 8 — Deliverables
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     slide.background.fill.solid(); slide.background.fill.fore_color.rgb = LIGHT
     slide_title(slide, "交付物：Decision Brief + 证据矩阵 + 卖方问题", "Client-ready deliverables", "OUTPUT")
-    if (shots / "05_report.png").is_file():
+    if (shots / "06_report.png").is_file():
         pic_w = 7.6
-        slide.shapes.add_picture(str(shots / "05_report.png"), Inches(0.6), Inches(1.55), Inches(pic_w), Inches(pic_w / 1.6))
+        slide.shapes.add_picture(str(shots / "06_report.png"), Inches(0.6), Inches(1.55), Inches(pic_w), Inches(pic_w / 1.6))
     bullets(slide, 8.55, 1.65, 4.2, 4.9, [
         "Due-diligence report (Markdown / DOCX / PDF)",
         "Decision Brief：证据支持点、Top risks、Top questions",
-        "Seller_Questions.xlsx：6 sheets（Summary/Asset/Evidence/Findings/Questions/Coverage）",
+        "Seller_Questions.xlsx：8 sheets（含 Asset Evaluation / Discovery / Evidence / Findings / Questions）",
         "每条 finding 附文件/页码/原文引用",
         "明确“人工复核、不自动 Go/No-Go”",
     ], 12, TEXT, 10)
-    footer(slide, 8, total)
+    footer(slide, 14, total)
 
     # 9 — Quality
     slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -277,7 +284,7 @@ def build(out: Path) -> Path:
     bullets(slide, 0.75, 4.0, 11.8, 2.3, [
         "284 页端到端约 11 秒；默认离线模式 0 次 LLM 调用；136 条证据全部通过原文校验。",
         "注入攻击控制 PASS：伪造“ORR 90%”未被采纳，且被标记为技术风险。",
-        "174 个自动化测试 + CI；v1 → v2 上传后旧 Type A 自动 resolved、Type C 持续存在。",
+        "176 个自动化测试 + CI；v1 → v2 上传后旧 Type A 自动 resolved、Type C 持续存在。",
         "以上为合成语料结果，不是真实客户性能；真实试点正在用双人裁定 benchmark 验证（见 docs/PRODUCTION_ROADMAP.md）。",
     ], 13, TEXT, 8)
     footer(slide, 9, total)
@@ -307,7 +314,7 @@ def build(out: Path) -> Path:
         "输出：Evidence Matrix、Consistency/Gap Report、Seller Question List、Decision Brief",
         "周期：3–5 个工作日（AI 生成 + 专家复核）",
         "定价：¥9,800–29,800 / 项目（试点可换案例与评测数据）",
-        "交付：报告 MD/DOCX/PDF + 6-Sheet Excel + 审核记录",
+        "交付：报告 MD/DOCX/PDF + 8-Sheet Excel（含发现/评估）+ 审核记录",
     ], 14, TEXT, 10)
     rect(slide, 7.0, 1.65, 5.65, 4.55, NAVY, radius=True)
     textbox(slide, 7.3, 1.95, 5.0, 0.4, "试点验收标准", 18, True, WHITE)

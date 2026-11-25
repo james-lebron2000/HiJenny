@@ -60,6 +60,7 @@ flowchart TB
 | `hijenny/agents/gap.py` | YAML-checklist coverage, gap/technical/incomplete findings | `run` |
 | `hijenny/agents/questions.py` | dedupe/merge findings + gaps into seller questions | `run` |
 | `hijenny/rules.py` + `hijenny/rules/` | versioned, data-only due-diligence rule packs (46 rules) | `load_rules`, `select_rules` |
+| `hijenny/overview.py` | aggregate asset discovery + evaluation for the Asset 360 dashboard | `build_overview` |
 | `hijenny/reporting.py` | stage handler writing MD/DOCX/XLSX deliverables | `generate_project_outputs` |
 | `hijenny/exports.py` | 6-sheet styled workbook + Markdown/DOCX renderers | `collect_export_data`, `build_workbook` |
 | `hijenny/api/main.py` | REST + static SPA host, project-scoped file allowlist | `app` |
@@ -208,7 +209,7 @@ GET  /                                 (SPA)
 
 ## 11. Testing and evaluation
 
-* 174 tests: parsers/ingestion, extraction/validation, agents/rules, API/exports,
+* 176 tests: parsers/ingestion, extraction/validation, agents/rules, API/exports,
   metrics, end-to-end pipeline (`tests/test_e2e.py` runs ingest → extract →
   verify → agents → report on the committed sample package and asserts
   provenance, planted findings, question quality, deliverable files, and the

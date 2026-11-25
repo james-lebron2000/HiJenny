@@ -13,8 +13,9 @@ findings and seller questions in days, not weeks.
 | **Seller Question List**（核心） | 去重、合并、按优先级排序，含责任部门、所需文件、证据链接；可直接发卖方 |
 | **Evidence Matrix** | 疗效/安全性/研究设计/统计字段 + 文件 · 页码 · 原文逐字引用 · 校验状态 |
 | **Consistency & Gap Report** | A 直接矛盾 / B 版本差异 / C 定义差异 / 证据缺口，全部可解释 |
+| **Asset 360 仪表盘** | 可交互汇总：资产发现、关键临床事实、8 维就绪度、A/B/C/U、Top 风险/问题，点击跳转原文 |
 | **Decision Brief** | 给 BD 负责人/投委会的一页纸：证据支持点、Top 风险、Top 问题、缺失证据 |
-| **交付格式** | Markdown / DOCX / PDF 报告 + 6-Sheet Excel + 审核记录 |
+| **交付格式** | Markdown / DOCX / PDF 报告 + 8-Sheet Excel（含 Asset Evaluation / Discovery）+ 审核记录 |
 
 ## 怎么做到 / How it works
 

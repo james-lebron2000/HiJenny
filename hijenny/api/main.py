@@ -1049,6 +1049,15 @@ def create_app() -> FastAPI:
             "outputs": _outputs_info(project_id),
         }
 
+    @app.get("/api/projects/{project_id}/overview")
+    def project_overview(project_id: str):
+        """Aggregated asset-discovery + evaluation data for the interactive dashboard."""
+        from hijenny.overview import build_overview
+
+        with store.session_scope() as session:
+            _project_or_404(session, project_id)
+            return build_overview(session, project_id)
+
     @app.get("/api/projects/{project_id}/review-events")
     def list_review_events(project_id: str, limit: int = Query(default=200, ge=1, le=1000)):
         with store.session_scope() as session:

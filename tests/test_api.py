@@ -600,6 +600,8 @@ def test_export_endpoints_produce_valid_files(client, env):
     assert workbook.sheetnames == [
         "Executive Summary",
         "Asset Profile",
+        "Asset Evaluation",
+        "Discovery",
         "Evidence Matrix",
         "Findings",
         "Questions",

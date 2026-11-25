@@ -23,7 +23,7 @@ cd HiJenny
 > `python3 -m hijenny.cli demo-kit --out demo_workspace`
 > `HIJENNY_DATA_DIR=demo_workspace/data HIJENNY_DB_PATH=demo_workspace/data/hijenny.db hijenny serve --port 8123`
 
-演示交付物已放在 `demo_workspace/deliverables/`：报告 MD/DOCX/PDF + 6-Sheet Excel。
+演示交付物已放在 `demo_workspace/deliverables/`：报告 MD/DOCX/PDF + 8-Sheet Excel（含 Asset Evaluation / Discovery）。
 仓库内另附一份快照：[docs/sample_output/](sample_output/)。
 
 ---
@@ -33,9 +33,10 @@ cd HiJenny
 | 时间 | 页面 | 演示动作 | 要讲的话 |
 |---|---|---|---|
 | 0:00–0:30 | 封面 | 打开首页 Projects | “HiJenny 把卖方 1,000+ 页资料包变成可溯源尽调底稿，而不是 PDF 聊天机器人。” |
-| 0:30–2:00 | Projects | 展示 1 个项目、13 份文档、284 页、136 条证据、11 条发现、6 个问题 | “所有统计来自真实运行；不同颜色状态对应解析/分析完成度。” |
-| 2:00–4:00 | Upload & Analysis | 展示文档清单、类型/版本/页数、7 阶段进度条 | “支持 PDF/PPTX/XLSX，自动识别 CSR/IB/SAP 等类型；版本更新会自动 supersede。” |
-| 4:00–6:30 | Evidence | 点击 ORR 证据卡片 → 左侧文档树定位 CSR → 中间高亮第 11 页原文 → 右侧显示证据值/人群/cutoff/方法/校验状态 | “每个数字都能点回原文逐字引用；这里 42.0% 来自 CSR p11 ITT/RECIST 1.1/2026-01-15。” |
+| 0:30–2:00 | **Asset 360** | 一屏展示资产档案、关键临床事实、8 维就绪度、A/B/C/U、Top 风险/问题；点击卡片跳转原文 | “药物资产发现 + 评估一屏汇总；65/100 是规则化尽调就绪度，因 critical 矛盾封顶，不构成投资建议。” |
+| 2:00–3:00 | Projects | 展示 1 个项目、13 份文档、284 页、136 条证据、11 条发现、6 个问题 | “所有统计来自真实运行；不同颜色状态对应解析/分析完成度。” |
+| 3:00–4:30 | Upload & Analysis | 展示文档清单、类型/版本/页数、7 阶段进度条 | “支持 PDF/PPTX/XLSX，自动识别 CSR/IB/SAP 等类型；版本更新会自动 supersede。” |
+| 4:30–6:30 | Evidence | 点击 ORR 证据卡片 → 左侧文档树定位 CSR → 中间高亮第 11 页原文 → 右侧显示证据值/人群/cutoff/方法/校验状态 | “每个数字都能点回原文逐字引用；这里 42.0% 来自 CSR p11 ITT/RECIST 1.1/2026-01-15。” |
 | 6:30–8:30 | Findings & Questions | 按严重度筛选；展示 critical ORR 矛盾（42.0% vs 48.4%）、Type B 版本差异、Type C 定义差异、缺口、注入风险 | “系统只比较六维可比的数据；不同 cutoff/人群不会误判为矛盾。” |
 | 8:30–9:30 | Findings | 打开 1 条 critical finding / 1 条卖方问题，展示证据链接、责任部门、所需文件 | “问题可直接发卖方，去重合并、可审核、可导出。” |
 | 9:30–10:30 | Report | 展示 Decision Brief、Top risks、问题清单；下载 MD/DOCX/PDF/XLSX | “交付物是 Decision Brief + 证据矩阵 + 问题清单；不自动给 Go/No-Go。” |
@@ -69,11 +70,12 @@ cd HiJenny
 
 | 页面 | 截图 |
 |---|---|
-| Projects | ![Projects](assets/screenshots/01_projects.png) |
-| Upload & Analysis | ![Upload](assets/screenshots/02_upload.png) |
-| Evidence Workspace（ORR 原文高亮） | ![Evidence](assets/screenshots/03_evidence.png) |
-| Findings & Questions | ![Findings](assets/screenshots/04_findings.png) |
-| Report | ![Report](assets/screenshots/05_report.png) |
+| **Asset 360（发现 + 评估）** | ![Asset 360](assets/screenshots/00_asset360.png) |
+| Projects | ![Projects](assets/screenshots/02_projects.png) |
+| Upload & Analysis | ![Upload](assets/screenshots/03_upload.png) |
+| Evidence Workspace（ORR 原文高亮） | ![Evidence](assets/screenshots/04_evidence.png) |
+| Findings & Questions | ![Findings](assets/screenshots/05_findings.png) |
+| Report | ![Report](assets/screenshots/06_report.png) |
 
 ---
 
@@ -103,7 +105,7 @@ A: `PORT=8124 ./scripts/demo.sh`。
 ./scripts/demo.sh          # builds demo_workspace/ and serves http://127.0.0.1:8123/
 ```
 
-A 10-minute customer demo: Projects → Upload & Analysis → Evidence (click ORR evidence,
+A 10-minute customer demo: **Asset 360** (discovery + evaluation dashboard) → Projects → Upload & Analysis → Evidence (click ORR evidence,
 jump to CSR page 11, highlighted quote) → Findings & Questions (Type A/B/C, gaps, injection)
 → Report (Decision Brief + MD/DOCX/PDF + Excel). The 15-minute investor version adds
 problem/why-now, the comparability-gating architecture, synthetic-corpus benchmark with an

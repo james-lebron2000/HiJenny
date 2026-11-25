@@ -1446,7 +1446,7 @@ Sheet 列表：`Executive Summary` · `Asset Profile` · `Evidence Matrix` · `F
 |---|---|---|
 | 报告（Markdown） | `data/projects/prj_b2e56259ef2d/exports/HiJenny_Report.md` | Decision Brief + 全部章节 |
 | 报告（Word） | `data/projects/prj_b2e56259ef2d/exports/HiJenny_Report.docx` | 可编辑/可分发 |
-| 问题工作簿 | `data/projects/prj_b2e56259ef2d/exports/Seller_Questions.xlsx` | 6 个 Sheet |
+| 问题工作簿 | `data/projects/prj_b2e56259ef2d/exports/Seller_Questions.xlsx` | 8 个 Sheet（含 Asset Evaluation / Discovery） |
 | 数据库 | `data/hijenny.db` | 证据/发现/问题/覆盖度/审核日志 |
 | 原始上传文件 | `data/projects/prj_b2e56259ef2d/documents/` | 输入文件副本 |
 

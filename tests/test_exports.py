@@ -31,6 +31,8 @@ from hijenny.schemas import (
 EXPECTED_SHEETS = [
     "Executive Summary",
     "Asset Profile",
+    "Asset Evaluation",
+    "Discovery",
     "Evidence Matrix",
     "Findings",
     "Questions",
