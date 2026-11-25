@@ -2552,3 +2552,22 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     doc.core_properties.comments = "AI-generated due-diligence report; requires expert human review."
     doc.save(target)
     return target
+
+
+def seller_reply_workbook(questions, *, sample=False):
+    """Export only request text, material requests and blank reply fields."""
+    from io import BytesIO
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    wb.properties.title = "合成样例 · 卖方问题单" if sample else "卖方问题单"
+    rows = [[q["question_id"], q["question"], _joined(q.get("required_documents")),
+             "", "", ""] for q in questions]
+    _table_sheet(wb, "合成样例" if sample else "卖方答复",
+                 ["问题编号", "待澄清问题", "所需材料", "卖方答复", "答复附件及定位", "答复日期"],
+                 rows, {1: 23, 2: 70, 3: 50, 4: 60, 5: 42, 6: 18},
+                 wrap_cols=(2, 3, 4, 5))
+    stream = BytesIO()
+    wb.save(stream)
+    return stream.getvalue()

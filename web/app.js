@@ -1348,7 +1348,8 @@ function findingsViewHtml() {
         <button class="btn" data-action="refresh-view">Refresh</button>
         <button class="btn" data-action="toggle-events">${state.showEvents ? 'Hide' : 'Review'} events</button>
         <button class="btn" data-action="run-analysis" data-force="1">Re-run analysis</button>
-        <button class="btn" data-action="export-xlsx">Export XLSX</button>
+        <button class="btn" data-action="export-xlsx">内部尽调工作簿</button>
+        <button class="btn" data-action="seller-reply">导出已批准的卖方问题单</button>
         <button class="btn primary" data-action="generate-report">Generate report</button>
       </div>
     </div>
@@ -1507,7 +1508,7 @@ function renderReportView() {
         <button class="btn navy" data-action="generate-report">${md.exists ? 'Regenerate report' : 'Generate report'}</button>
         ${docx.exists ? `<a class="btn" href="${esc(docx.url)}">Download DOCX</a>` : ''}
         ${md.exists ? `<a class="btn" href="${esc(md.url)}" download>Download MD</a>` : ''}
-        ${xlsx.exists ? `<a class="btn" href="${esc(xlsx.url)}">Download XLSX</a>` : ''}
+        ${xlsx.exists ? `<a class="btn" href="${esc(xlsx.url)}">内部尽调工作簿</a>` : ''}
       </div>
     </div>
     ${statStrip([
@@ -1529,7 +1530,7 @@ function renderReportView() {
         <div class="kv-grid">
           <div class="kv"><span class="k">Markdown report</span><span class="v">${md.exists ? `<a href="${esc(md.url)}" download>${esc(md.name || 'HiJenny_Report.md')}</a>` : 'not generated'}</span></div>
           <div class="kv"><span class="k">Word report</span><span class="v">${docx.exists ? `<a href="${esc(docx.url)}">${esc(docx.name || 'HiJenny_Report.docx')}</a>` : 'not generated'}</span></div>
-          <div class="kv"><span class="k">Questions workbook</span><span class="v">${xlsx.exists ? `<a href="${esc(xlsx.url)}">${esc(xlsx.name || 'Seller_Questions.xlsx')}</a>` : 'not generated'}</span></div>
+          <div class="kv"><span class="k">内部尽调工作簿</span><span class="v">${xlsx.exists ? `<a href="${esc(xlsx.url)}">${esc(xlsx.name || 'Seller_Questions.xlsx')}</a>` : 'not generated'}</span></div>
         </div>
       </div>
     </div>`);
@@ -1586,6 +1587,13 @@ async function handleAction(action, el) {
       setView(findingsViewHtml());
       toast('Seller question deleted', 'ok');
       return;
+    }
+    if (action === 'seller-reply') {
+      const res=await fetch('/api/projects/'+encodeURIComponent(state.projectId)+'/exports/seller-reply.xlsx');
+      if (!res.ok) throw new Error((await res.json()).detail || '问题单导出失败');
+      const url=URL.createObjectURL(await res.blob());
+      const a=document.createElement('a');a.href=url;a.download='HiJenny-Seller-Reply.xlsx';a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);return;
     }
     if (action === 'export-xlsx') {
       toast('Building Excel workbook…');

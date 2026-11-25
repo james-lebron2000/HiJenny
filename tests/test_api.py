@@ -668,3 +668,22 @@ def test_bd_review_history_and_brief(client, env):
     assert any("updated interpretation" in c.text for t in Document(out / "HiJenny_Report.docx").tables
                for row in t.rows for c in row.cells)
     assert client.get(f"/api/projects/{other}/followup").json()["history"] == {}
+
+
+def test_seller_reply_export_is_project_scoped_and_limited_to_approved_requests(client):
+    import openpyxl
+
+    project = create_project(client)["project_id"]
+    question = seed_review_data(project)["question_id"]
+    route = f"/api/projects/{project}/exports/seller-reply.xlsx"
+    assert client.get(route).status_code == 409
+    client.patch(f"/api/questions/{question}", json={"status": "approved", "actor": "reviewer"}).raise_for_status()
+    response = client.get(route)
+    assert response.status_code == 200
+    workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+    assert workbook.sheetnames == ["卖方答复"]
+    header, row = list(workbook.active.values)
+    assert header == ("问题编号", "待澄清问题", "所需材料", "卖方答复", "答复附件及定位", "答复日期")
+    assert row[0] == question and row[3:] == (None, None, None)
+    client.patch(f"/api/questions/{question}", json={"review_status": "rejected", "actor": "reviewer"}).raise_for_status()
+    assert client.get(route).status_code == 409

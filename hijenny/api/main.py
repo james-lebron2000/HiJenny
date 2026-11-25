@@ -1105,6 +1105,19 @@ def create_app() -> FastAPI:
             return event
 
     # -- Exports ------------------------------------------------------------
+    @app.get("/api/projects/{project_id}/exports/seller-reply.xlsx")
+    def export_seller_reply(project_id: str):
+        with store.session_scope() as session:
+            _project_or_404(session, project_id)
+            approved = [q for q in store.list_questions(session, project_id, status="approved")
+                        if q.get("review_status") != "rejected"]
+        if not approved:
+            raise HTTPException(409, "请先在卖方问题列表将拟发送问题的状态设为 approved。")
+        return Response(exports.seller_reply_workbook(approved),
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": 'attachment; filename="HiJenny-Seller-Reply.xlsx"',
+                                 "Cache-Control": "no-store"})
+
     @app.post("/api/projects/{project_id}/exports/questions")
     def export_questions(project_id: str):
         with store.session_scope() as session:
