@@ -57,6 +57,7 @@ function briefText(run) {
     for (const item of items) {
       const decision = run.review[item.id] || '待复核';
       lines.push('', '[' + item.id + '] ' + item.title, decision, sourceLink(item));
+      if (run.reasons?.[item.id]) lines.push('筛选理由 '+run.reasons[item.id]);
       if (decision === '排除') continue;
       lines.push([item.date, item.detail].filter(Boolean).join(' · '));
       for (const passage of item.passages) lines.push(passage.label, passage.text);
@@ -111,7 +112,7 @@ async function renderBrief() {
         <p>${esc(item.date)} · ${esc(item.detail)}</p>
         ${item.passages.map(p=>`<p><b>${esc(p.label)}</b><br>${esc(p.text)}</p>`).join('')}
         <label>筛选判断 <select data-review="${esc(item.id)}" ${busy?'disabled':''}>
-        ${['待复核','纳入','排除'].map(v=>option(v,run.review[item.id] || '待复核',v)).join('')}</select></label></details>`).join('')}`
+        ${['待复核','纳入','排除'].map(v=>option(v,run.review[item.id] || '待复核',v)).join('')}</select></label><label>筛选理由（可选）<textarea data-reason="${esc(item.id)}" maxlength="2000" ${busy?'disabled':''}>${esc(run.reasons?.[item.id] || '')}</textarea></label></details>`).join('')}`
         : `<p>${esc(step.error || (busy ? '正在执行检索计划…' : '等待检索'))}</p>`}</section>`).join('')}
       <button id="brief-copy" type="button" class="btn" ${busy?'disabled':''}>复制计划并调整检索式</button>
       <label for="brief-note">审核意见、相互矛盾的证据与未解决问题</label>
@@ -119,6 +120,8 @@ async function renderBrief() {
       <div><button id="brief-save" class="btn" ${busy?'disabled':''}>保存审核意见</button>
       <button id="brief-medical" class="btn" ${busy?'disabled':''}>用纳入证据准备专家会</button>
       <button id="brief-export" class="btn" ${busy?'disabled':''}>导出当前底稿</button>
+      <button id="brief-word" class="btn" ${busy?'disabled':''}>下载 Word 研究报告</button>
+      <small>生成 Word 时，本版检索记录、纳入的来源片段及审核意见会发送至本项目服务器。</small>
       ${run.steps.some(s=>!s.result) ? '<button class="btn primary" id="brief-resume">继续未完成的检索</button>' : ''}
       </div>`;
     $('#brief-medical', home).onclick = async () => {
@@ -145,6 +148,30 @@ async function renderBrief() {
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (err) { fail(err); }
     };
+    const word = $('#brief-word',home);
+    word.onclick=async ()=>{
+      word.disabled=true;
+      try {
+        const id=run.id;
+        await saveReview();
+        const saved=await briefStore('readonly',store=>store.get(id));
+        const payload={id,question:saved.question,created:saved.created,note:saved.note,steps:saved.steps.map(step=>({
+          source:step.source,query:step.query,retrieved:step.retrieved || '',total:step.result?.total ?? null,error:step.error || '',
+          records:(step.result?.items || []).map(item=>({
+            id:item.id,title:item.title,date:item.date || '',decision:saved.review[item.id] || '待复核',
+            reason:saved.reasons?.[item.id] || '',postedResult:!!item.postedResult,
+            passages:saved.review[item.id]==='纳入'?item.passages:[]
+          }))
+        }))};
+        const res=await fetch('/api/research/brief.docx',jsonOptions('POST',payload));
+        if (!res.ok) throw new Error('Word 导出失败（'+res.status+'）');
+        const url=URL.createObjectURL(await res.blob());
+        const a=document.createElement('a');a.href=url;
+        a.download=res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] || 'HiJenny-研究报告.docx';
+        a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      } catch(err) {fail(err);}
+      finally {word.disabled=false;}
+    };
     $('#brief-save', home).onclick = () => saveReview().then(() => toast('已保存审核意见。')).catch(fail);
   }
   function fail(error) { toast('底稿操作失败：' + error.message, 'err'); }
@@ -158,9 +185,13 @@ async function renderBrief() {
       .map(el => [el.dataset.review, el.value]);
     const value = note.value;
     const changedNote = value !== run.note;
-    if (!changes.length && !changedNote) return;
+    const reasons=[...report.querySelectorAll('[data-reason]')]
+      .filter(el=>el.value !== (run.reasons?.[el.dataset.reason] || ''))
+      .map(el=>[el.dataset.reason,el.value]);
+    if (!changes.length && !changedNote && !reasons.length) return;
     const latest = await patchBrief(id, record => {
       if (changedNote) record.note = value;
+      record.reasons=Object.assign(record.reasons || {},Object.fromEntries(reasons));
       Object.assign(record.review, Object.fromEntries(changes));
     });
     if (run?.id === id) run = latest;
