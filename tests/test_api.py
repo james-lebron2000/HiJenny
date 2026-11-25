@@ -638,3 +638,33 @@ def test_export_endpoints_produce_valid_files(client, env):
 
     assert client.post("/api/projects/prj_missing/exports/questions").status_code == 404
     assert client.post("/api/projects/prj_missing/exports/report").status_code == 404
+
+
+def test_bd_review_history_and_brief(client, env):
+    project = create_project(client)["project_id"]
+    other = create_project(client, "Other")["project_id"]
+    seeded = seed_review_data(project)
+    path = f"/api/projects/{project}/followup/{seeded['question_id']}"
+    doc = seeded["document_id"]
+
+    def record(kind, revision, **fields):
+        return client.post(path, json=dict(actor="test reviewer", kind=kind, revision=revision, **fields))
+
+    assert record("publish", 0, note="premature").status_code == 409
+    assert record("request", 0, note="Provide table").is_success
+    assert record("request", 0, note="Duplicate").status_code == 409
+    foreign_doc = upload_pdf(client, other).json()["documents"][0]["document_id"]
+    assert record("reply", 1, note="wrong", locator="p1", document_id=foreign_doc).status_code == 422
+    source = dict(locator="Table 1", document_id=doc)
+    assert record("reply", 1, note="table received", **source).is_success
+    assert record("review", 2, decision="experiment", note="independent test required").is_success
+    assert record("publish", 3, note="validation pending").is_success
+    assert record("experiment_result", 4, note="result file reviewed", **source).is_success
+    assert record("review", 5, decision="documents", note="no further experiments").is_success
+    assert record("publish", 6, note="updated interpretation").is_success
+    from docx import Document
+    out = env["data_dir"] / "projects" / project / "exports"
+    assert "updated interpretation" in (out / "HiJenny_Report.md").read_text()
+    assert any("updated interpretation" in c.text for t in Document(out / "HiJenny_Report.docx").tables
+               for row in t.rows for c in row.cells)
+    assert client.get(f"/api/projects/{other}/followup").json()["history"] == {}

@@ -132,3 +132,22 @@ jump to CSR page 11, highlighted quote) → Findings & Questions (Type A/B/C, ga
 problem/why-now, the comparability-gating architecture, synthetic-corpus benchmark with an
 explicit caveat, and the pilot/commercialization roadmap. All demo data is synthetic and
 the deliverable is a human-review draft, never an automated Go/No-Go.
+
+## ORR 补件与 Decision Brief
+
+![ORR 复核的五步控制台演示](assets/bd_followup.gif)
+
+在 Findings & Questions 的 ORR 问题下点击「跟踪卖方答复」，或从侧栏进入「BD 复核」。选择问题后可以添加可比资产，用来源文件及页码或表号定位数据。登记索取材料、卖方答复和验证判断后，由 BD 负责人填写对交易判断的影响并更新 Decision Brief。选择需要实验时可登记实验结果和来源，再次复核。已发布后出现新记录，报告会提示等待重新确认。
+
+示例使用仓库的合成 ASD-101 项目。CSR p11 记载 42.0%（53/126），商业预测 p3 记载 48.4%。模拟卖方补件重列计数；按一位小数复算为 42.1%。复核人保留原报值并追索签核表。虚构可比资产 Example-B 的 45.0% 来自疗效可评价人群，不能据此推断跨试验优效。此处判断无需新增湿实验，交易输入仍待统计核对。
+
+可在安装了项目 demo 依赖及 Chrome 的环境中，创建独立工作区并重放控制台操作：
+
+```bash
+python3 -m hijenny.cli demo-kit --package data/sample_package --out demo_workspace/orr_replay --no-pdf
+OUT=demo_workspace/orr_replay PORT=8138 ./scripts/demo.sh
+# 另一个终端，位于仓库根目录
+python3 tools/demo_bd_followup.py demo_workspace/orr_replay --port 8138 --gif demo_workspace/orr_replay/walkthrough.gif
+```
+
+脚本上传两份带合成标识的工作簿并通过浏览器提交记录。更新后的 Markdown 和 Word 在控制台 Report 页下载。每次重放使用新的工作区。

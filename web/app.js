@@ -179,7 +179,7 @@ function relativeFileUrl(path) {
 function currentView() {
   const hash = (location.hash || '').replace(/^#\/?/, '');
   const view = hash.split('?')[0];
-  return ['projects', 'overview', 'upload', 'evidence', 'findings', 'report'].includes(view) ? view : 'projects';
+  return ['projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
 }
 
 function hashParams() {
@@ -231,6 +231,7 @@ function updateTopbar() {
     overview: ['Asset 360', '药物资产发现与资产评估 · Discovery & Evaluation'],
     upload: ['Upload & Analysis', 'Documents, parsing and pipeline runs'],
     evidence: ['Evidence Workspace', 'Every number traced to document, page and quote'],
+    followup: ['BD 复核', '可比资产、卖方答复与验证判断'],
     findings: ['Findings & Questions', 'Consistency, gaps, seller questions and review'],
     report: ['Report', 'Generated due-diligence report and exports'],
   };
@@ -309,6 +310,7 @@ async function renderView() {
     if (state.view === 'upload') await renderUpload(seq);
     else if (state.view === 'evidence') await renderEvidence(seq);
     else if (state.view === 'findings') await renderFindings(seq);
+    else if (state.view === 'followup') await renderFollowup(seq);
     else if (state.view === 'report') await renderReport(seq);
   } catch (error) {
     if (seq === state.renderSeq) setView(errorPanel(error));
@@ -1262,7 +1264,7 @@ function questionsTableHtml() {
       <td><select data-change="patch-question" data-id="${esc(q.question_id)}" data-field="owner">${selectOptions(OWNERS, q.owner)}</select></td>
       <td>${esc(q.category || '—')}</td>
       <td>
-        <div class="title-cell">${esc(q.question)}</div>
+        <div class="title-cell">${esc(q.question)}</div><a href="#/followup?project=${esc(state.projectId)}&question=${esc(q.question_id)}">跟踪卖方答复 →</a>
         <div class="muted" style="margin-top:3px">${esc(q.rationale || '')}</div>
         ${(q.required_documents || []).length ? `<div class="muted" style="margin-top:3px">Required: ${esc((q.required_documents || []).join('; '))}</div>` : ''}
       </td>

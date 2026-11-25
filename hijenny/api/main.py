@@ -26,6 +26,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from hijenny import config, exports, pipeline, reporting, store
+from sqlalchemy import text
+from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
 
 SERVICE_NAME = "HiJenny API"
@@ -1064,6 +1066,29 @@ def create_app() -> FastAPI:
             _project_or_404(session, project_id)
             events = store.list_review_events(session, project_id, limit=limit)
         return {"events": events, "count": len(events)}
+
+    @app.get("/api/projects/{project_id}/followup")
+    def followup(project_id: str):
+        with store.session_scope() as session:
+            _project_or_404(session, project_id)
+            history = diligence.histories(session, project_id)
+            questions = store.list_questions(session, project_id)
+            return {"questions": questions, "history": history,
+                    "allowed": {q["question_id"]: diligence.allowed(history.get(q["question_id"], []))
+                                for q in questions},
+                    "documents": [_doc_json(d) for d in store.list_documents(session, project_id)],
+                    "evidence": store.get_evidence(session, project_id, limit=10000)}
+
+    @app.post("/api/projects/{project_id}/followup/{question_id}")
+    def record_followup(project_id: str, question_id: str, action: diligence.Action):
+        with store.session_scope() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            _project_or_404(session, project_id)
+            event = diligence.append(session, project_id, question_id, action)
+            history = diligence.histories(session, project_id)[question_id]
+            if any(e["action"] == "publish" for e in history):
+                reporting.generate_project_outputs(session, project_id)
+            return event
 
     # -- Exports ------------------------------------------------------------
     @app.post("/api/projects/{project_id}/exports/questions")

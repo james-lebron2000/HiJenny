@@ -358,8 +358,10 @@ def collect_export_data(session, project_id: str) -> dict:
             ev["trial_key"] = trial_names.get(ev["trial_id"], "")
 
     from hijenny.overview import build_overview
+    from hijenny.diligence import brief_updates
 
     return {
+        "bd_updates": brief_updates(session, project_id, questions),
         "project": project,
         "stats": stats,
         "overview": build_overview(session, project_id),
@@ -1571,6 +1573,11 @@ def render_markdown_report(data: dict) -> str:
         "what is still open, and what the seller must answer. It summarises evidence only."
     )
     add("")
+    for update in data.get("bd_updates", []):
+        add("### BD 复核更新")
+        for key, value in update:
+            add(f"- {key} · {_md_cell(value, 4000)}")
+        add("")
     add("### Asset & transaction context")
     add("")
     add("| Field | Value |")
@@ -2154,6 +2161,9 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
         "One-page summary for BD heads and investment committee: what the package shows, what is "
         "still open, and what the seller must answer. It summarises evidence only."
     )
+    for update in data.get("bd_updates", []):
+        doc.add_heading("BD 复核更新", level=2)
+        _docx_kv_table(doc, update)
     doc.add_heading("Asset & transaction context", level=2)
     _docx_table(doc, ["Field", "Value"], brief["context"], widths=(1.7, 4.6), font_size=9)
     doc.add_heading("What the evidence supports", level=2)
