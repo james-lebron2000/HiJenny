@@ -6,6 +6,12 @@ const designFields = {
   endpoint:'主要终点与评价时间', feasibility:'可行性与限制',
 };
 
+const sapFields = {
+  estimand:'估计目标与伴发事件处理', sets:'分析集与主要分析人群', method:'主要分析模型、比较与效应量',
+  sampleSize:'样本量依据与参数来源', multiplicity:'多重性与检验顺序', missing:'缺失数据处理',
+  sensitivity:'敏感性与亚组分析', interim:'期中分析与停止规则', outputs:'预定表图与数据锁定要求'
+};
+
 function changedSections(before, after) {
   if (!before) return [];
   const changes = [];
@@ -22,6 +28,9 @@ function changedSections(before, after) {
   });
   for (const [key,label] of Object.entries({question:'研究问题',choice:'倾向方案',rationale:'选择依据',pending:'待复核事项'})) {
     if (before[key] !== after[key]) changes.push(label + '已更改');
+  }
+  for (const [key,label] of Object.entries(sapFields)) {
+    if ((before.sap?.[key] || '') !== (after.sap?.[key] || '')) changes.push('SAP · '+label+'已更改，需统计复核');
   }
   return changes;
 }
@@ -59,6 +68,10 @@ function renderClinical() {
       <label>倾向方案 <select id="design-choice">${[['','待讨论'],['A','设计 A'],['B','设计 B']].map(([v,label])=>option(v,version.choice,label)).join('')}</select></label>
       <label>选择依据与取舍<textarea rows="3" maxlength="6000" id="design-rationale">${esc(version.rationale)}</textarea></label>
       <label>待临床与统计复核<textarea rows="3" maxlength="6000" id="design-pending">${esc(version.pending)}</textarea></label>
+      <details id="sap-editor"><summary>起草统计分析计划（SAP）</summary>
+      <p>从倾向方案带入人群、对照、终点和评价时间。以下内容由统计人员填写，空缺会标入 Word 草稿。</p>
+      ${Object.entries(sapFields).map(([key,label])=>`<label>${label}<textarea data-sap="${key}" maxlength="6000" rows="2">${esc(version.sap?.[key] || '')}</textarea></label>`).join('')}
+      <button type="button" class="btn" id="sap-export">保存并导出 SAP 草稿</button></details>
       <button type="submit" class="btn primary">保存设计版本</button>
       <button type="button" class="btn" id="design-export">保存并导出 Word 草稿</button></form>
       ${version.id?`<section class="card"><h2>本版专业复核</h2>
@@ -117,23 +130,27 @@ function renderClinical() {
       const next = {...version,id:crypto.randomUUID(),parent:version.id,created:new Date().toISOString(),
         question,options:[{},{}],choice:$('#design-choice').value,rationale:$('#design-rationale').value,pending:$('#design-pending').value};
       for (const el of $$('textarea[data-opt]',form)) next.options[Number(el.dataset.opt)][el.dataset.key] = el.value;
+      next.sap=Object.fromEntries($$('[data-sap]',form).map(el=>[el.dataset.sap,el.value]));
       next.changes = changedSections(version.id ? version : null,next);
       try { localStorage.setItem(prefix+next.id,JSON.stringify(next)); }
       catch { $('#design-status').textContent = '本机存储失败，请保留此页并检查可用空间。'; return false; }
       version = next; draw(); $('#design-status').textContent = '已保存新版本'; return true;
     }
     form.onsubmit = event => { event.preventDefault(); save(); };
-    $('#design-export').onclick = async () => {
+    async function exportDocument(sap) {
+      if (sap && !$('#design-choice').value) {$('#design-status').textContent='请先选择用于 SAP 的候选设计 A 或 B。';return;}
       if (!save()) return;
       const id = version.id;
       try {
-        const res = await fetch('/api/clinical/synopsis.docx',jsonOptions('POST',{...version,reviews:reviewsFor(id)}));
+        const res = await fetch(sap?'/api/clinical/sap.docx':'/api/clinical/synopsis.docx',jsonOptions('POST',{...version,reviews:reviewsFor(id)}));
         if (!res.ok) throw new Error('导出失败，已保存的版本可重新导出。');
         const url = URL.createObjectURL(await res.blob());
-        const link = document.createElement('a'); link.href = url; link.download = 'HiJenny-方案摘要-'+id+'.docx'; link.click();
+        const link = document.createElement('a'); link.href = url; link.download = (sap?'HiJenny-SAP-':'HiJenny-方案摘要-')+id+'.docx'; link.click();
         setTimeout(()=>URL.revokeObjectURL(url),1000);
       } catch (err) { toast(err.message,'err'); }
-    };
+    }
+    $('#design-export').onclick=()=>exportDocument(false);
+    $('#sap-export').onclick=()=>exportDocument(true);
   }
   draw();
 }

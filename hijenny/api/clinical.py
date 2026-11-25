@@ -6,6 +6,7 @@ from uuid import UUID
 
 from docx import Document
 from fastapi import APIRouter, Response
+from .brief import clean
 from pydantic import BaseModel, Field, model_validator
 
 router = APIRouter()
@@ -41,6 +42,18 @@ class DesignReview(BaseModel):
     created: datetime
 
 
+class StatisticalPlan(BaseModel):
+    estimand: Text = ""
+    sets: Text = ""
+    method: Text = ""
+    sampleSize: Text = ""
+    multiplicity: Text = ""
+    missing: Text = ""
+    sensitivity: Text = ""
+    interim: Text = ""
+    outputs: Text = ""
+
+
 class Synopsis(BaseModel):
     id: UUID
     question: str = Field(min_length=1, max_length=400)
@@ -49,6 +62,7 @@ class Synopsis(BaseModel):
     rationale: Text = ""
     pending: Text = ""
     references: list[TrialReference] = Field(max_length=4)
+    sap: StatisticalPlan = Field(default_factory=StatisticalPlan)
     reviews: list[DesignReview] = Field(default_factory=list)
     changes: list[Text] = Field(default_factory=list, max_length=32)
 
@@ -64,9 +78,7 @@ def export_synopsis(plan: Synopsis):
     document = Document()
 
     def paragraph(value):
-        # Word XML accepts tabs/newlines but rejects control characters in pasted source text.
-        document.add_paragraph("".join(c for c in (value or "待填写") if c in "\t\n\r" or
-                                       32 <= ord(c) <= 0xD7FF or 0xE000 <= ord(c) <= 0xFFFD or ord(c) >= 0x10000))
+        document.add_paragraph(clean(value) or "待填写")
 
     document.add_heading("临床研究方案摘要 · 评审草稿", 0)
     paragraph(plan.question)
@@ -83,6 +95,14 @@ def export_synopsis(plan: Synopsis):
     paragraph(plan.pending)
     for item in plan.changes:
         paragraph(item)
+    append_review_and_sources(document, plan)
+    return word_download(document, "HiJenny-Protocol-Synopsis.docx")
+
+
+def append_review_and_sources(document, plan):
+    def paragraph(value):
+        document.add_paragraph(clean(value) or "待填写")
+
     document.add_heading("本版专业复核记录", 1)
     for role in ("临床", "统计"):
         reviews = [r for r in plan.reviews if r.role == role]
@@ -100,8 +120,42 @@ def export_synopsis(plan: Synopsis):
         paragraph(f"{ref.id} · 登记更新 {ref.date or '未提供'}")
         paragraph(f"https://clinicaltrials.gov/study/{ref.id}")
         paragraph(ref.snapshot)
+
+
+def word_download(document, filename):
     stream = BytesIO()
     document.save(stream)
     return Response(stream.getvalue(),
                     media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    headers={"Content-Disposition": 'attachment; filename="HiJenny-Protocol-Synopsis.docx"'})
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+class SelectedDesign(Synopsis):
+    choice: Literal["A", "B"]
+
+
+@router.post("/api/clinical/sap.docx")
+def export_sap(plan: SelectedDesign):
+    document = Document()
+    document.add_heading("统计分析计划（SAP）· 评审草稿", 0)
+    document.add_paragraph(clean(plan.question))
+    document.add_paragraph(f"来源设计版本 {plan.id} · 候选设计 {plan.choice}")
+    selected = plan.options[0 if plan.choice == "A" else 1]
+    document.add_heading("来源设计与分析约束", 1)
+    for key, label in FIELDS.items():
+        document.add_heading(label, 2)
+        document.add_paragraph(clean(getattr(selected, key)) or "来源设计未填写")
+    document.add_heading("统计计划 · 本版人工填写", 1)
+    sections = {
+        "estimand": "估计目标与伴发事件处理", "sets": "分析集与主要分析人群", "method": "主要分析模型、比较与效应量",
+        "sampleSize": "样本量依据与参数来源", "multiplicity": "多重性与检验顺序", "missing": "缺失数据处理",
+        "sensitivity": "敏感性与亚组分析", "interim": "期中分析与停止规则", "outputs": "预定表图与数据锁定要求",
+    }
+    for key, label in sections.items():
+        document.add_heading(label, 2)
+        document.add_paragraph(clean(getattr(plan.sap, key)) or "待统计人员补充")
+    document.add_heading("本版变更与待复核事项", 1)
+    document.add_paragraph(clean(plan.pending) or "未记录待复核事项")
+    for change in plan.changes:
+        document.add_paragraph(clean(change))
+    append_review_and_sources(document, plan)
+    return word_download(document, f"HiJenny-SAP-{plan.id}.docx")

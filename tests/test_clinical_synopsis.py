@@ -40,3 +40,19 @@ def test_review_export_requires_the_matching_version():
     assert review["note"] in paragraphs
     data["id"] = str(uuid4())
     assert client.post("/api/clinical/synopsis.docx", json=data).status_code == 422
+
+
+def test_sap_uses_selected_design_and_records_missing_statistical_assumptions():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    data = dict(id=str(uuid4()), question="研究设计讨论", options=[{"endpoint": "候选甲"}, {"endpoint": "候选乙"}],
+                references=[], choice="B", sap={"missing": "统计负责人填写的处理规则"})
+    result = client.post("/api/clinical/sap.docx", json=data)
+    assert result.status_code == 200
+    text = "\n".join(p.text for p in Document(BytesIO(result.content)).paragraphs)
+    for expected in (data["id"], "候选乙", "统计负责人填写的处理规则", "待统计人员补充", "待复核"):
+        assert expected in text
+    assert "候选甲" not in text
+    data["choice"] = ""
+    assert client.post("/api/clinical/sap.docx", json=data).status_code == 422
