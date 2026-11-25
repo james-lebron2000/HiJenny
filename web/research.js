@@ -94,7 +94,15 @@ function renderResearch() {
         <div class="comparison-scroll" tabindex="0"><table><thead><tr><th scope="col">登记字段</th>
         ${records.map(item=>`<th scope="col"><a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.id)}</a></th>`).join('')}
         </tr></thead><tbody>${fields.map(field=>`<tr><th scope="row">${esc(field)}</th>
-        ${records.map(item=>`<td>${esc(cell(item.comparison[field]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        ${records.map(item=>`<td>${esc(cell(item.comparison[field]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+        <button type="button" id="design-from-trials" class="btn primary">用这组试验起草研究设计</button>`;
+      $('#design-from-trials', panel).onclick = () => {
+        clinicalSeed = records.map(item => ({
+          id:item.id, title:item.title, date:item.date,
+          snapshot:fields.map(field => field + '：' + cell(item.comparison[field])).join('\n'),
+        }));
+        nav('clinical');
+      };
       panel.scrollIntoView({block:'nearest'});
     };
     const keep = $('#keep-records', output);

@@ -476,7 +476,9 @@ def create_app() -> FastAPI:
         lifespan=_lifespan,
     )
     from .research import router as research_router
+    from .clinical import router as clinical_router
     app.include_router(research_router)
+    app.include_router(clinical_router)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

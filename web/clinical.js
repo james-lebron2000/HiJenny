@@ -1,0 +1,99 @@
+'use strict';
+
+let clinicalSeed = null;
+const designFields = {
+  population:'目标人群', include:'入选标准', exclude:'排除标准', control:'对照与分配',
+  endpoint:'主要终点与评价时间', feasibility:'可行性与限制',
+};
+
+function changedSections(before, after) {
+  if (!before) return [];
+  const changes = [];
+  after.options.forEach((opt, i) => {
+    const label = i === 0 ? 'A' : 'B';
+    for (const key of Object.keys(designFields)) {
+      if (opt[key] === before.options[i][key]) continue;
+      const impact = ['population','include','exclude'].includes(key)
+        ? '复核招募可行性、分析集与亚组定义'
+        : key === 'endpoint' ? '复核访视安排、估计目标与统计分析计划'
+        : key === 'control' ? '复核分配流程、对照假设与统计比较' : '复核实施计划';
+      changes.push('设计 ' + label + ' · ' + designFields[key] + '已更改，' + impact);
+    }
+  });
+  for (const [key,label] of Object.entries({question:'研究问题',choice:'倾向方案',rationale:'选择依据',pending:'待复核事项'})) {
+    if (before[key] !== after[key]) changes.push(label + '已更改');
+  }
+  return changes;
+}
+
+function renderClinical() {
+  const prefix = 'hijenny.clinical.';
+  const blank = () => ({id:null, parent:null, created:'', question:'', options:[{},{}], choice:'',
+    rationale:'', pending:'', references:[], changes:[]});
+  let version = blank();
+  const versions = () => Object.keys(localStorage).filter(k=>k.startsWith(prefix))
+    .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>b.created.localeCompare(a.created));
+  try {
+    if (clinicalSeed) { version.references = clinicalSeed; clinicalSeed = null; }
+    else version = versions()[0] || version;
+  } catch (err) { toast('无法读取本机设计版本。', 'err'); }
+  function draw() {
+    const refs = version.references;
+    setView(`<section class="research-home" lang="zh-CN"><h1>比较两种临床研究设计</h1>
+      <p>用同一研究问题比较人群、对照与主要终点，记录选择依据，导出供团队评审的 Word 摘要。</p>
+      <label>已保存版本 <select id="design-history"><option value="">当前新草稿</option>
+      ${versions().map(v=>option(v.id,version.id,fmtDate(v.created)+' · '+v.question)).join('')}</select></label>
+      <button type="button" id="design-new" class="btn">新建空白设计</button>
+      <details><summary>关联登记试验（${refs.length}）</summary>
+      ${refs.map(r=>`<article><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.id)} · ${esc(r.title)}</a>
+        <p>登记更新 ${esc(r.date)}</p><pre class="source-snapshot">${esc(r.snapshot)}</pre></article>`).join('') ||
+      '<p>在医药检索中选择试验并打开设计对照，可使用选区创建新草稿。</p>'}</details>
+      <form id="design-form"><label>研究问题 <input id="design-question" maxlength="400" required value="${esc(version.question)}"></label>
+      <div class="design-options">${version.options.map((opt,i)=>`<fieldset class="card"><legend>候选设计 ${i?'B':'A'}</legend>
+      ${Object.entries(designFields).map(([k,label])=>`<label>${label}<textarea rows="2" maxlength="6000" data-opt="${i}" data-key="${k}">${esc(opt[k] || '')}</textarea></label>`).join('')}</fieldset>`).join('')}</div>
+      <label>倾向方案 <select id="design-choice">${[['','待讨论'],['A','设计 A'],['B','设计 B']].map(([v,label])=>option(v,version.choice,label)).join('')}</select></label>
+      <label>选择依据与取舍<textarea rows="3" maxlength="6000" id="design-rationale">${esc(version.rationale)}</textarea></label>
+      <label>待临床与统计复核<textarea rows="3" maxlength="6000" id="design-pending">${esc(version.pending)}</textarea></label>
+      <button type="submit" class="btn primary">保存设计版本</button>
+      <button type="button" class="btn" id="design-export">保存并导出 Word 草稿</button></form>
+      <div id="design-status" role="status"></div>
+      ${version.changes.length ? '<h2>本版变更与影响</h2><ul>'+version.changes.map(c=>'<li>'+esc(c)+'</li>').join('')+'</ul>' : ''}</section>`);
+    const form = $('#design-form');
+    let dirty = false;
+    form.oninput = () => { dirty = true; $('#design-status').textContent = '有未保存的修改'; };
+    $('#design-history').onchange = event => {
+      if (dirty && !confirm('放弃未保存的修改并切换版本？')) { event.target.value = version.id || ''; return; }
+      version = versions().find(v=>v.id===event.target.value) || blank(); draw();
+    };
+    $('#design-new').onclick = () => {
+      if (dirty && !confirm('放弃当前未保存的修改并新建？')) return;
+      version = blank(); draw();
+    };
+    function save() {
+      if (!form.reportValidity()) return false;
+      if (version.id && !dirty) return true;
+      const question = $('#design-question').value.trim();
+      if (!question) { $('#design-status').textContent = '请填写研究问题。'; return false; }
+      const next = {...version,id:crypto.randomUUID(),parent:version.id,created:new Date().toISOString(),
+        question,options:[{},{}],choice:$('#design-choice').value,rationale:$('#design-rationale').value,pending:$('#design-pending').value};
+      for (const el of $$('textarea[data-opt]',form)) next.options[Number(el.dataset.opt)][el.dataset.key] = el.value;
+      next.changes = changedSections(version.id ? version : null,next);
+      try { localStorage.setItem(prefix+next.id,JSON.stringify(next)); }
+      catch { $('#design-status').textContent = '本机存储失败，请保留此页并检查可用空间。'; return false; }
+      version = next; draw(); $('#design-status').textContent = '已保存新版本'; return true;
+    }
+    form.onsubmit = event => { event.preventDefault(); save(); };
+    $('#design-export').onclick = async () => {
+      if (!save()) return;
+      const id = version.id;
+      try {
+        const res = await fetch('/api/clinical/synopsis.docx',jsonOptions('POST',version));
+        if (!res.ok) throw new Error('导出失败，已保存的版本可重新导出。');
+        const url = URL.createObjectURL(await res.blob());
+        const link = document.createElement('a'); link.href = url; link.download = 'HiJenny-方案摘要-'+id+'.docx'; link.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      } catch (err) { toast(err.message,'err'); }
+    };
+  }
+  draw();
+}

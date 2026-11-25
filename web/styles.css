@@ -944,3 +944,7 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 .comparison-scroll table { border-collapse: collapse; width: 100%; }
 .comparison-scroll th, .comparison-scroll td { min-width: 8rem; max-width: 24rem; padding: 10px; vertical-align: top; white-space: normal; }
 .research-home textarea { width: 100%; font: inherit; }
+.design-options { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); gap:12px; }
+.design-options fieldset { min-width:0; }
+#design-form label { display:block; margin:12px 0; }
+.source-snapshot { white-space:pre-wrap; overflow-wrap:anywhere; }
