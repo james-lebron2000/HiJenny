@@ -361,7 +361,7 @@ def build(out: Path) -> Path:
         "2. 提供 1 个脱敏临床包；我们 3–5 天交付证据矩阵 + 问题清单 + Decision Brief",
         "3. 复盘准确率、误报与人工工时，决定是否扩展为订阅/企业版",
     ], 14, RGBColor(0xD7, 0xE3, 0xF2), 12)
-    textbox(slide, 0.9, 6.5, 11.5, 0.3, "Contact: [您的姓名/邮箱] · Demo: ./scripts/demo.sh · Docs: docs/DEMO_GUIDE.md",
+    textbox(slide, 0.9, 6.5, 11.5, 0.3, "Contact: [您的姓名/邮箱] · Demo: ./scripts/demo.sh · GIF: docs/assets/demo_walkthrough.gif · Docs: docs/DEMO_GUIDE.md",
             10, False, RGBColor(0x8F, 0xA6, 0xC0))
     footer(slide, 13, total)
 

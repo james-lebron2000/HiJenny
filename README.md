@@ -15,7 +15,7 @@ list and a reviewable report — every claim linked to document + page + verbati
 
 [中文文档](#中文文档) · [English documentation](#english-documentation)
 
-![HiJenny Asset 360 — discovery & evaluation dashboard](docs/assets/screenshots/00_asset360.png)
+![HiJenny demo walkthrough — 5-step interactive due-diligence console](docs/assets/demo_walkthrough.gif)
 
 > **一键演示 / One-command demo:** `./scripts/demo.sh` → http://127.0.0.1:8123/
 > · [演示指南 / Demo guide](docs/DEMO_GUIDE.md) ·
@@ -730,5 +730,6 @@ object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
 | [docs/SECURITY_ONE_PAGER.md](docs/SECURITY_ONE_PAGER.md) | Security questionnaire answers: deployment, isolation, LLM policy, access/audit, honest gaps |
 | [docs/HiJenny_Pitch.pptx](docs/HiJenny_Pitch.pptx) · [PDF](docs/HiJenny_Pitch.pdf) | Investor/customer pitch deck with product screenshots and synthetic-corpus benchmark |
 | [docs/sample_output/](docs/sample_output/) | Ready client deliverables generated from the demo package (MD/DOCX/PDF/XLSX) |
+| [docs/assets/demo_walkthrough.gif](docs/assets/demo_walkthrough.gif) · [MP4](docs/assets/demo_walkthrough.mp4) | 11-second 5-step demo walkthrough (project → Asset 360 → source trace → findings → deliverables) |
 | [AGENTS_CONTRACT.md](AGENTS_CONTRACT.md) | Internal module contract used by the multi-agent build |
 | [LICENSE](LICENSE) | Apache-2.0 |

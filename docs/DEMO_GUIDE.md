@@ -66,7 +66,25 @@ cd HiJenny
 
 ---
 
-## 4. 截图（可直接放进演示文稿）
+## 4. 动图 / Animated walkthrough（约 11 秒）
+
+![HiJenny demo walkthrough](assets/demo_walkthrough.gif)
+
+5 步：打开项目 → Asset 360（发现+评估）→ 点击 ORR 42.0% 回到 CSR 第 11 页 →
+自动分类 A/B/C/U 与缺口 → 交付 Decision Brief + 8-Sheet Excel。
+高清版：[demo_walkthrough.mp4](assets/demo_walkthrough.mp4)。
+
+重新生成（需要本地 demo 服务）：
+
+```bash
+# terminal 1
+./scripts/demo.sh
+# terminal 2
+python3 tools/capture_screenshots.py --base http://127.0.0.1:8123 --out docs/assets/screenshots
+python3 tools/make_demo_gif.py
+```
+
+## 5. 截图（可直接放进演示文稿）
 
 | 页面 | 截图 |
 |---|---|
@@ -79,7 +97,7 @@ cd HiJenny
 
 ---
 
-## 5. 常见演示问题
+## 6. 常见演示问题
 
 **Q: 这是真实数据吗？**
 A: 不是。仓库提供的是合成 Phase 2 肿瘤资料包，用于可复现演示；真实客户资料需要脱敏并在私有环境运行。
@@ -99,7 +117,7 @@ A: `PORT=8124 ./scripts/demo.sh`。
 
 ---
 
-## 6. English quick summary
+## 7. English quick summary
 
 ```bash
 ./scripts/demo.sh          # builds demo_workspace/ and serves http://127.0.0.1:8123/
