@@ -56,3 +56,17 @@ def test_sap_uses_selected_design_and_records_missing_statistical_assumptions():
     assert "候选甲" not in text
     data["choice"] = ""
     assert client.post("/api/clinical/sap.docx", json=data).status_code == 422
+
+
+def test_protocol_keeps_the_selected_operational_plan_and_same_version_sap():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    data = dict(id=str(uuid4()), question="演练", choice="B", options=[{}, {"endpoint": "乙终点"}],
+                references=[], protocol={"A": {"visits": "甲访视"}, "B": {"visits": "乙访视"}},
+                sap={"sets": "本版分析集"})
+    response = client.post("/api/clinical/protocol.docx", json=data)
+    assert response.status_code == 200
+    body = "\n".join(p.text for p in Document(BytesIO(response.content)).paragraphs)
+    assert all(x in body for x in [data["id"], "乙终点", "乙访视", "本版分析集", "待研究团队补充"])
+    assert "甲访视" not in body

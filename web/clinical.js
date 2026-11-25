@@ -12,6 +12,12 @@ const sapFields = {
   sensitivity:'敏感性与亚组分析', interim:'期中分析与停止规则', outputs:'预定表图与数据锁定要求'
 };
 
+const protocolFields = {
+  objectives:'研究背景、依据与目标', organisation:'申办方、研究中心与职责', intervention:'干预实施与合并治疗',
+  visits:'访视安排、评价窗口与随访', discontinuation:'退出、停药与随访处理', safety:'安全监测与报告流程',
+  data:'数据采集、质量控制与管理', ethics:'知情同意、伦理与隐私安排'
+};
+
 function changedSections(before, after) {
   if (!before) return [];
   const changes = [];
@@ -31,6 +37,12 @@ function changedSections(before, after) {
   }
   for (const [key,label] of Object.entries(sapFields)) {
     if ((before.sap?.[key] || '') !== (after.sap?.[key] || '')) changes.push('SAP · '+label+'已更改，需统计复核');
+  }
+  for (const choice of ['A','B']) {
+    for (const [key,label] of Object.entries(protocolFields)) {
+      if ((before.protocol?.[choice]?.[key] || '') !== (after.protocol?.[choice]?.[key] || ''))
+        changes.push('Protocol '+choice+' · '+label+'已更改，需临床复核');
+    }
   }
   return changes;
 }
@@ -68,6 +80,11 @@ function renderClinical() {
       <label>倾向方案 <select id="design-choice">${[['','待讨论'],['A','设计 A'],['B','设计 B']].map(([v,label])=>option(v,version.choice,label)).join('')}</select></label>
       <label>选择依据与取舍<textarea rows="3" maxlength="6000" id="design-rationale">${esc(version.rationale)}</textarea></label>
       <label>待临床与统计复核<textarea rows="3" maxlength="6000" id="design-pending">${esc(version.pending)}</textarea></label>
+      <details id="protocol-editor"><summary>起草临床研究方案正文（Protocol）</summary>
+      <p>选择倾向方案后填写实施章节。A、B 各自保存正文；统计部分引用本版 SAP。</p>
+      ${['A','B'].map(choice=>`<fieldset data-protocol-choice="${choice}"><legend>设计 ${choice} 的方案正文</legend>
+      ${Object.entries(protocolFields).map(([key,label])=>`<label>${label}<textarea data-protocol="${key}" maxlength="6000" rows="2">${esc(version.protocol?.[choice]?.[key] || '')}</textarea></label>`).join('')}</fieldset>`).join('')}
+      <button type="button" class="btn" id="protocol-export">保存并导出 Protocol 草稿</button></details>
       <details id="sap-editor"><summary>起草统计分析计划（SAP）</summary>
       <p>从倾向方案带入人群、对照、终点和评价时间。以下内容由统计人员填写，空缺会标入 Word 草稿。</p>
       ${Object.entries(sapFields).map(([key,label])=>`<label>${label}<textarea data-sap="${key}" maxlength="6000" rows="2">${esc(version.sap?.[key] || '')}</textarea></label>`).join('')}
@@ -85,6 +102,14 @@ function renderClinical() {
       <div id="design-status" role="status"></div>
       ${version.changes.length ? '<h2>本版变更与影响</h2><ul>'+version.changes.map(c=>'<li>'+esc(c)+'</li>').join('')+'</ul>' : ''}</section>`);
     const form = $('#design-form');
+    const choiceInput=$('#design-choice',form);
+    function displayProtocol() {
+      for (const section of $$('[data-protocol-choice]',form)) {
+        section.hidden=section.disabled=section.dataset.protocolChoice!==choiceInput.value;
+      }
+    }
+    choiceInput.addEventListener('change',displayProtocol);
+    displayProtocol();
     let dirty = false;
     let reviewDirty = false;
     const reviewForm=$('#design-review-form');
@@ -130,6 +155,11 @@ function renderClinical() {
       const next = {...version,id:crypto.randomUUID(),parent:version.id,created:new Date().toISOString(),
         question,options:[{},{}],choice:$('#design-choice').value,rationale:$('#design-rationale').value,pending:$('#design-pending').value};
       for (const el of $$('textarea[data-opt]',form)) next.options[Number(el.dataset.opt)][el.dataset.key] = el.value;
+      next.protocol={};
+      for (const section of $$('[data-protocol-choice]',form)) {
+        next.protocol[section.dataset.protocolChoice]=Object.fromEntries(
+          $$('[data-protocol]',section).map(el=>[el.dataset.protocol,el.value]));
+      }
       next.sap=Object.fromEntries($$('[data-sap]',form).map(el=>[el.dataset.sap,el.value]));
       next.changes = changedSections(version.id ? version : null,next);
       try { localStorage.setItem(prefix+next.id,JSON.stringify(next)); }
@@ -137,20 +167,21 @@ function renderClinical() {
       version = next; draw(); $('#design-status').textContent = '已保存新版本'; return true;
     }
     form.onsubmit = event => { event.preventDefault(); save(); };
-    async function exportDocument(sap) {
-      if (sap && !$('#design-choice').value) {$('#design-status').textContent='请先选择用于 SAP 的候选设计 A 或 B。';return;}
+    async function exportDocument(kind, label) {
+      if (kind!=='synopsis' && !choiceInput.value) {$('#design-status').textContent='请先选择用于 '+label+' 的候选设计 A 或 B。';return;}
       if (!save()) return;
       const id = version.id;
       try {
-        const res = await fetch(sap?'/api/clinical/sap.docx':'/api/clinical/synopsis.docx',jsonOptions('POST',{...version,reviews:reviewsFor(id)}));
+        const res = await fetch('/api/clinical/'+kind+'.docx',jsonOptions('POST',{...version,reviews:reviewsFor(id)}));
         if (!res.ok) throw new Error('导出失败，已保存的版本可重新导出。');
         const url = URL.createObjectURL(await res.blob());
-        const link = document.createElement('a'); link.href = url; link.download = (sap?'HiJenny-SAP-':'HiJenny-方案摘要-')+id+'.docx'; link.click();
+        const link = document.createElement('a'); link.href = url; link.download = ('HiJenny-'+label+'-')+id+'.docx'; link.click();
         setTimeout(()=>URL.revokeObjectURL(url),1000);
       } catch (err) { toast(err.message,'err'); }
     }
-    $('#design-export').onclick=()=>exportDocument(false);
-    $('#sap-export').onclick=()=>exportDocument(true);
+    $('#design-export').onclick=()=>exportDocument('synopsis','方案摘要');
+    $('#protocol-export').onclick=()=>exportDocument('protocol','Protocol');
+    $('#sap-export').onclick=()=>exportDocument('sap','SAP');
   }
   draw();
 }

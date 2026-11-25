@@ -54,6 +54,17 @@ class StatisticalPlan(BaseModel):
     outputs: Text = ""
 
 
+class ProtocolSections(BaseModel):
+    objectives: Text = ""
+    organisation: Text = ""
+    intervention: Text = ""
+    visits: Text = ""
+    discontinuation: Text = ""
+    safety: Text = ""
+    data: Text = ""
+    ethics: Text = ""
+
+
 class Synopsis(BaseModel):
     id: UUID
     question: str = Field(min_length=1, max_length=400)
@@ -63,8 +74,9 @@ class Synopsis(BaseModel):
     pending: Text = ""
     references: list[TrialReference] = Field(max_length=4)
     sap: StatisticalPlan = Field(default_factory=StatisticalPlan)
+    protocol: dict[Literal["A", "B"], ProtocolSections] = Field(default_factory=dict)
     reviews: list[DesignReview] = Field(default_factory=list)
-    changes: list[Text] = Field(default_factory=list, max_length=32)
+    changes: list[Text] = Field(default_factory=list, max_length=48)
 
     @model_validator(mode="after")
     def reviews_belong_to_this_version(self):
@@ -139,11 +151,22 @@ def export_sap(plan: SelectedDesign):
     document.add_heading("统计分析计划（SAP）· 评审草稿", 0)
     document.add_paragraph(clean(plan.question))
     document.add_paragraph(f"来源设计版本 {plan.id} · 候选设计 {plan.choice}")
+    append_selected_design(document, plan)
+    append_statistics(document, plan)
+    append_changes(document, plan)
+    append_review_and_sources(document, plan)
+    return word_download(document, f"HiJenny-SAP-{plan.id}.docx")
+
+
+def append_selected_design(document, plan):
     selected = plan.options[0 if plan.choice == "A" else 1]
     document.add_heading("来源设计与分析约束", 1)
     for key, label in FIELDS.items():
         document.add_heading(label, 2)
         document.add_paragraph(clean(getattr(selected, key)) or "来源设计未填写")
+
+
+def append_statistics(document, plan):
     document.add_heading("统计计划 · 本版人工填写", 1)
     sections = {
         "estimand": "估计目标与伴发事件处理", "sets": "分析集与主要分析人群", "method": "主要分析模型、比较与效应量",
@@ -153,9 +176,36 @@ def export_sap(plan: SelectedDesign):
     for key, label in sections.items():
         document.add_heading(label, 2)
         document.add_paragraph(clean(getattr(plan.sap, key)) or "待统计人员补充")
+
+
+def append_changes(document, plan):
     document.add_heading("本版变更与待复核事项", 1)
     document.add_paragraph(clean(plan.pending) or "未记录待复核事项")
     for change in plan.changes:
         document.add_paragraph(clean(change))
+
+
+@router.post("/api/clinical/protocol.docx")
+def export_protocol(plan: SelectedDesign):
+    document = Document()
+    document.add_heading("临床研究方案（Protocol）· 评审草稿", 0)
+    document.add_paragraph(clean(plan.question))
+    document.add_paragraph(f"来源设计版本 {plan.id} · 候选设计 {plan.choice}")
+    append_selected_design(document, plan)
+    document.add_heading("方案选择依据", 1)
+    document.add_paragraph(clean(plan.rationale) or "待填写")
+    document.add_heading("研究实施 · 所选设计的人工填写内容", 1)
+    protocol = plan.protocol.get(plan.choice, ProtocolSections())
+    sections = {
+        "objectives": "研究背景、依据与目标", "organisation": "申办方、研究中心与职责",
+        "intervention": "干预实施与合并治疗", "visits": "访视安排、评价窗口与随访",
+        "discontinuation": "退出、停药与随访处理", "safety": "安全监测与报告流程",
+        "data": "数据采集、质量控制与管理", "ethics": "知情同意、伦理与隐私安排",
+    }
+    for key, label in sections.items():
+        document.add_heading(label, 2)
+        document.add_paragraph(clean(getattr(protocol, key)) or "待研究团队补充")
+    append_statistics(document, plan)
+    append_changes(document, plan)
     append_review_and_sources(document, plan)
-    return word_download(document, f"HiJenny-SAP-{plan.id}.docx")
+    return word_download(document, f"HiJenny-Protocol-{plan.id}.docx")
