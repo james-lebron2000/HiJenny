@@ -13,15 +13,23 @@ function priceScenario(flows, rate) {
   return {presentValues,total};
 }
 
+const dealFields = [
+  ['name','交易双方与资产','text'], ['disclosed','披露日','date'],
+  ['scope','授权地区、权利范围及资产阶段','text'], ['currency','披露币种','text'],
+  ['upfront','已披露首付款（百万）','number'], ['milestones','或有里程碑上限（百万）','number'],
+  ['source','披露来源及页码或链接','text'], ['limits','与本资产的可比性限制','text']
+];
+
 async function renderValuation(seq) {
   const project = state.projectId;
   const prefix = 'hijenny.valuation.' + project + '.';
-  const response = await api('/api/projects/' + encodeURIComponent(project) + '/questions');
+  const projectPath = '/api/projects/' + encodeURIComponent(project);
+  const [response, detail] = await Promise.all([api(projectPath+'/questions'), api(projectPath)]);
   if (seq !== state.renderSeq) return;
   const versions = () => Object.keys(localStorage).filter(k=>k.startsWith(prefix))
     .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>b.created.localeCompare(a.created));
   const newFlow = () => ({label:'',basis:'',cases:[{},{}]});
-  const newPlan = () => ({name:'',asOf:'',currency:'USD',rate:'',basis:'',comparable:'', flows:[newFlow()],question:null});
+  const newPlan = () => ({name:detail.project.asset_name || '',origin:detail.project.meta?.opportunity || null,deals:[],asOf:'',currency:'USD',rate:'',basis:'',comparable:'', flows:[newFlow()],question:null});
   const requested = response.questions.find(q=>q.question_id===hashParams().get('question'));
   const previous = versions();
   let prior = (requested ? previous.find(v=>v.question?.question_id===requested.question_id) : previous[0]) || null;
@@ -36,6 +44,7 @@ async function renderValuation(seq) {
       <p>按同一币种录入增量净现金流。收款填正数，付款填负数；发生概率按估值日的无条件概率填写。</p>
       <label>项目内已保存的估值版本<select id="val-history"><option value="">新估值</option>
       ${versions().map(v=>option(v.id,prior?.id,v.name+' · '+fmtDate(v.created))).join('')}</select></label>
+      ${opportunityOrigin(draft.origin)}
       <form id="val-form"><fieldset class="card"><legend>估值口径</legend>
       <label>估值名称<input required maxlength="200" data-head="name" value="${esc(draft.name)}"></label>
       <label>估值日<input required type="date" data-head="asOf" value="${esc(draft.asOf)}"></label>
@@ -44,7 +53,11 @@ async function renderValuation(seq) {
       <label>折现率和估值日的来源或假设<textarea required maxlength="3000" data-head="basis">${esc(draft.basis)}</textarea></label>
       <label>参照交易、披露日期、出处和可比性限制（如有）<textarea maxlength="4000" data-head="comparable">${esc(draft.comparable)}</textarea></label>
       <label>关联卖方问题<select id="val-question"><option value="">无关联</option>${questions.map(q=>option(q.question_id,draft.question?.question_id,q.question)).join('')}</select></label>
-      </fieldset><h2>现金流与里程碑</h2><p>第 0 年为估值日，第 1 年及以后按估值日周年折现。两种情景可分别调整收付金额、发生概率和时间。</p>
+      </fieldset><h2>可比交易披露</h2><p>每笔交易按原币种记录。未披露金额留空，已披露为零填 0。里程碑上限单独展示，现金流假设由评审人填写。</p>
+      ${(draft.deals || []).map((deal,i)=>`<fieldset class="card" data-deal="${i}"><legend>可比交易 ${i+1}</legend>
+      ${dealFields.map(([key,label,type])=>`<label>${label}<input data-term="${key}" type="${type}" ${type==='number'?'min="0" step="any"':'required maxlength="2000"'} value="${esc(deal[key] ?? '')}"></label>`).join('')}
+      <button type="button" class="btn" data-remove-deal="${i}">移除此交易</button></fieldset>`).join('')}
+      <button type="button" class="btn" id="val-add-deal">增加可比交易</button><h2>现金流与里程碑</h2><p>第 0 年为估值日，第 1 年及以后按估值日周年折现。两种情景可分别调整收付金额、发生概率和时间。</p>
       ${draft.flows.map((row,i)=>`<fieldset class="card" data-row="${i}"><legend>现金流 ${i+1}</legend>
       <label>项目（如首付款、研发成本或产品净现金流）<input data-row-field="label" maxlength="200" required value="${esc(row.label)}"></label>
       ${scenarioNames.map((s,j)=>`<fieldset><legend>${s}情景</legend>
@@ -59,6 +72,8 @@ async function renderValuation(seq) {
     const result=$('#val-result');
     function collect() {
       for (const el of $$('[data-head]',form)) draft[el.dataset.head]=el.value.trim();
+      draft.deals = $$('[data-deal]',form).map(box=>Object.fromEntries(
+        $$('[data-term]',box).map(el=>[el.dataset.term,el.value.trim()])));
       const picked=questions.find(q=>q.question_id===$('#val-question').value);
       if (picked) draft.question={question_id:picked.question_id,question:picked.question,status:picked.status};
       else draft.question=null;
@@ -75,6 +90,10 @@ async function renderValuation(seq) {
         ${v.flows.map((f,i)=>`<tr><th>${esc(f.label)}</th>${v.outputs.map(o=>`<td>${number(o.presentValues[i])}</td>`).join('')}</tr>`).join('')}
         <tr><th>合计</th>${totals.map(t=>`<td>${number(t)}</td>`).join('')}</tr></tbody></table>
         <p>替代情景较基准变化 ${number(totals[1]-totals[0])} 百万 ${esc(v.currency)}。</p>
+        ${v.deals?.length ? `<h3>本版参照的交易条款</h3><div class="bd-scroll"><table>
+        <thead><tr><th>交易与披露日</th><th>授权范围</th><th>原币种</th><th>首付款（百万）</th><th>里程碑上限（百万）</th><th>来源与限制</th></tr></thead>
+        <tbody>${v.deals.map(d=>`<tr><th>${esc(d.name)}<br>${esc(d.disclosed)}</th><td>${esc(d.scope)}</td><td>${esc(d.currency)}</td>
+        <td>${esc(d.upfront || '未披露')}</td><td>${esc(d.milestones || '未披露')}</td><td>${esc(d.source)}<br>${esc(d.limits)}</td></tr>`).join('')}</tbody></table></div>` : ''}
         ${v.question?`<p><a href="#/followup?project=${encodeURIComponent(project)}&question=${encodeURIComponent(v.question.question_id)}">复核关联卖方问题</a> · 保存时状态 ${esc(v.question.status)}</p>`:''}
         <button type="button" id="val-download" class="btn">下载内部估值底稿</button>`;
       $('#val-download').onclick=()=>{
@@ -82,6 +101,11 @@ async function renderValuation(seq) {
           '年折现率 '+v.rate+'% · '+v.basis,'参照交易及限制 '+(v.comparable || '未提供'),
           '关联问题 '+(v.question ? v.question.question_id+' '+v.question.question+' · '+v.question.status : '未关联'),
           '单笔现值 = 有符号金额 × 无条件发生概率 ÷ (1 + 年折现率)^年份'];
+        if (v.origin) lines.push('', '机会筛选快照 '+v.origin.snapshot_id, v.origin.asset, v.origin.rationale,
+          v.origin.trial_title, sourceLink({id:v.origin.nct}), '检索时间 '+v.origin.retrieved);
+        for (const deal of v.deals || []) {
+          lines.push('', '可比交易披露', ...dealFields.map(([key,label])=>label+' · '+(deal[key] || '未披露')));
+        }
         v.flows.forEach((f,i)=>{
           lines.push('',f.label,...f.cases.map((c,j)=>scenarioNames[j]+' · 第 '+c.year+' 年 · 金额 '+c.amount+' · 概率 '+c.probability+'% · 现值 '+v.outputs[j].presentValues[i]),'依据 '+f.basis);
         });
@@ -97,6 +121,10 @@ async function renderValuation(seq) {
       if (dirty && !confirm('放弃未保存的修改并切换版本？')) {e.target.value=prior?.id || '';return;}
       prior=versions().find(v=>v.id===e.target.value) || null;draft=structuredClone(prior || newPlan());dirty=false;paint();
     };
+    $('#val-add-deal').onclick=()=>{collect();draft.deals.push({});dirty=true;paint();};
+    for (const el of $$('[data-remove-deal]',form)) el.onclick=()=>{
+      collect();draft.deals.splice(Number(el.dataset.removeDeal),1);dirty=true;paint();
+    };
     $('#val-add').onclick=()=>{collect();draft.flows.push(newFlow());dirty=true;paint();};
     for (const el of $$('[data-remove-flow]',form)) el.onclick=()=>{
       collect();draft.flows.splice(Number(el.dataset.removeFlow),1);dirty=true;paint();
@@ -104,6 +132,9 @@ async function renderValuation(seq) {
     form.onsubmit=e=>{
       e.preventDefault();collect();
       if (!draft.name || !draft.basis || draft.flows.some(f=>!f.basis || !f.label)) {result.textContent='请填写现金流名称和假设依据。';return;}
+      if (draft.deals.some(deal=>dealFields.some(([key,,type])=>type!=='number' && !deal[key]))) {
+        result.textContent='请填写可比交易的披露来源、币种和可比性限制等必填项。';return;
+      }
       if (!dirty && prior) {show(prior);return;}
       try {
         const outputs=scenarioNames.map((_,j)=>priceScenario(draft.flows.map(f=>({
