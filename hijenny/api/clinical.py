@@ -1,11 +1,12 @@
 """Produce an editable protocol synopsis from a clinician's saved design decisions."""
+from datetime import datetime
 from io import BytesIO
 from typing import Annotated, Literal
 from uuid import UUID
 
 from docx import Document
 from fastapi import APIRouter, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 router = APIRouter()
 Text = Annotated[str, Field(max_length=6000)]
@@ -31,6 +32,15 @@ class TrialReference(BaseModel):
     snapshot: str = Field(default="", max_length=500_000)
 
 
+class DesignReview(BaseModel):
+    version: UUID
+    role: Literal["临床", "统计"]
+    reviewer: str = Field(min_length=1, max_length=120)
+    decision: Literal["需修改", "同意当前设计", "需补充材料"]
+    note: str = Field(min_length=1, max_length=6000)
+    created: datetime
+
+
 class Synopsis(BaseModel):
     id: UUID
     question: str = Field(min_length=1, max_length=400)
@@ -39,7 +49,14 @@ class Synopsis(BaseModel):
     rationale: Text = ""
     pending: Text = ""
     references: list[TrialReference] = Field(max_length=4)
+    reviews: list[DesignReview] = Field(default_factory=list)
     changes: list[Text] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode="after")
+    def reviews_belong_to_this_version(self):
+        if any(review.version != self.id for review in self.reviews):
+            raise ValueError("复核记录与方案版本不符")
+        return self
 
 
 @router.post("/api/clinical/synopsis.docx")
@@ -66,6 +83,15 @@ def export_synopsis(plan: Synopsis):
     paragraph(plan.pending)
     for item in plan.changes:
         paragraph(item)
+    document.add_heading("本版专业复核记录", 1)
+    for role in ("临床", "统计"):
+        reviews = [r for r in plan.reviews if r.role == role]
+        document.add_heading(f"{role}复核", 2)
+        if not reviews:
+            paragraph("待复核")
+        for review in reviews:
+            paragraph(f"{review.reviewer} · {review.created.isoformat()} · {review.decision}")
+            paragraph(review.note)
     document.add_heading("公开登记来源快照", 1)
     if not plan.references:
         paragraph("未关联登记来源")

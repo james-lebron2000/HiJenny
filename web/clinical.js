@@ -37,6 +37,11 @@ function renderClinical() {
     if (clinicalSeed) { version.references = clinicalSeed; clinicalSeed = null; }
     else version = versions()[0] || version;
   } catch (err) { toast('无法读取本机设计版本。', 'err'); }
+  function reviewsFor(id) {
+    const reviewPrefix='hijenny.design-review.'+id+'.';
+    return Object.keys(localStorage).filter(key=>key.startsWith(reviewPrefix))
+      .map(key=>JSON.parse(localStorage.getItem(key))).sort((a,b)=>a.created.localeCompare(b.created));
+  }
   function draw() {
     const refs = version.references;
     setView(`<section class="research-home" lang="zh-CN"><h1>比较两种临床研究设计</h1>
@@ -56,21 +61,56 @@ function renderClinical() {
       <label>待临床与统计复核<textarea rows="3" maxlength="6000" id="design-pending">${esc(version.pending)}</textarea></label>
       <button type="submit" class="btn primary">保存设计版本</button>
       <button type="button" class="btn" id="design-export">保存并导出 Word 草稿</button></form>
+      ${version.id?`<section class="card"><h2>本版专业复核</h2>
+      <p>意见保存在本浏览器，按设计版本归档。修改设计后，临床和统计人员可分别复核新版。</p>
+      <div id="design-reviews"></div><form id="design-review-form">
+      <label>专业角色<select name="role"><option>临床</option><option>统计</option></select></label>
+      <label>复核人<input name="reviewer" required maxlength="120"></label>
+      <label>复核意见<select name="decision"><option>需修改</option><option>同意当前设计</option><option>需补充材料</option></select></label>
+      <label>理由与待处理事项<textarea name="note" required maxlength="6000"></textarea></label>
+      <button class="btn" type="submit">把意见记入此版本</button></form></section>`:''}
       <div id="design-status" role="status"></div>
       ${version.changes.length ? '<h2>本版变更与影响</h2><ul>'+version.changes.map(c=>'<li>'+esc(c)+'</li>').join('')+'</ul>' : ''}</section>`);
     const form = $('#design-form');
     let dirty = false;
+    let reviewDirty = false;
+    const reviewForm=$('#design-review-form');
+    function paintReviews() {
+      const reviews=reviewsFor(version.id);
+      $('#design-reviews').innerHTML=['临床','统计'].map(role=>{
+        const entries=reviews.filter(r=>r.role===role);
+        return '<h3>'+role+'复核 · '+esc(entries.at(-1)?.decision || '待复核')+'</h3>'+
+          entries.map(r=>'<p>'+esc(r.reviewer)+' · '+esc(fmtDate(r.created))+' · '+esc(r.decision)+'<br>'+esc(r.note)+'</p>').join('');
+      }).join('');
+    }
+    if (reviewForm) {
+      paintReviews();
+      reviewForm.oninput=()=>{reviewDirty=true;};
+      reviewForm.onsubmit=event=>{
+        event.preventDefault();
+        const status=$('#design-status');
+        if (dirty) {status.textContent='请先保存设计修改，再复核新版本。';return;}
+        const data=Object.fromEntries(new FormData(reviewForm));
+        const entry={...data,reviewer:data.reviewer.trim(),note:data.note.trim(),version:version.id,created:new Date().toISOString()};
+        if (!entry.reviewer || !entry.note) {status.textContent='请填写复核人和具体意见。';return;}
+        try {
+          localStorage.setItem('hijenny.design-review.'+version.id+'.'+crypto.randomUUID(),JSON.stringify(entry));
+          paintReviews();reviewForm.reset();reviewDirty=false;status.textContent='已保存本版复核意见';
+        } catch {status.textContent='复核意见保存失败，请检查本机存储空间。';}
+      };
+    }
     form.oninput = () => { dirty = true; $('#design-status').textContent = '有未保存的修改'; };
     $('#design-history').onchange = event => {
-      if (dirty && !confirm('放弃未保存的修改并切换版本？')) { event.target.value = version.id || ''; return; }
+      if ((dirty || reviewDirty) && !confirm('放弃未保存的修改并切换版本？')) { event.target.value = version.id || ''; return; }
       version = versions().find(v=>v.id===event.target.value) || blank(); draw();
     };
     $('#design-new').onclick = () => {
-      if (dirty && !confirm('放弃当前未保存的修改并新建？')) return;
+      if ((dirty || reviewDirty) && !confirm('放弃当前未保存的修改并新建？')) return;
       version = blank(); draw();
     };
     function save() {
       if (!form.reportValidity()) return false;
+      if (reviewDirty && !confirm('复核表还有未登记的意见。继续仅使用已保存的复核记录？')) return false;
       if (version.id && !dirty) return true;
       const question = $('#design-question').value.trim();
       if (!question) { $('#design-status').textContent = '请填写研究问题。'; return false; }
@@ -87,7 +127,7 @@ function renderClinical() {
       if (!save()) return;
       const id = version.id;
       try {
-        const res = await fetch('/api/clinical/synopsis.docx',jsonOptions('POST',version));
+        const res = await fetch('/api/clinical/synopsis.docx',jsonOptions('POST',{...version,reviews:reviewsFor(id)}));
         if (!res.ok) throw new Error('导出失败，已保存的版本可重新导出。');
         const url = URL.createObjectURL(await res.blob());
         const link = document.createElement('a'); link.href = url; link.download = 'HiJenny-方案摘要-'+id+'.docx'; link.click();

@@ -23,3 +23,20 @@ def test_protocol_synopsis_retains_choices_sources_and_explicit_gaps():
         assert expected in text
     data["options"] = [{}]
     assert client.post("/api/clinical/synopsis.docx", json=data).status_code == 422
+
+
+def test_review_export_requires_the_matching_version():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    version = str(uuid4())
+    review = dict(version=version, role="统计", reviewer="演练统计师", decision="需修改",
+                  note="澄清主要分析集", created="2026-11-26T12:30:00Z")
+    data = dict(id=version, question="演练", options=[{}, {}], references=[], reviews=[review])
+    response = client.post("/api/clinical/synopsis.docx", json=data)
+    assert response.status_code == 200
+    paragraphs = [p.text for p in Document(BytesIO(response.content)).paragraphs]
+    assert paragraphs[paragraphs.index("临床复核") + 1] == "待复核"
+    assert review["note"] in paragraphs
+    data["id"] = str(uuid4())
+    assert client.post("/api/clinical/synopsis.docx", json=data).status_code == 422
