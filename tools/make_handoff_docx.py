@@ -123,7 +123,15 @@ def add_table(doc, lines: list[str]) -> None:
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.autofit = True
     for r_idx, row in enumerate(rows):
-        cells = table.add_row().cells
+        tr = table.add_row()
+        trPr = tr._tr.get_or_add_trPr()
+        cant_split = OxmlElement("w:cantSplit")
+        trPr.append(cant_split)
+        if r_idx == 0:
+            tbl_header = OxmlElement("w:tblHeader")
+            tbl_header.set(qn("w:val"), "true")
+            trPr.append(tbl_header)
+        cells = tr.cells
         for c_idx in range(cols):
             value = row[c_idx] if c_idx < len(row) else ""
             set_cell_text(cells[c_idx], value, bold=(r_idx == 0), size=8)

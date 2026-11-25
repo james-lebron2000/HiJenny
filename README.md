@@ -734,6 +734,7 @@ object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
 | [docs/assets/demo_walkthrough.gif](docs/assets/demo_walkthrough.gif) · [MP4](docs/assets/demo_walkthrough.mp4) | 10.9s real-click demo walkthrough (Playwright: project → Asset 360 → source trace → findings filter → report) |
 | [docs/HiJenny_Handoff.docx](docs/HiJenny_Handoff.docx) · [PDF](docs/HiJenny_Handoff.pdf) · [Markdown](docs/HANDOFF.md) | Complete project handoff pack for colleagues (status, architecture, demo, ops, risks, roadmap) |
 | [docs/HiJenny_PRD_v0.2.docx](docs/HiJenny_PRD_v0.2.docx) · [PDF](docs/HiJenny_PRD_v0.2.pdf) · [Markdown](docs/PRD_v0.2_Noah_Inspired.md) | Noah-inspired v0.2/v1.0 PRD: external asset graph, Ask HiJenny agent, Decision Memo, watchlist, collaboration, release plan |
+| [docs/HiJenny_Paid_Pilot_PRD.docx](docs/HiJenny_Paid_Pilot_PRD.docx) · [PDF](docs/HiJenny_Paid_Pilot_PRD.pdf) · [Markdown](docs/PAID_PILOT_PRD_ZH.md) | Paid-pilot PRD: one asset / one clinical DD round, ¥19,800 pilot, homepage + 2-min demo, quality and validation plan |
 | [docs/assets/bd_followup.gif](docs/assets/bd_followup.gif) | BD follow-up loop: comparable asset → seller reply → review → Decision Brief |
 | [AGENTS_CONTRACT.md](AGENTS_CONTRACT.md) | Internal module contract used by the multi-agent build |
 | [LICENSE](LICENSE) | Apache-2.0 |
