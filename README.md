@@ -24,7 +24,7 @@ list and a reviewable report — every claim linked to document + page + verbati
 > [截图 / Screenshots](docs/assets/screenshots/)
 >
 > **状态 / Status:** MVP 端到端可运行 / end-to-end MVP. 示例包 13 份文档、284 页；
-> 136 条证据全部通过原文校验；11 条 active findings；6 条卖方问题；176 个自动化测试。
+> 136 条证据全部通过原文校验；11 条 active findings；6 条卖方问题；177 个自动化测试。
 > 合成语料，非真实客户性能验证 — 见 [限制](#14-安全与限制) / [Limitations](#14-security--limitations)。
 >
 > **产品设计 / Product design:** [docs/PRODUCT.md](docs/PRODUCT.md) ·
@@ -59,6 +59,7 @@ HiJenny 面向药企 BD / License-in 团队，自动完成创新药临床尽调�
 | 一致性检查 | 六维可比性门控，避免把不同 cutoff/人群的数据误判为矛盾 |
 | 缺口分析 | 10 个 YAML 规则包、46 条肿瘤 Phase 1–3 尽调检查项 |
 | 卖方问题 | 按 finding 簇合并、优先级、责任部门、所需文件、证据链接；支持人工编辑/锁定/导出 |
+| **BD 复核** | 问题级卖方答复跟踪：可比资产、索取材料、答复/实验结果、验证判断、更新 Decision Brief；全程 audit trail |
 | 交付物 | Decision Brief、证据矩阵、风险清单、覆盖度、问题清单；MD/DOCX/XLSX |
 | **Asset 360 仪表盘** | 一屏汇总**药物资产发现**（资产档案/试验/关键临床事实/文件构成）与**资产评估**（8 维就绪度、A/B/C/U、风险与问题、版本），可点击钻取原文 |
 | 审核工作台 | 上传 → 分析进度 → 证据工作区（跳转 PDF 页码）→ 问题审核 → 报告下载 |
@@ -331,10 +332,10 @@ python3 -m eval.benchmark --adversarial --out eval/reports/adversarial
 ## 12. 测试与 CI
 
 ```bash
-python3 -m pytest -q        # 176 个单元/集成测试；含真实流水线 e2e
+python3 -m pytest -q        # 177 个单元/集成测试；含真实流水线 e2e
 ```
 
-GitHub Actions（`.github/workflows/ci.yml`）在每次 push 时执行：安装 → 176 tests →
+GitHub Actions（`.github/workflows/ci.yml`）在每次 push 时执行：安装 → 177 tests →
 确定性生成示例包 → CLI 冒烟跑通。
 
 ## 13. 常见问题（FAQ）
@@ -665,10 +666,10 @@ Current build on the synthetic corpus (**not real-client validation**):
 ## 12. Tests & CI
 
 ```bash
-python3 -m pytest -q        # 176 unit + integration tests, including a real pipeline e2e
+python3 -m pytest -q        # 177 unit + integration tests, including a real pipeline e2e
 ```
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push: install → 176 tests
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push: install → 177 tests
 → deterministic sample generation → CLI smoke test.
 
 ## 13. FAQ / troubleshooting
@@ -731,5 +732,7 @@ object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
 | [docs/HiJenny_Pitch.pptx](docs/HiJenny_Pitch.pptx) · [PDF](docs/HiJenny_Pitch.pdf) | Investor/customer pitch deck with product screenshots and synthetic-corpus benchmark |
 | [docs/sample_output/](docs/sample_output/) | Ready client deliverables generated from the demo package (MD/DOCX/PDF/XLSX) |
 | [docs/assets/demo_walkthrough.gif](docs/assets/demo_walkthrough.gif) · [MP4](docs/assets/demo_walkthrough.mp4) | 10.9s real-click demo walkthrough (Playwright: project → Asset 360 → source trace → findings filter → report) |
+| [docs/HiJenny_Handoff.docx](docs/HiJenny_Handoff.docx) · [PDF](docs/HiJenny_Handoff.pdf) · [Markdown](docs/HANDOFF.md) | Complete project handoff pack for colleagues (status, architecture, demo, ops, risks, roadmap) |
+| [docs/assets/bd_followup.gif](docs/assets/bd_followup.gif) | BD follow-up loop: comparable asset → seller reply → review → Decision Brief |
 | [AGENTS_CONTRACT.md](AGENTS_CONTRACT.md) | Internal module contract used by the multi-agent build |
 | [LICENSE](LICENSE) | Apache-2.0 |

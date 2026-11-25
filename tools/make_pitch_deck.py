@@ -284,7 +284,7 @@ def build(out: Path) -> Path:
     bullets(slide, 0.75, 4.0, 11.8, 2.3, [
         "284 页端到端约 11 秒；默认离线模式 0 次 LLM 调用；136 条证据全部通过原文校验。",
         "注入攻击控制 PASS：伪造“ORR 90%”未被采纳，且被标记为技术风险。",
-        "176 个自动化测试 + CI；v1 → v2 上传后旧 Type A 自动 resolved、Type C 持续存在。",
+        "177 个自动化测试 + CI；v1 → v2 上传后旧 Type A 自动 resolved、Type C 持续存在。",
         "以上为合成语料结果，不是真实客户性能；真实试点正在用双人裁定 benchmark 验证（见 docs/PRODUCTION_ROADMAP.md）。",
     ], 13, TEXT, 8)
     footer(slide, 9, total)

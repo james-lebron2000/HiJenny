@@ -209,7 +209,7 @@ GET  /                                 (SPA)
 
 ## 11. Testing and evaluation
 
-* 176 tests: parsers/ingestion, extraction/validation, agents/rules, API/exports,
+* 177 tests: parsers/ingestion, extraction/validation, agents/rules, API/exports,
   metrics, end-to-end pipeline (`tests/test_e2e.py` runs ingest → extract →
   verify → agents → report on the committed sample package and asserts
   provenance, planted findings, question quality, deliverable files, and the
