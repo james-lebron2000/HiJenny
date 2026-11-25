@@ -5,7 +5,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from hijenny.api.research import SearchRequest, pubmed, search_public_records, trials
+from hijenny.api.research import SearchRequest, guidelines, pubmed, registry_result_snapshot, search_public_records, trials
 
 
 def test_pubmed_keeps_abstract_labels_and_inline_text():
@@ -81,4 +81,28 @@ def test_exact_trial_identifier_uses_detail_and_preserves_date_precision():
             count, rows = await trials(client, "nct00000001")
             assert count == 1
             assert rows[0]["milestones"]["研究完成日期"] == {"date": "2028-03", "type": "ESTIMATED"}
+    asyncio.run(check())
+
+def test_result_snapshot_preserves_unreported_values_and_source_groups():
+    record = {"protocolSection": {"identificationModule": {"nctId": "NCT00000001", "briefTitle": "Example"}},
+              "hasResults": False}
+    empty = registry_result_snapshot(record, "now")
+    assert empty["outcomes"] == [] and not empty["has_results"]
+    measure = {"unitOfMeasure": "participants", "groups": [{"id": "OG001", "title": "Arm"}],
+               "denoms": [{"units": "Participants", "counts": [{"groupId": "OG001", "value": "8"}]}],
+               "classes": [{"categories": [{"measurements": [{"groupId": "OG001", "value": "0"}]}]}]}
+    record.update(hasResults=True, resultsSection={"outcomeMeasuresModule": {"outcomeMeasures": [measure]},
+                  "adverseEventsModule": {"eventGroups": [{"id": "EG002", "seriousNumAffected": 0}]}})
+    snapshot = registry_result_snapshot(record, "now")
+    assert snapshot["outcomes"] == [measure]
+    assert snapshot["safety"]["eventGroups"] == [{"id": "EG002", "seriousNumAffected": 0}]
+
+def test_guideline_search_applies_publication_type_to_whole_query():
+    def respond(request):
+        assert request.url.params["term"] == "(asthma OR COPD) AND (Guideline[pt] OR Practice Guideline[pt])"
+        return httpx.Response(200, json={"esearchresult": {"idlist": [], "count": "0"}})
+
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            assert await guidelines(client, "asthma OR COPD") == (0, [])
     asyncio.run(check())

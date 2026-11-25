@@ -11,19 +11,22 @@ function readPublicLibrary() {
 
 function sourceLink(item) {
   const id = String(item.id);
-  if (/^NCT[0-9]+$/.test(id)) return 'https://clinicaltrials.gov/study/' + id;
+  if (/^NCT[0-9]+$/.test(id)) return 'https://clinicaltrials.gov/study/' + id + (item.postedResult ? '?tab=results' : '');
   if (/^[0-9]+$/.test(id)) return 'https://pubmed.ncbi.nlm.nih.gov/' + id + '/';
   return '';
 }
 
 function researchResults(data) {
   if (!data.items.length) return '<p>没有找到记录。可尝试药物通用名、英文适应症或更短的检索式。</p>';
-  return `<h2>${esc(data.query)}</h2><p>${data.source === 'pubmed' ? 'PubMed' : 'ClinicalTrials.gov'} · 共 ${esc(data.total)} 条，展示 ${data.items.length} 条</p>
+  return `<h2>${esc(data.query)}</h2><p>${data.source === 'guidelines' ? 'PubMed 指南文献' : (data.source === 'pubmed' ? 'PubMed' : 'ClinicalTrials.gov')} · 共 ${esc(data.total)} 条，展示 ${data.items.length} 条</p>
+    ${data.source === 'guidelines' ? '<p>范围为 PubMed 标注的指南及实践指南。适用地区、更新状态和推荐级别请核对发布方原文。</p>' : ''}
     <button id="save-search" class="btn" type="button">下载检索记录</button>
     <ol class="research-results">${data.items.map(item => `<li><label><input type="checkbox" class="pick-record" value="${esc(item.id)}"> 选择</label> <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
     <p>${esc([item.id, item.detail, item.date].filter(Boolean).join(' · '))}</p>
+    ${data.source === 'guidelines' ? '<p>文献类型 · '+esc((item.publication_types || []).join(' / ') || '未提供')+'</p>' : ''}
     <details><summary>查看来源片段</summary>${item.passages.length ? item.passages.map(p =>
-      `<p><strong>${esc(p.label)}</strong><br>${esc(p.text)}</p>`).join('') : '<p>该记录未提供摘要。</p>'}</details></li>`).join('')}</ol><button id="keep-records" type="button" class="btn">收藏勾选记录</button>
+      `<p><strong>${esc(p.label)}</strong><br>${esc(p.text)}</p>`).join('') : '<p>该记录未提供摘要。</p>'}</details>
+    ${data.source === 'trials' ? `<button type="button" class="btn" data-load-results="${esc(item.id)}">查看公布结果与安全性</button><section class="trial-posted" aria-live="polite"></section>` : ''}</li>`).join('')}</ol><button id="keep-records" type="button" class="btn">收藏勾选记录</button>
     ${data.source === 'trials' ? '<button id="follow-trials" class="btn" type="button">关注选中的试验</button><button id="compare-trials" type="button" class="btn">并排比较选中的试验</button><div id="trial-comparison"></div>' : ''}`;
 }
 
@@ -33,7 +36,7 @@ function renderResearch() {
     <form id="research-form" class="card"><label for="research-query">检索内容</label>
     <input id="research-query" required maxlength="400" placeholder="例如 imatinib 或 NCT00115739" value="${esc(researchSession.query)}">
     <label for="research-source">数据来源</label><select id="research-source"><option value="pubmed">PubMed 文献</option>
-    <option value="trials">ClinicalTrials.gov 临床试验</option></select>
+    <option value="guidelines">PubMed 指南文献</option><option value="trials">ClinicalTrials.gov 临床试验</option></select>
     <p>点击检索后，仅检索词会发送至所选公共数据库。请使用公开信息。</p>
     <button class="btn primary" type="submit">检索公开记录</button></form>
     <button class="btn" type="button" id="make-brief">用这个主题整理多来源底稿 →</button>
@@ -68,6 +71,7 @@ function renderResearch() {
   renderLibrary();
   function show(data) {
     output.innerHTML = researchResults(data);
+    bindTrialResultButtons(output);
     const follow = $('#follow-trials', output);
     if (follow) follow.onclick = async () => {
       const picked = new Set($$('.pick-record:checked', output).map(el => el.value));

@@ -1,8 +1,8 @@
 """Opt-in retrieval of public records. No project data enters these requests."""
 import asyncio
 import re
+from datetime import datetime, timezone
 from typing import Literal
-
 from xml.etree import ElementTree
 
 import httpx
@@ -15,7 +15,7 @@ NCBI = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=400)
-    source: Literal["pubmed", "trials"]
+    source: Literal["pubmed", "trials", "guidelines"]
 
 
 async def pubmed(client, query):
@@ -50,10 +50,15 @@ async def pubmed(client, query):
             if surname:
                 name = " ".join(filter(None, (author.findtext("ForeName") or author.findtext("Initials"), surname)))
                 authors.append(name)
-        items.append({"authors": authors, "id": pmid, "title": "".join(title.itertext()) if title is not None else pmid,
+        publication_types = [node.text for node in article.findall("PublicationTypeList/PublicationType") if node.text]
+        items.append({"publication_types": publication_types, "authors": authors, "id": pmid, "title": "".join(title.itertext()) if title is not None else pmid,
                       "date": " ".join(date.split()), "detail": article.findtext("Journal/Title", ""),
                       "passages": passages, "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"})
     return int(search["count"]), items
+
+
+async def guidelines(client, query):
+    return await pubmed(client, f"({query}) AND (Guideline[pt] OR Practice Guideline[pt])")
 
 
 async def trials(client, query):
@@ -113,7 +118,7 @@ async def search_public_records(request: SearchRequest):
     query = request.query.strip()
     if not query:
         raise HTTPException(422, "请输入公开的药物名、适应症或检索式。")
-    retrieve = pubmed if request.source == "pubmed" else trials
+    retrieve = {"pubmed": pubmed, "trials": trials, "guidelines": guidelines}[request.source]
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             try:
@@ -124,3 +129,39 @@ async def search_public_records(request: SearchRequest):
     except (httpx.HTTPError, ElementTree.ParseError, ValueError, KeyError, TypeError) as exc:
         raise HTTPException(502, "暂时无法读取所选数据库，请稍后重试。") from exc
     return {"query": query, "source": request.source, "total": total, "items": items}
+
+
+def registry_result_snapshot(record, retrieved):
+    """Keep registry-specific groups, denominators, precision and assessment periods intact."""
+    protocol = record["protocolSection"]
+    ident = protocol["identificationModule"]
+    status = protocol.get("statusModule", {})
+    results = record.get("resultsSection") or {}
+    return {
+        "id": ident["nctId"], "title": ident["briefTitle"], "retrieved": retrieved,
+        "updated": status.get("lastUpdatePostDateStruct", {}).get("date"),
+        "first_posted": status.get("resultsFirstPostDateStruct", {}),
+        "has_results": record.get("hasResults", bool(results)),
+        "outcomes": results.get("outcomeMeasuresModule", {}).get("outcomeMeasures", []),
+        "safety": results.get("adverseEventsModule") or {},
+    }
+
+
+@router.get("/api/research/trials/{nct_id}/results")
+async def posted_results(nct_id: str):
+    if not re.fullmatch(r"NCT[0-9]{8}", nct_id, re.IGNORECASE):
+        raise HTTPException(422, "请输入有效的 NCT 登记编号。")
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            url = f"https://clinicaltrials.gov/api/v2/studies/{nct_id.upper()}"
+            try:
+                response = await client.get(url)
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                await asyncio.sleep(0.4)
+                response = await client.get(url)
+            if response.status_code == 404:
+                raise HTTPException(404, "登记库中未找到此试验。")
+            response.raise_for_status()
+            return registry_result_snapshot(response.json(), datetime.now(timezone.utc).isoformat())
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(502, "无法读取登记结果，请稍后重试。") from exc
