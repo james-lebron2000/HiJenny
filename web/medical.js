@@ -60,7 +60,7 @@ async function renderMedical() {
       <label><input id="meeting-confirm" type="checkbox"> 我已核对本版答复和所选来源</label>
       <div><button class="btn" type="submit">保存草稿版本</button>
       <button class="btn primary" type="button" id="meeting-release">确认并导出简报</button>
-      ${version?.confirmed ? '<button class="btn" type="button" id="meeting-original">下载已确认原版</button><button class="btn" type="button" id="meeting-study">用此确认版起草研究</button>' : ''}</div>
+      ${version?.confirmed ? '<button class="btn" type="button" id="meeting-original">下载已确认原版</button><button class="btn" type="button" id="meeting-slides">下载确认版 PowerPoint</button><button class="btn" type="button" id="meeting-study">用此确认版起草研究</button>' : ''}</div>
       <p role="status" id="meeting-status">${version ? esc((version.confirmed?'已确认':'草稿')+' · '+fmtDate(version.created)) : ''}</p></form>`
       : '<p>请先在研究底稿标记并保存至少一项纳入记录。</p>'}`;
     function switchAllowed() { return !dirty || confirm('放弃本页未保存的修改？'); }
@@ -112,6 +112,22 @@ async function renderMedical() {
     const original=$('#meeting-original',body);
     if (original) {
       original.onclick=()=>download(version);
+      const slides = $('#meeting-slides',body);
+      slides.onclick = async () => {
+        const {sourceRecords, ...snapshot} = version;
+        slides.disabled = true;
+        try {
+          const response = await fetch('/api/medical/meeting.pptx', {
+            method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(snapshot)
+          });
+          if (!response.ok) throw new Error('导出失败（'+response.status+'）');
+          const url = URL.createObjectURL(await response.blob());
+          const a = document.createElement('a');
+          a.href=url; a.download='HiJenny-专家会-'+snapshot.id+'.pptx'; a.click();
+          setTimeout(()=>URL.revokeObjectURL(url),1000);
+        } catch (err) { $('#meeting-status',form).textContent=err.message; }
+        finally { slides.disabled=false; }
+      };
       $('#meeting-study',body).onclick=()=>{ if (!switchAllowed()) return; studySeed=version; nav('study'); };
     }
   }
