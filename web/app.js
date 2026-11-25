@@ -180,7 +180,7 @@ function currentView() {
   const hash = (location.hash || '').replace(/^#\/?/, '');
   const view = hash.split('?')[0];
   if (!view) return 'research';
-  return ['discovery', 'research', 'brief', 'watch', 'clinical', 'medical', 'study', 'valuation', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
+  return ['pilot', 'discovery', 'research', 'brief', 'watch', 'clinical', 'medical', 'study', 'valuation', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
 }
 
 function hashParams() {
@@ -233,6 +233,7 @@ function updateTopbar() {
     clinical: ['临床设计', '研究方案比较与评审'],
     watch: ['试验关注', '登记日期与变更记录'],
     brief: ['研究底稿', '多来源检索与证据复核'],
+    pilot: ['单资产付费试点', '首轮临床尽调报价申请'],
     discovery: ['机会筛选', '公开管线与候选资产'],
     research: ['HiJenny Agent', '公开医药证据检索'],
     projects: ['Projects', 'Due-diligence packages'],
@@ -312,6 +313,7 @@ async function renderView() {
   const seq = ++state.renderSeq;
   updateTopbar();
 
+  if (state.view === 'pilot') { renderPilot(); return; }
   if (state.view === 'discovery') { renderDiscovery(); return; }
   if (state.view === 'study') { renderStudy(); return; }
   if (state.view === 'medical') { await renderMedical(); return; }

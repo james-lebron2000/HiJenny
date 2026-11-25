@@ -35,6 +35,7 @@ function researchResults(data) {
 function renderResearch() {
   setView(`<section class="research-home" lang="zh-CN"><h1>查文献与临床试验</h1>
     <p>输入公开药物名、适应症或检索式，查看数据库记录与原始来源。</p>
+    <p>准备资产引进评审？<a href="#/pilot">查看单资产尽调交付物与试点报价申请</a></p>
     <form id="research-form" class="card"><label for="research-query">检索内容</label>
     <input id="research-query" required maxlength="400" placeholder="例如 imatinib 或 NCT00115739" value="${esc(researchSession.query)}">
     <label for="research-source">数据来源</label><select id="research-source"><option value="pubmed">PubMed 文献</option>

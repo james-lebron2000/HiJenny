@@ -279,6 +279,24 @@ def cmd_projects(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pilot_progress(args: argparse.Namespace) -> int:
+    try:
+        with store.session_scope() as session:
+            store.record_pilot_progress(session, args.receipt, args.stage, args.reference)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"{args.receipt} · {args.stage}")
+    return 0
+
+
+def cmd_pilot_inquiries(args: argparse.Namespace) -> int:
+    with store.session_scope() as session:
+        records = store.list_pilot_inquiries(session, args.receipt)
+    print(json.dumps(records, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="hijenny", description="HiJenny clinical due diligence")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -324,6 +342,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     projects = sub.add_parser("projects", help="list projects")
     projects.set_defaults(func=cmd_projects)
+
+    inquiries = sub.add_parser("pilot-inquiries", help="review pilot inquiries in this server database")
+    inquiries.add_argument("--receipt", help="look up one intake receipt")
+    inquiries.set_defaults(func=cmd_pilot_inquiries)
+
+    progress = sub.add_parser("pilot-progress", help="record a sales milestone and its supporting reference")
+    progress.add_argument("receipt")
+    progress.add_argument("stage", choices=["已联系", "已报价", "已下单", "已回款", "已关闭"])
+    progress.add_argument("reference", help="contact record, quote, order or payment reference")
+    progress.set_defaults(func=cmd_pilot_progress)
 
     serve = sub.add_parser("serve", help="start the FastAPI application")
     serve.add_argument("--host", default="127.0.0.1")

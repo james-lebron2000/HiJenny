@@ -478,6 +478,8 @@ def create_app() -> FastAPI:
     from .research import router as research_router
     from .discovery import router as discovery_router
     app.include_router(discovery_router)
+    from .pilot import router as pilot_router
+    app.include_router(pilot_router)
     from .clinical import router as clinical_router
     app.include_router(research_router)
     from .brief import router as brief_router

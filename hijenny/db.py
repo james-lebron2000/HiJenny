@@ -280,3 +280,26 @@ class ProjectMember(Base):
     project_id: Mapped[str] = mapped_column(String(48), index=True)
     user_id: Mapped[str] = mapped_column(String(48), index=True)
     role: Mapped[str] = mapped_column(String(40), default="reviewer")
+
+
+class PilotInquiry(Base):
+    __tablename__ = "pilot_inquiries"
+
+    receipt: Mapped[str] = mapped_column(String(40), primary_key=True)
+    request_key: Mapped[str] = mapped_column(String(36), unique=True)
+    created_at: Mapped[str] = mapped_column(String(40))
+    email: Mapped[str] = mapped_column(String(254))
+    stage: Mapped[str] = mapped_column(String(40))
+    pages: Mapped[str] = mapped_column(String(40))
+    meeting: Mapped[str] = mapped_column(String(10))
+    deployment: Mapped[str] = mapped_column(String(40))
+
+
+class PilotProgress(Base):
+    __tablename__ = "pilot_progress"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    receipt: Mapped[str] = mapped_column(ForeignKey("pilot_inquiries.receipt"), index=True)
+    stage: Mapped[str] = mapped_column(String(40))
+    reference: Mapped[str] = mapped_column(String(300))
+    recorded_at: Mapped[str] = mapped_column(String(40))

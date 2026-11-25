@@ -1290,3 +1290,47 @@ def get_pages_text(session: Session, document_id: str) -> dict[int, str]:
         select(DocumentPage.page_no, DocumentPage.text).where(DocumentPage.document_id == document_id)
     ).all()
     return {int(no): text for no, text in rows}
+
+
+def submit_pilot_inquiry(session, request_key, fields):
+    from sqlalchemy.dialects.sqlite import insert
+    from hijenny.db import PilotInquiry
+
+    receipt = new_id("pilot")
+    session.execute(insert(PilotInquiry).values(receipt=receipt, request_key=request_key,
+                    created_at=utcnow(), **fields).on_conflict_do_nothing(index_elements=["request_key"]))
+    saved = session.scalar(select(PilotInquiry).where(PilotInquiry.request_key == request_key))
+    if any(getattr(saved, k) != v for k, v in fields.items()):
+        raise ValueError("受理请求已被使用，请为修改后的需求重新提交")
+    return {"receipt": saved.receipt, "created_at": saved.created_at}
+
+
+def list_pilot_inquiries(session, receipt=None):
+    from hijenny.db import PilotInquiry, PilotProgress
+
+    query = select(PilotInquiry).order_by(PilotInquiry.created_at.desc())
+    if receipt:
+        query = query.where(PilotInquiry.receipt == receipt)
+    columns = ("receipt", "created_at", "email", "stage", "pages", "meeting", "deployment")
+    rows = [{key: getattr(row, key) for key in columns} for row in session.scalars(query)]
+    progress = select(PilotProgress).order_by(PilotProgress.id)
+    if receipt:
+        progress = progress.where(PilotProgress.receipt == receipt)
+    by_receipt = {row["receipt"]: row for row in rows}
+    for row in rows:
+        row["progress"] = []
+    for event in session.scalars(progress):
+        if event.receipt in by_receipt:
+            by_receipt[event.receipt]["progress"].append({
+                "stage": event.stage, "reference": event.reference, "recorded_at": event.recorded_at})
+    return rows
+
+
+def record_pilot_progress(session, receipt, stage, reference):
+    from hijenny.db import PilotInquiry, PilotProgress
+
+    if not session.get(PilotInquiry, receipt):
+        raise ValueError("受理编号不存在")
+    if not 1 <= len(reference.strip()) <= 300:
+        raise ValueError("请提供 1–300 字的跟进或凭据编号")
+    session.add(PilotProgress(receipt=receipt, stage=stage, reference=reference.strip(), recorded_at=utcnow()))
