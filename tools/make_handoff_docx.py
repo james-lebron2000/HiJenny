@@ -2,6 +2,7 @@
 """Render docs/HANDOFF.md into a shareable Word document (and verify it)."""
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -148,11 +149,11 @@ def add_code_block(doc, lines: list[str]) -> None:
         shade(p, "F2F5F9")
 
 
-def add_page_number_footer(section) -> None:
+def add_page_number_footer(section, label: str = "HiJenny · 项目交接文档") -> None:
     footer = section.footer
     p = footer.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run("HiJenny · 项目交接文档 · 第 ")
+    run = p.add_run(f"{label} · 第 ")
     run.font.size = Pt(8)
     run.font.color.rgb = MUTED
     fld = OxmlElement("w:fldSimple")
@@ -164,7 +165,16 @@ def add_page_number_footer(section) -> None:
 
 
 def main() -> int:
-    text = SRC.read_text(encoding="utf-8")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--src", default=str(SRC))
+    parser.add_argument("--out", default=str(OUT))
+    parser.add_argument("--title", default="HiJenny 项目交接文档")
+    parser.add_argument("--footer", default="HiJenny · 项目交接文档")
+    parser.add_argument("--author", default="HiJenny 项目组")
+    args = parser.parse_args()
+    src = Path(args.src)
+    out = Path(args.out)
+    text = src.read_text(encoding="utf-8")
     lines = text.splitlines()
     doc = Document()
     section = doc.sections[0]
@@ -172,7 +182,7 @@ def main() -> int:
     section.bottom_margin = Cm(1.8)
     section.left_margin = Cm(1.9)
     section.right_margin = Cm(1.9)
-    add_page_number_footer(section)
+    add_page_number_footer(section, args.footer)
 
     normal = doc.styles["Normal"]
     normal.font.name = "Calibri"
@@ -296,11 +306,12 @@ def main() -> int:
         add_inline(p, stripped)
         i += 1
 
-    doc.core_properties.title = "HiJenny 项目交接文档"
-    doc.core_properties.author = "HiJenny 项目组"
-    doc.core_properties.subject = "HiJenny 客户/投资人演示版交接"
-    doc.save(OUT)
-    print(f"wrote {OUT}  paragraphs={len(doc.paragraphs)} tables={len(doc.tables)}")
+    doc.core_properties.title = args.title
+    doc.core_properties.author = args.author
+    doc.core_properties.subject = args.title
+    out.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(out)
+    print(f"wrote {out}  paragraphs={len(doc.paragraphs)} tables={len(doc.tables)}")
     return 0
 
 
