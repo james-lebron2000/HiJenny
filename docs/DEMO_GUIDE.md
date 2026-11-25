@@ -70,6 +70,9 @@ cd HiJenny
 
 ![HiJenny demo walkthrough](assets/demo_walkthrough.gif)
 
+> 动图由 **Playwright 真实浏览器交互**录制：光标终点是真实 DOM 元素，点击会实际触发
+> 页面跳转/筛选，前后截图来自真实运行结果（不是静态截图拼接的假光标）。
+
 5 步：打开项目 → Asset 360（发现+评估）→ 点击 ORR 42.0% 回到 CSR 第 11 页 →
 自动分类 A/B/C/U 与缺口 → 交付 Decision Brief + 8-Sheet Excel。
 高清版：[demo_walkthrough.mp4](assets/demo_walkthrough.mp4)。
@@ -79,9 +82,9 @@ cd HiJenny
 ```bash
 # terminal 1
 ./scripts/demo.sh
-# terminal 2
-python3 tools/capture_screenshots.py --base http://127.0.0.1:8123 --out docs/assets/screenshots
-python3 tools/make_demo_gif.py
+# terminal 2（需：pip install -e ".[demo]" + ffmpeg）
+python3 tools/record_demo_walkthrough.py --base http://127.0.0.1:8123
+python3 tools/make_demo_gif.py --recording-dir demo_recording
 ```
 
 ## 5. 截图（可直接放进演示文稿）

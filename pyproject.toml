@@ -23,6 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "reportlab>=4"]
+demo = ["playwright>=1.40", "Pillow>=10"]
 
 [project.scripts]
 hijenny = "hijenny.cli:main"
