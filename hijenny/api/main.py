@@ -476,6 +476,8 @@ def create_app() -> FastAPI:
         lifespan=_lifespan,
     )
     from .research import router as research_router
+    from .discovery import router as discovery_router
+    app.include_router(discovery_router)
     from .clinical import router as clinical_router
     app.include_router(research_router)
     app.include_router(clinical_router)

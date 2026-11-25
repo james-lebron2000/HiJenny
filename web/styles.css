@@ -962,3 +962,4 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
   .topbar .project-select { flex:1 1 100%; min-width:0; }
   .topbar .project-select select { flex:1; min-width:0; width:0; }
 }
+#opportunities label { display:block; margin:10px 0; }
