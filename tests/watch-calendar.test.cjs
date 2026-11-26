@@ -4,8 +4,8 @@ const {readFileSync} = require('node:fs');
 const {join} = require('node:path');
 const {runInNewContext} = require('node:vm');
 const source = readFileSync(join(__dirname,'../web/watch.js'),'utf8');
-const {watchedMilestones,watchCalendar,milestoneDate} = runInNewContext(source+
-  '\n({watchedMilestones,watchCalendar,milestoneDate})',{TextEncoder});
+const {watchedMilestones,watchCalendar,milestoneDate,watchCalendarCorrections} = runInNewContext(source+
+  '\n({watchedMilestones,watchCalendar,milestoneDate,watchCalendarCorrections})',{TextEncoder});
 
 test('retain month precision and use last observed date to identify schedule slips',()=>{
   const row={id:'NCT00000001',title:'测试,一;二\n'+ '长标题'.repeat(30),updated:'2026-02-01',
@@ -40,4 +40,21 @@ test('calendar alarms target future local mornings for precise estimated dates o
   assert.doesNotMatch(watchCalendar(events,now),/VALARM/);
   fields['主要完成日期']='2027-01 · 预计';
   assert.doesNotMatch(watchCalendar(watchedMilestones([row]),now,7),/VALARM/);
+});
+
+test('flag the last previously exportable date until a precise date returns',()=>{
+  const row={id:'NCT00000001',fields:{'主要完成日期':'2027-03 · 预计'},changes:[
+    {fields:[{name:'主要完成日期',before:'2027-02 · 预计'}]},
+    {fields:[{name:'主要完成日期',before:'2027-02-12 · 预计'}]}]};
+  const [first]=watchCalendarCorrections([row]);
+  assert.equal(first.former,'2027-02-12');
+  assert.equal(first.current,'2027-03');
+  delete row.fields['主要完成日期'];
+  assert.equal(watchCalendarCorrections([row])[0].current,undefined);
+  assert.equal(watchedMilestones([row]).length,0);
+  row.fields['主要完成日期']='2027-03-01 · 实际';
+  assert.equal(watchCalendarCorrections([row]).length,0);
+  row.changes=[];
+  row.fields['主要完成日期']='2027-03 · 预计';
+  assert.equal(watchCalendarCorrections([row]).length,0);
 });

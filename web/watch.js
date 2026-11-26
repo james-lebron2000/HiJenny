@@ -45,10 +45,11 @@ async function refreshWatchedTrial(id) {
     const saved = JSON.parse(raw);
     const item = await lookupWatchedTrial(id);
     const fields = trialFields(item);
-    const changed = Object.keys(fields).filter(k => JSON.stringify(fields[k]) !== JSON.stringify(saved.fields[k]));
+    const names = new Set([...Object.keys(saved.fields), ...Object.keys(fields)]);
+    const changed = [...names].filter(k => JSON.stringify(fields[k] ?? null) !== JSON.stringify(saved.fields[k] ?? null));
     const checked = new Date().toISOString();
     if (changed.length) saved.changes.unshift({checked, updated:item.date,
-      fields:changed.map(name => ({name, before:saved.fields[name], after:fields[name]}))});
+      fields:changed.map(name => ({name, before:saved.fields[name] ?? null, after:fields[name] ?? null}))});
     Object.assign(saved, {fields, checked, title:item.title, updated:item.date});
     localStorage.setItem(key, JSON.stringify(saved));
   });
@@ -82,6 +83,20 @@ function watchedMilestones(rows) {
     }
   }
   return events.sort((a,b)=>a.date.localeCompare(b.date) || a.id.localeCompare(b.id) || a.key.localeCompare(b.key));
+}
+
+function watchCalendarCorrections(rows) {
+  const corrections=[];
+  for (const row of rows) {
+    for (const label of ['主要完成日期','研究完成日期']) {
+      const current=milestoneDate(row.fields[label]);
+      if (current?.precise) continue;
+      const former=row.changes.flatMap(change=>change.fields)
+        .filter(field=>field.name===label).map(field=>milestoneDate(field.before)).find(date=>date?.precise);
+      if (former) corrections.push({id:row.id,label,former:former.date,current:current?.date});
+    }
+  }
+  return corrections;
 }
 
 const watchReminderOptions = [1,7,30];
@@ -207,6 +222,11 @@ function renderWatch() {
         ${option('0',String(reminderDays),'不添加提醒')}${watchReminderOptions.map(days=>option(String(days),String(reminderDays),'提前 '+days+' 天')).join('')}</select></label>
       <p id="watch-reminder-summary" role="status"></p>
       <button class="btn" id="watch-export" ${running || !events.some(e=>e.precise)?'disabled':''}>下载日历（${events.filter(e=>e.precise).length} 个全天事件）</button>`:'';
+    const corrections=watchCalendarCorrections(rows);
+    if (corrections.length) calendar.insertAdjacentHTML('beforeend',`<section><h2>核对先前导入的日历事件</h2>
+      <p>这些里程碑曾披露具体日期，本次日历文件无法更新旧事件。如果已导入，请在个人日历中核对。</p>
+      <ul>${corrections.map(c=>`<li><a href="${esc(sourceLink(c))}" target="_blank" rel="noopener noreferrer">${esc(c.id)}</a>
+        · ${esc(c.label)} · 原具体日期 ${esc(c.former)} · ${c.current?'当前仅披露月份 '+esc(c.current):'当前无可用日期'}</li>`).join('')}</ul></section>`);
     const download=$('#watch-export',root);
     const select=$('#watch-reminder',root);
     if (select) {
