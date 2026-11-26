@@ -55,6 +55,7 @@ async function recheckBriefPublications(original) {
     for (const row of result.items) current.set(row.id,row);
   }
   const checked=new Date().toISOString();
+  const unavailable=[];
   const log=['出版状态复查 · '+checked,'原底稿 '+original.id+' · 核查 '+ids.length+' 条 PMID'];
   for (const item of items) {
     const row=current.get(item.id);
@@ -62,7 +63,7 @@ async function recheckBriefPublications(original) {
     const after=row?.notices;
     const changed=Array.isArray(after) && JSON.stringify([...(before || [])].sort())!==JSON.stringify([...after].sort());
     let finding;
-    if (!Array.isArray(after)) finding='未能核实，保留原记录';
+    if (!Array.isArray(after)) {unavailable.push(item.id);finding='未能核实，保留原记录';}
     else if (changed) finding=Array.isArray(before)?'出版标记变化':'首次查到出版标记，旧版状态未知';
     else finding=Array.isArray(before)?'与原版一致':'首次核查，未见标记';
     log.push(item.id+' · '+finding);
@@ -76,7 +77,7 @@ async function recheckBriefPublications(original) {
     }
     if (Array.isArray(after)) item.notices=after;
   }
-  return {...next,id:crypto.randomUUID(),created:checked,publicationCheck:log};
+  return {...next,id:crypto.randomUUID(),created:checked,publicationCheck:log,unavailablePublications:unavailable};
 }
 
 function briefText(run) {
@@ -339,6 +340,9 @@ async function renderBrief() {
   };
   try {
     const runs = await refreshHistory();
-    if (runs.length) { run = runs[0]; history.value = run.id; paint(); }
+    const requested=hashParams().get('version');
+    run=requested ? runs.find(r=>r.id===requested) : runs[0];
+    if (run) {history.value=run.id;paint();}
+    else if (requested) report.textContent='当前浏览器找不到该底稿版本。';
   } catch (err) { fail(err); }
 }

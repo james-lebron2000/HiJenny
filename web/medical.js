@@ -24,12 +24,43 @@ function meetingText(v) {
   return lines.join('\n');
 }
 
+function latestPublicationChecks(runs) {
+  const checks=new Map();
+  for (const run of runs) {
+    if (!run.publicationCheck) continue;
+    const missing=new Set(run.unavailablePublications || run.publicationCheck.flatMap(line=>{
+      const match=/^(\d+) · 未能核实，保留原记录$/.exec(line);
+      return match ? [match[1]] : [];
+    }));
+    for (const step of run.steps.filter(s=>s.source==='pubmed')) {
+      for (const item of step.result?.items || []) {
+        if (!checks.has(item.id) || run.created>checks.get(item.id).created) {
+          checks.set(item.id,{version:run.id,created:run.created,notices:item.notices || [],missing:missing.has(item.id)});
+        }
+      }
+    }
+  }
+  return checks;
+}
+
+function meetingPublicationAlerts(version, checks, briefDate) {
+  return version.refs.flatMap(ref=>{
+    const check=checks.get(ref.id);
+    if (!check || check.version===version.briefId || check.created <= (briefDate || ref.retrieved || '')) return [];
+    const changed=JSON.stringify([...(ref.notices || [])].sort())!==JSON.stringify([...check.notices].sort());
+    return check.missing || changed ? [{id:ref.id,...check}] : [];
+  });
+}
+
 async function renderMedical() {
   setView('<section id="medical-meeting" class="research-home"><h1>准备专家会简报</h1><div id="meeting-body">正在读取本机底稿…</div></section>');
   const body = $('#meeting-body');
-  let runs, saved;
+  let runs, saved, checks, briefDates;
   try {
-    runs = (await briefStore('readonly', store=>store.getAll())).filter(r=>medicalSources(r).length)
+    const allRuns=await briefStore('readonly', store=>store.getAll());
+    checks=latestPublicationChecks(allRuns);
+    briefDates=new Map(allRuns.map(r=>[r.id,r.created]));
+    runs = allRuns.filter(r=>medicalSources(r).length)
       .sort((a,b)=>b.created.localeCompare(a.created));
     saved = Object.keys(localStorage).filter(k=>k.startsWith(meetingPrefix))
       .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>b.created.localeCompare(a.created));
@@ -46,9 +77,17 @@ async function renderMedical() {
     const conflictPool = version ? version.conflictPool || [] : run?.conflicts || [];
     const relevantConflicts = ids => conflictPool.filter(c=>ids.has(c.left) || ids.has(c.right));
     const selected = new Map((version?.refs || []).map(ref=>[ref.id,ref]));
+    const affected=saved.filter(v=>v.confirmed).map(v=>({version:v,
+      alerts:meetingPublicationAlerts(v,checks,briefDates.get(v.briefId))})).filter(row=>row.alerts.length);
+    const alerts=affected.find(row=>row.version.id===version?.id)?.alerts || [];
     const selectedIndex = r => Math.max(0,r.passages.findIndex(p=>p.text===selected.get(r.id)?.quote && p.label===selected.get(r.id)?.label));
     body.innerHTML = `<p>从已纳入的来源中挑选支持答复的原文，记录专家会要讨论的问题、医学复核意见和后续行动。</p>
       <button class="btn" data-nav="brief">打开研究底稿</button>
+      ${affected.length ? `<section class="card"><h2>引文需要复查的已确认简报（${affected.length}）</h2>
+      ${affected.map(row=>`<p><button type="button" class="btn" data-affected="${esc(row.version.id)}">${esc(row.version.question)} · ${esc(fmtDate(row.version.created))}</button> · 涉及 ${row.alerts.map(a=>esc(a.id)).join('、')}</p>`).join('')}</section>` : ''}
+      ${alerts.length ? `<section class="card"><h3>本版引文的后续复查</h3>
+      ${alerts.map(a=>`<p>PMID ${esc(a.id)} · ${a.missing?'最近一次未能核实':'出版标记与本版不一致'} · ${esc(fmtDate(a.created))}</p>
+      ${a.missing?'':publicationNotices(a)}<a href="#/brief?version=${encodeURIComponent(a.version)}">打开对应复查底稿</a>`).join('')}</section>` : ''}
       <label>历史简报 <select id="meeting-history"><option value="">新草稿</option>
         ${saved.map(v=>option(v.id,version?.id,fmtDate(v.created)+' · '+v.question)).join('')}</select></label>
       <label>选用底稿并新建简报 <select id="meeting-source"><option value="">选择有纳入记录的研究底稿</option>
@@ -72,6 +111,11 @@ async function renderMedical() {
       <p role="status" id="meeting-status">${version ? esc((version.confirmed?'已确认':'草稿')+' · '+fmtDate(version.created)) : ''}</p></form>`
       : '<p>请先在研究底稿标记并保存至少一项纳入记录。</p>'}`;
     function switchAllowed() { return !dirty || confirm('放弃本页未保存的修改？'); }
+    for (const button of $$('[data-affected]',body)) button.onclick=()=>{
+      if (!switchAllowed()) return;
+      version=saved.find(v=>v.id===button.dataset.affected);
+      run=runs.find(r=>r.id===version.briefId);draw();
+    };
     $('#meeting-history',body).onchange = event => {
       if (!switchAllowed()) { event.target.value=version?.id || ''; return; }
       version = saved.find(v=>v.id===event.target.value);
