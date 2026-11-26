@@ -42,6 +42,9 @@ async function renderValuation(seq) {
     return [r.asset || r.subject,r.field,r.value,r.region,'披露 '+r.source_date,
       r.effective?'发生或生效 '+r.effective:''].filter(Boolean).join(' · ');
   }
+  function scenarioSources(plan, scenario) {
+    return (plan.disclosures || []).filter(r=>scenario.disclosureIds?.includes(r.id));
+  }
   function paint() {
     const questions = [...response.questions];
     if (draft.question && !questions.some(q=>q.question_id===draft.question.question_id)) questions.push(draft.question);
@@ -73,7 +76,9 @@ async function renderValuation(seq) {
       <label>项目（如首付款、研发成本或产品净现金流）<input data-row-field="label" maxlength="200" required value="${esc(row.label)}"></label>
       ${scenarioNames.map((s,j)=>`<fieldset><legend>${s}情景</legend>
       ${[['year','发生年份','min="0" max="100" step="1"'],['amount','有符号金额（百万）','step="any"'],['probability','无条件发生概率（%）','min="0" max="100" step="any"']].map(([k,label,limits])=>
-        `<label>${label}<input required type="number" data-case="${j}" data-field="${k}" ${limits} value="${esc(row.cases[j][k] ?? '')}"></label>`).join('')}</fieldset>`).join('')}
+        `<label>${label}<input required type="number" data-case="${j}" data-field="${k}" ${limits} value="${esc(row.cases[j][k] ?? '')}"></label>`).join('')}
+        ${draft.disclosures?.length?`<fieldset><legend>本情景参考的公开披露</legend>
+        ${draft.disclosures.map(r=>`<label><input type="checkbox" data-case-source="${j}" value="${esc(r.id)}" ${row.cases[j].disclosureIds?.includes(r.id)?'checked':''}> ${esc(disclosureText(r))}</label>`).join('')}</fieldset>`:''}</fieldset>`).join('')}
       <label>两种情景金额、概率及年份的依据<textarea required data-row-field="basis" maxlength="4000">${esc(row.basis)}</textarea></label>
       <button type="button" class="btn" data-remove-flow="${i}" ${draft.flows.length===1?'disabled':''}>移除此现金流</button></fieldset>`).join('')}
       <div><button type="button" id="val-add" class="btn">增加现金流</button>
@@ -91,6 +96,9 @@ async function renderValuation(seq) {
       for (const box of $$('[data-row]',form)) {
         const row=draft.flows[Number(box.dataset.row)];
         for (const el of $$('[data-row-field]',box)) row[el.dataset.rowField]=el.value.trim();
+        row.cases.forEach((scenario,j)=>{
+          scenario.disclosureIds=$$('[data-case-source="'+j+'"]:checked',box).map(el=>el.value);
+        });
         for (const el of $$('[data-field]',box)) row.cases[el.dataset.case][el.dataset.field]=el.value;
       }
     }
@@ -98,7 +106,8 @@ async function renderValuation(seq) {
       const totals=v.outputs.map(o=>o.total);
       result.innerHTML=`<h2>买方风险调整净现值</h2><p>${esc(v.asOf)} · 百万 ${esc(v.currency)} · 年折现率 ${esc(v.rate)}%</p>
         <table><thead><tr><th>现金流</th><th>基准现值</th><th>替代现值</th></tr></thead><tbody>
-        ${v.flows.map((f,i)=>`<tr><th>${esc(f.label)}</th>${v.outputs.map(o=>`<td>${number(o.presentValues[i])}</td>`).join('')}</tr>`).join('')}
+        ${v.flows.map((f,i)=>`<tr><th>${esc(f.label)}</th>${v.outputs.map((o,j)=>`<td>${number(o.presentValues[i])}${scenarioSources(v,f.cases[j]).map(r=>
+          `<br><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.field)} · ${esc(r.source_date)}</a>`).join('')}</td>`).join('')}</tr>`).join('')}
         <tr><th>合计</th>${totals.map(t=>`<td>${number(t)}</td>`).join('')}</tr></tbody></table>
         <p>替代情景较基准变化 ${number(totals[1]-totals[0])} 百万 ${esc(v.currency)}。</p>
         ${v.deals?.length ? `<h3>本版参照的交易条款</h3><div class="bd-scroll"><table>
@@ -119,7 +128,12 @@ async function renderValuation(seq) {
           lines.push('', '可比交易披露', ...dealFields.map(([key,label])=>label+' · '+(deal[key] || '未披露')));
         }
         v.flows.forEach((f,i)=>{
-          lines.push('',f.label,...f.cases.map((c,j)=>scenarioNames[j]+' · 第 '+c.year+' 年 · 金额 '+c.amount+' · 概率 '+c.probability+'% · 现值 '+v.outputs[j].presentValues[i]),'依据 '+f.basis);
+          lines.push('',f.label);
+          f.cases.forEach((c,j)=>{
+            lines.push(scenarioNames[j]+' · 第 '+c.year+' 年 · 金额 '+c.amount+' · 概率 '+c.probability+'% · 现值 '+v.outputs[j].presentValues[i]);
+            for (const r of scenarioSources(v,c)) lines.push('本情景参照 · '+disclosureText(r), r.url, '公开动态编号 '+r.id);
+          });
+          lines.push('依据 '+f.basis);
         });
         lines.push('',...totals.map((t,j)=>scenarioNames[j]+'净现值 '+t),'情景差额 '+(totals[1]-totals[0]));
         const url=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain;charset=utf-8'}));
@@ -168,7 +182,12 @@ async function renderValuation(seq) {
       finally {search.disabled=false;}
     };
     for (const el of $$('[data-remove-disclosure]',form)) el.onclick=()=>{
-      collect();draft.disclosures.splice(Number(el.dataset.removeDisclosure),1);dirty=true;paint();
+      collect();
+      const index=Number(el.dataset.removeDisclosure), id=draft.disclosures[index].id;
+      const linked=draft.flows.flatMap(row=>row.cases).filter(scenario=>scenario.disclosureIds.includes(id));
+      if (linked.length && !confirm('这条披露已被 '+linked.length+' 项情景引用。移除披露及对应引用？')) return;
+      for (const scenario of linked) scenario.disclosureIds=scenario.disclosureIds.filter(ref=>ref!==id);
+      draft.disclosures.splice(index,1);dirty=true;paint();
     };
     $('#val-add-deal').onclick=()=>{collect();draft.deals.push({});dirty=true;paint();};
     for (const el of $$('[data-remove-deal]',form)) el.onclick=()=>{
