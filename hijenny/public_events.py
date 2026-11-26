@@ -31,7 +31,7 @@ def import_month(db, name, sha, content):
         raise ValueError("Git blob digest mismatch")
     for line in content.splitlines():
         row = json.loads(line)
-        if not row["url"].startswith(("https://www.sec.gov/Archives/", "https://clinicaltrials.gov/study/")):
+        if not row["url"].startswith(("https://www.sec.gov/Archives/", "https://clinicaltrials.gov/study/", "https://pubmed.ncbi.nlm.nih.gov/")):
             raise ValueError("Unexpected public source")
         payload = json.dumps(row, sort_keys=True, ensure_ascii=False)
         old = db.execute("SELECT payload FROM events WHERE id=?", (row["id"],)).fetchone()

@@ -5,9 +5,10 @@ import json
 import re
 import sys
 import time
+from xml.etree import ElementTree
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1] / "data/public"
@@ -15,11 +16,11 @@ AGENT = "HiJenny research jakeljm12@163.com"
 FORMS = {"8-K", "6-K", "10-Q", "10-K", "20-F", "40-F"}
 
 
-def fetch(url):
+def fetch(url, parse=json.load):
     for attempt in range(3):
         try:
             with urlopen(Request(url, headers={"User-Agent": AGENT}), timeout=30) as response:
-                return json.load(response)
+                return parse(response)
         except OSError:
             if attempt == 2:
                 raise
@@ -73,6 +74,48 @@ def trial_records(trial):
                    effective=None, url=f"https://clinicaltrials.gov/study/{nct}")
 
 
+def publication_links(trial, root):
+    nct = trial["id"]
+    for article in root.findall("PubmedArticle"):
+        citation = article.find("MedlineCitation")
+        pmid = citation.findtext("PMID")
+        banks = citation.findall("Article/DataBankList/DataBank")
+        if not any(bank.findtext("DataBankName") == "ClinicalTrials.gov" and
+                   nct in [entry.text for entry in bank.findall("AccessionNumberList/AccessionNumber")]
+                   for bank in banks):
+            continue
+        if not re.fullmatch(r"[0-9]+", pmid or ""):
+            raise ValueError("Invalid linked PMID")
+        indexed = article.find("PubmedData/History/PubMedPubDate[@PubStatus='pubmed']")
+        date = datetime(*(int(indexed.findtext(part)) for part in ("Year", "Month", "Day"))).date()
+        title = "".join(citation.find("Article/ArticleTitle").itertext()).strip()
+        yield dict(source="PubMed", record=pmid, subject=trial["asset"], asset=trial["asset"], region=None,
+                   trial=nct, field="论文登记关联 · " + nct, value=title, source_date=date.isoformat(),
+                   date_label="PubMed 收录", effective=None, url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/")
+
+
+def publication_records(trial):
+    nct = trial["id"]
+    if not re.fullmatch(r"NCT[0-9]{8}", nct):
+        raise ValueError("Invalid trial identifier")
+    base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+    params = {"db": "pubmed", "tool": "hijenny", "email": AGENT.split()[-1]}
+    time.sleep(0.4)
+    search = fetch(base + "esearch.fcgi?" + urlencode(dict(params, term=nct+"[si]", retmax=9999,
+                                                          retmode="json")))["esearchresult"]
+    ids = search["idlist"]
+    if len(ids) != int(search["count"]):
+        raise ValueError("Incomplete PubMed identifier list")
+    for i in range(0, len(ids), 100):
+        batch = ids[i:i+100]
+        time.sleep(0.4)
+        xml = fetch(base + "efetch.fcgi?" + urlencode(dict(params, id=",".join(batch), retmode="xml")),
+                    ElementTree.parse)
+        if {a.text for a in xml.findall("PubmedArticle/MedlineCitation/PMID")} != set(batch):
+            raise ValueError("Incomplete PubMed citation batch")
+        yield from publication_links(trial, xml)
+
+
 def changes(records, history, now):
     latest = {(r["source"], r["record"], r["field"]): r for r in history}
     for record in records:
@@ -93,8 +136,8 @@ def collect(root=ROOT):
     history = [json.loads(line) for path in files for line in path.read_text().splitlines()]
     watch = json.loads((root / "watchlist.json").read_text())
     events, failures = [], []
-    for group, read in (("sec", sec_records), ("trials", trial_records)):
-        for target in watch[group]:
+    for group, read in (("sec", sec_records), ("trials", trial_records), ("publications", publication_records)):
+        for target in watch.get(group, []):
             try:
                 events.extend(list(changes(read(target), history, now)))
             except Exception as err:

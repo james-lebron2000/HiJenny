@@ -56,3 +56,19 @@ def test_review_digest_uses_taipei_discovery_day_and_exports_all_matches(tmp_pat
     assert report.text.count(row["url"]) == 2 and "共 2 条" in report.text
     assert "15:59:59Z" in report.text and "2026-11-26T15:59:59Z" not in report.text
     assert client.get("/api/public-events", params=dict(params, discovered_to="2026-11-26")).status_code == 422
+
+
+def test_pubmed_link_requires_exact_registry_and_preserves_index_date():
+    xml = """<PubmedArticleSet><PubmedArticle><MedlineCitation><PMID>123</PMID><Article>
+        <ArticleTitle>Design of <i>study</i></ArticleTitle><DataBankList><DataBank>
+        <DataBankName>ClinicalTrials.gov</DataBankName><AccessionNumberList>
+        <AccessionNumber>NCT05499390</AccessionNumber></AccessionNumberList></DataBank></DataBankList>
+        </Article></MedlineCitation><PubmedData><History><PubMedPubDate PubStatus="pubmed">
+        <Year>2025</Year><Month>3</Month><Day>7</Day></PubMedPubDate></History></PubmedData></PubmedArticle></PubmedArticleSet>"""
+    trial = {"id": "NCT05499390", "asset": "demo"}
+    root = collector.ElementTree.fromstring(xml)
+    record, = collector.publication_links(trial, root)
+    assert (record["record"], record["trial"], record["source_date"], record["value"]) == (
+        "123", trial["id"], "2025-03-07", "Design of study")
+    assert not list(collector.publication_links(dict(trial, id="NCT00000001"), root))
+    assert not list(collector.publication_links(trial, collector.ElementTree.fromstring(xml.replace("ClinicalTrials.gov", "Other"))))

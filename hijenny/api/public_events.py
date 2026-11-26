@@ -73,7 +73,7 @@ def report(filters=Depends(event_filters)):
             if row["kind"] == "change":
                 value = display(row["previous"]) + " → " + value
             lines.extend(["", f'{count}. {row["asset"] or row["subject"]} · {row["field"]}',
-                          f'{KINDS[row["kind"]]} · {value}', f'来源披露 {row["source_date"]} · 首次发现 {row["observed"]}'])
+                          f'{KINDS[row["kind"]]} · {value}', f'{row.get("date_label", "来源披露")} {row["source_date"]} · 首次发现 {row["observed"]}'])
             if row.get("effective"):
                 lines.append("事件发生或生效 " + row["effective"])
             if row.get("region"):

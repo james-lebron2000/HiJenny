@@ -9,3 +9,5 @@
 客户专属名单放在仓库之外的授权项目目录中。服务器运行 tools/collect_public_events.py --private-dir 目录时，只读该目录的 watchlist.json，结果写入同一目录的 events；这些结果不参与公开索引同步。客户文件、业务判断、凭据和原始全文均不属于此仓库数据集。
 
 授权项目需要定时采集时，在服务器以服务账户创建权限为 0700 的 ~/.local/share/hijenny/private-watchlists/项目代号，将名单以 0600 权限保存为 watchlist.json；安装 deploy 下对应的模板后，启用 hijenny-private-collect@项目代号.timer。该实例每日台北时间 08:47 检查，日志与输出只留在服务器。没有授权项目时无需启用实例。
+
+PubMed 按 publications 名单中的 NCT 编号检索，再核对文献元数据中 ClinicalTrials.gov 数据库的登记号。题名、PMID 与 PubMed 收录日期写入公开索引；是否报告疗效结果需另行复核。

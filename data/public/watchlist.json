@@ -14,6 +14,24 @@
     {
       "id": "NCT07264075",
       "asset": "ivonescimab"
+    },
+    {
+      "id": "NCT05499390",
+      "asset": "ivonescimab"
+    }
+  ],
+  "publications": [
+    {
+      "id": "NCT05899608",
+      "asset": "ivonescimab"
+    },
+    {
+      "id": "NCT07264075",
+      "asset": "ivonescimab"
+    },
+    {
+      "id": "NCT05499390",
+      "asset": "ivonescimab"
     }
   ]
 }
