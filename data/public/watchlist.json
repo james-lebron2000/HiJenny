@@ -66,5 +66,11 @@
         ]
       }
     }
+  ],
+  "ema": [
+    {
+      "id": "EMEA/H/C/005481",
+      "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
+    }
   ]
 }

@@ -1,5 +1,6 @@
 """Collect public facts using only the repository's public watchlist (standard library)."""
 import argparse
+from functools import cache
 import hashlib
 import json
 import os
@@ -95,6 +96,31 @@ def fda_records(target):
                    source="Drugs@FDA", record=f"{application}/{kind}/{number}", subject=product["sponsor_name"],
                    asset=target["asset"], region="美国", field=field, value=description, source_date=action_day,
                    date_label="FDA 决定日", effective=action_day, url=url)
+
+
+EMA_MEDICINES = "https://www.ema.europa.eu/en/documents/report/medicines-output-medicines_json-report_en.json"
+
+
+def ema_records(target, dataset):
+    product = target["id"]
+    rows = [r for r in dataset()["data"] if r["ema_product_number"] == product and r["category"] == "Human"]
+    if len(rows) != 1:
+        raise ValueError("Expected one EMA human medicine")
+    row = rows[0]
+    if not re.fullmatch(r"https://www\.ema\.europa\.eu/en/medicines/human/EPAR/[a-z0-9-]+", row["medicine_url"]):
+        raise ValueError("Unexpected EMA medicine page")
+    updated = datetime.strptime(row["last_updated_date"], "%d/%m/%Y").date().isoformat()
+    fields = {"medicine_status": "欧盟集中程序状态", "marketing_authorisation_date": "欧盟上市许可日期",
+              "european_commission_decision_date": "欧委会决定日期", "latest_procedure_affecting_product_information": "最近影响产品信息的程序",
+              "marketing_authorisation_developer_applicant_holder": "EMA 所列开发方、申请人或持有人"}
+    for key, label in fields.items():
+        value = row[key] or None
+        is_date = key.endswith("_date")
+        if value and is_date:
+            value = datetime.strptime(value, "%d/%m/%Y").date().isoformat()
+        yield dict(source="EMA", record=product, subject=row["name_of_medicine"], asset=target["asset"], region="欧盟",
+                   field=label, value=value, date_label="EMA 产品页更新日", source_date=updated,
+                   effective=value if is_date else None, url=row["medicine_url"])
 
 
 def trial_records(trial):
@@ -222,7 +248,8 @@ def collect(root=ROOT, receipt=None):
     previous = json.loads(previous_file.read_text()) if receipt and previous_file.exists() else {}
     prior_checks = {(row["source"], row["target"]): row for row in previous.get("checks", [])}
     events, failures, checks = [], [], []
-    for group, read in (("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
+    ema_dataset = cache(lambda: fetch(EMA_MEDICINES))
+    for group, read in (("ema", lambda target: ema_records(target, ema_dataset)), ("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
         for target in watch.get(group, []):
             check = {"source": group, "target": target.get("id") or target.get("cik")}
             check.update(subject=target.get("asset") or target.get("company"), target_sha256=fingerprint(target))

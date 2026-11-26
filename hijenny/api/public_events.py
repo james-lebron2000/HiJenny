@@ -17,7 +17,7 @@ KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原�
 
 def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
-                  disclosed_to: date | None = None, source: Literal["SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA"] | None = None,
+                  disclosed_to: date | None = None, source: Literal["SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA"] | None = None,
                   trial: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None):
     if discovered_from and discovered_to and discovered_from > discovered_to:
