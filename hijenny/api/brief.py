@@ -56,6 +56,7 @@ class Brief(BaseModel):
     note: Text
     steps: list[Step] = Field(min_length=1, max_length=2)
 
+    publicationCheck: list[str] = Field(default_factory=list, max_length=602)
     conflicts: list[Conflict] = Field(default_factory=list, max_length=200)
 
     @model_validator(mode="after")
@@ -94,6 +95,10 @@ def export_brief(brief: Brief):
     doc.add_paragraph(f"底稿 {brief.id}  ·  内容指纹 {snapshot}\n创建时间 {clean(brief.created)}")
     doc.add_heading("审核意见、冲突与未解决问题", 1)
     doc.add_paragraph(clean(brief.note) or "尚未填写审核意见")
+    if brief.publicationCheck:
+        doc.add_heading("出版状态复查记录", 1)
+        for line in brief.publicationCheck:
+            doc.add_paragraph(clean(line))
     doc.add_heading("检索覆盖", 1)
     records = []
     for step in brief.steps:

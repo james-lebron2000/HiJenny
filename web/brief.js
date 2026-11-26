@@ -44,8 +44,44 @@ async function patchBrief(id, update) {
   });
 }
 
+async function recheckBriefPublications(original) {
+  const next=structuredClone(original);
+  const items=next.steps.filter(step=>step.source==='pubmed').flatMap(step=>step.result?.items || []);
+  const ids=[...new Set(items.map(row=>row.id))];
+  const current=new Map();
+  for (let i=0;i<ids.length;i+=10) {
+    const query=ids.slice(i,i+10).map(id=>id+'[pmid]').join(' OR ');
+    const result=await api('/api/research/search',jsonOptions('POST',{source:'pubmed',query}));
+    for (const row of result.items) current.set(row.id,row);
+  }
+  const checked=new Date().toISOString();
+  const log=['出版状态复查 · '+checked,'原底稿 '+original.id+' · 核查 '+ids.length+' 条 PMID'];
+  for (const item of items) {
+    const row=current.get(item.id);
+    const before=item.notices;
+    const after=row?.notices;
+    const changed=Array.isArray(after) && JSON.stringify([...(before || [])].sort())!==JSON.stringify([...after].sort());
+    let finding;
+    if (!Array.isArray(after)) finding='未能核实，保留原记录';
+    else if (changed) finding=Array.isArray(before)?'出版标记变化':'首次查到出版标记，旧版状态未知';
+    else finding=Array.isArray(before)?'与原版一致':'首次核查，未见标记';
+    log.push(item.id+' · '+finding);
+    if (changed) {
+      log.push('  原标记：'+(before?.join(' / ') || (before?'无':'旧版未记录')));
+      log.push('  本次标记：'+(after.join(' / ') || '无'));
+    }
+    if (!Array.isArray(after) || changed) {
+      next.review[item.id]='待复核';
+      if (next.reasons) delete next.reasons[item.id];
+    }
+    if (Array.isArray(after)) item.notices=after;
+  }
+  return {...next,id:crypto.randomUUID(),created:checked,publicationCheck:log};
+}
+
 function briefText(run) {
   const lines = [run.question, '研究底稿 · 待专业复核', '版本 ' + run.id, '创建时间 ' + run.created];
+  lines.push(...(run.publicationCheck || []));
   for (const step of run.steps) {
     lines.push('', briefSources[step.source], '检索式 ' + step.query, '查询尝试 ' + step.attempts);
     if (!step.result) {
@@ -134,6 +170,8 @@ async function renderBrief() {
         <label>分歧内容、判断依据或待查事项<textarea name="note" required maxlength="2000"></textarea></label>
         <label>复核人<input name="reviewer" required maxlength="120"></label>
         <button class="btn" ${busy?'disabled':''}>保存分歧记录</button></form></details></section>` : ''}
+      ${run.publicationCheck ? `<section class="card"><h3>出版状态复查记录</h3>${run.publicationCheck.map(line=>'<p>'+esc(line)+'</p>').join('')}</section>` : ''}
+      ${run.steps.some(s=>s.source==='pubmed' && s.result?.items?.length) ? `<button id="brief-recheck" type="button" class="btn" ${busy?'disabled':''}>复查文献出版状态并保存新版</button>` : ''}
       <button id="brief-copy" type="button" class="btn" ${busy?'disabled':''}>复制计划并调整检索式</button>
       <label for="brief-note">审核意见、相互矛盾的证据与未解决问题</label>
       <textarea id="brief-note" rows="4" maxlength="16000" ${busy?'disabled':''}>${esc(run.note)}</textarea>
@@ -173,6 +211,21 @@ async function renderBrief() {
         nav('medical');
       } catch (err) { fail(err); }
     };
+    const recheck=$('#brief-recheck',home);
+    if (recheck) recheck.onclick=async ()=>{
+      if (busy) return;
+      busy=true;
+      try {
+        await saveReview(true);
+        paint();
+        const source=await briefStore('readonly',store=>store.get(run.id));
+        const checked=await recheckBriefPublications(source);
+        await put(checked);
+        run=checked;
+        await refreshHistory();
+      } catch(err) {fail(err);}
+      finally {busy=false;if (home.isConnected) paint();}
+    };
     $('#brief-copy', home).onclick = () => {
       $('#brief-question', form).value = run.question;
       for (const step of run.steps) $('#brief-' + step.source, form).value = step.query;
@@ -196,7 +249,7 @@ async function renderBrief() {
         const id=run.id;
         await saveReview();
         const saved=await briefStore('readonly',store=>store.get(id));
-        const payload={id,question:saved.question,created:saved.created,note:saved.note,conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
+        const payload={id,question:saved.question,created:saved.created,note:saved.note,publicationCheck:saved.publicationCheck || [],conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
           source:step.source,query:step.query,retrieved:step.retrieved || '',total:step.result?.total ?? null,error:step.error || '',
           records:(step.result?.items || []).map(item=>({
             id:item.id,title:item.title,date:item.date || '',notices:item.notices || [],decision:saved.review[item.id] || '待复核',
