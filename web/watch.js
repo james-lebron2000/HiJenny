@@ -84,17 +84,30 @@ function watchedMilestones(rows) {
   return events.sort((a,b)=>a.date.localeCompare(b.date) || a.id.localeCompare(b.id) || a.key.localeCompare(b.key));
 }
 
-function watchCalendar(events, now=new Date()) {
+const watchReminderOptions = [1,7,30];
+
+function watchReminderTime(event, days, now) {
+  if (!watchReminderOptions.includes(days) || !event.precise || event.kind !== '预计') return null;
+  const [year,month,day] = event.date.split('-').map(Number);
+  const reminder = new Date(year,month-1,day-days,9);
+  return reminder > now ? reminder : null;
+}
+
+function watchCalendar(events, now=new Date(), reminderDays=0) {
   const text=value=>String(value).replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n')
     .replace(/,/g,'\\,').replace(/;/g,'\\;').replace(/[\x00-\x08\x0b-\x1f\x7f]/g,'');
-  const stamp=now.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+  const stamp=date=>date.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
   const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//HiJenny//Trial Watch//ZH'];
   for (const e of events.filter(e=>e.precise)) {
-    lines.push('BEGIN:VEVENT','UID:'+e.id+'-'+e.key+'@hijenny','DTSTAMP:'+stamp,'SEQUENCE:'+e.revision,
+    lines.push('BEGIN:VEVENT','UID:'+e.id+'-'+e.key+'@hijenny','DTSTAMP:'+stamp(now),'SEQUENCE:'+e.revision,
       'DTSTART;VALUE=DATE:'+e.date.replaceAll('-',''),'TRANSP:TRANSPARENT',
       'SUMMARY:'+text(e.status+' · '+e.label+' · '+e.id),
       'DESCRIPTION:'+text(e.title+'\n登记更新 '+(e.updated || '未提供')+(e.previous?'\n上次登记日期 '+e.previous:'')),
-      'URL:https://clinicaltrials.gov/study/'+e.id,'END:VEVENT');
+      'URL:https://clinicaltrials.gov/study/'+e.id);
+    const reminder=watchReminderTime(e,reminderDays,now);
+    if (reminder) lines.push('BEGIN:VALARM','ACTION:DISPLAY','TRIGGER;VALUE=DATE-TIME:'+stamp(reminder),
+      'DESCRIPTION:'+text(e.id+' · '+e.label+' · '+e.date),'END:VALARM');
+    lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');
   const encoder=new TextEncoder();
@@ -121,6 +134,7 @@ function renderWatch() {
   const refresh = $('#update-watch',root);
   const display = value => Array.isArray(value) ? value.join(' · ') || '未提供' : String(value ?? '') || '未提供';
   let running = false;
+  let reminderDays = 0;
   function paint() {
     const rows = Object.keys(localStorage).filter(k => k.startsWith(watchPrefix))
       .map(k => JSON.parse(localStorage.getItem(k))).sort((a,b)=>a.id.localeCompare(b.id));
@@ -132,10 +146,24 @@ function renderWatch() {
       <ol>${events.map(e=>`<li><time datetime="${esc(e.date)}">${esc(e.date)}</time> · ${esc(e.status)} · ${esc(e.label)}
         <a href="${esc(sourceLink(e))}" target="_blank" rel="noopener noreferrer">${esc(e.id)} · ${esc(e.title)}</a>
         ${e.status==='预计延期'?'<small>上次预计 '+esc(e.previous)+'</small>':''}</li>`).join('')}</ol>
+      <label>预计里程碑的日历提醒<select id="watch-reminder">
+        ${option('0',String(reminderDays),'不添加提醒')}${watchReminderOptions.map(days=>option(String(days),String(reminderDays),'提前 '+days+' 天')).join('')}</select></label>
+      <p id="watch-reminder-summary" role="status"></p>
       <button class="btn" id="watch-export" ${running || !events.some(e=>e.precise)?'disabled':''}>下载日历（${events.filter(e=>e.precise).length} 个全天事件）</button>`:'';
     const download=$('#watch-export',root);
+    const select=$('#watch-reminder',root);
+    if (select) {
+      const describe=()=>{
+        reminderDays=Number(select.value);
+        const now=new Date();
+        const count=events.filter(e=>watchReminderTime(e,reminderDays,now)).length;
+        $('#watch-reminder-summary',root).textContent=reminderDays ?
+          `导入日历后，由日历应用按其通知设置提醒。文件包含 ${count} 个提醒，时间为本地上午 9 点（${Intl.DateTimeFormat().resolvedOptions().timeZone}）。已过提醒时间的项目会跳过。` : '';
+      };
+      select.onchange=describe;describe();
+    }
     if (download) download.onclick=()=>{
-      const url=URL.createObjectURL(new Blob([watchCalendar(events)],{type:'text/calendar;charset=utf-8'}));
+      const url=URL.createObjectURL(new Blob([watchCalendar(events,new Date(),reminderDays)],{type:'text/calendar;charset=utf-8'}));
       const a=document.createElement('a');a.href=url;a.download='HiJenny-试验里程碑.ics';a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
     };

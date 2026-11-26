@@ -25,3 +25,19 @@ test('retain month precision and use last observed date to identify schedule sli
   assert.equal(watchedMilestones([row])[0].status,'实际');
   assert.equal(milestoneDate('2026-02-30 · 预计'),null);
 });
+
+test('calendar alarms target future local mornings for precise estimated dates only',()=>{
+  const fields={'主要完成日期':'2027-01-05 · 预计','研究完成日期':'2027-01-20 · 实际'};
+  const row={id:'NCT00000001',title:'test',fields,changes:[]};
+  const events=watchedMilestones([row]);
+  const trigger=new Date(2026,11,29,9);
+  const now=new Date(trigger.getTime()-1);
+  const exported=watchCalendar(events,now,7);
+  const utc=trigger.toISOString().replace(/[-:]/g,'').replace('.000','');
+  assert.ok(exported.includes('TRIGGER;VALUE=DATE-TIME:'+utc+'\r\n'));
+  assert.equal(exported.match(/BEGIN:VALARM/g).length,1);
+  assert.doesNotMatch(watchCalendar(events,trigger,7),/VALARM/);
+  assert.doesNotMatch(watchCalendar(events,now),/VALARM/);
+  fields['主要完成日期']='2027-01 · 预计';
+  assert.doesNotMatch(watchCalendar(watchedMilestones([row]),now,7),/VALARM/);
+});
