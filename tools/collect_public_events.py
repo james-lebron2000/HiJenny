@@ -117,6 +117,7 @@ def trial_records(trial):
             result = {k: m[k] for k in ("title", "populationDescription", "timeFrame", "reportingStatus", "paramType",
                                          "dispersionType", "unitOfMeasure", "denoms", "classes") if k in m}
             result["groups"] = [{k: g[k] for k in ("id", "title") if k in g} for g in m.get("groups", [])]
+            result["analyses"] = m.get("analyses", [])
             primary.append(result)
     fields["登记主要终点分组结果"] = {"primary_outcomes": primary} if primary else None
     for field, value in fields.items():

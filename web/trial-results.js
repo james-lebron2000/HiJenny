@@ -33,6 +33,19 @@ function measureRows(measure) {
   return {rows,denoms};
 }
 
+const analysisHeaders=['登记分析序号','字段','原报内容'];
+function analysisRows(measure) {
+  const groups=new Map((measure.groups || []).map(g=>[g.id,g.title]));
+  const labels={groupIds:'纳入分析的组',paramType:'效应量类型',paramValue:'效应估计值',ciPctValue:'置信水平（%）',
+    ciNumSides:'区间侧数',ciLowerLimit:'区间下限',ciUpperLimit:'区间上限',pValue:'P 值',
+    statisticalMethod:'检验方法',statisticalComment:'方法说明',nonInferiorityType:'比较类型',
+    groupDescription:'组别说明',estimateComment:'估计值说明',pValueComment:'P 值说明'};
+  return (measure.analyses || []).flatMap((analysis,index)=>Object.entries(analysis).map(([field,value])=>{
+    const text=field==='groupIds' ? value.map(id=>[id,groups.get(id)].filter(Boolean).join(' · ')).join(' / ') : value;
+    return [index+1,labels[field] || field,text];
+  }));
+}
+
 const outcomeHeaders=['分层或类别','结果组','登记值','单位','离散量','下限','上限','原注'];
 const denomHeaders=['适用范围','结果组','分析分母','分母单位'];
 const safetyHeaders=['类别','报告组','受影响人数','风险人数'];
@@ -78,7 +91,8 @@ function showPostedResults(panel, snapshot) {
     function renderMeasure() {
       const m=active(), {rows,denoms}=measureRows(m);
       panel.querySelector('[data-outcome-view]').innerHTML=details(m).map(([label,v])=>'<p><strong>'+esc(label)+'</strong> '+esc(registryValue(v))+'</p>').join('')+
-        registryTable(denomHeaders,denoms)+registryTable(outcomeHeaders,rows);
+        registryTable(denomHeaders,denoms)+registryTable(outcomeHeaders,rows)+
+        (m.analyses?.length ? '<h4>登记统计分析</h4>'+registryTable(analysisHeaders,analysisRows(m)) : '');
     }
     choose.onchange=renderMeasure;renderMeasure();
   }
@@ -109,6 +123,7 @@ function showPostedResults(panel, snapshot) {
         url:source,passages:[{label:m.title,text:details(m).map(([k,v])=>k+'：'+registryValue(v)).join('\n')},
           {label:'登记分析分母',text:toText(denomHeaders,denoms)},
           {label:'登记测量值',text:toText(outcomeHeaders,rows)}]};
+      if (m.analyses?.length) item.passages.push({label:'登记统计分析',text:toText(analysisHeaders,analysisRows(m))});
       const run={id:crypto.randomUUID(),created:new Date().toISOString(),question:m.title,review:{},note:'',
         steps:[{source:'trials',query:snapshot.id,attempts:1,retrieved:snapshot.retrieved,
           result:{total:1,items:[item]}}]};
@@ -141,7 +156,8 @@ function comparisonFields(measure) {
     ['评价时间',measure.timeFrame],['分析人群',measure.populationDescription],
     ['统计量',measure.paramType],['单位',measure.unitOfMeasure],['离散量或区间类型',measure.dispersionType],
     ['组别定义',(measure.groups || []).map(g=>[g.id,g.title,g.description].filter(Boolean).join(' · ')).join('\n')],
-    ['分析分母',[denomHeaders,...denoms]],['测量结果',[outcomeHeaders,...rows]]
+    ['分析分母',[denomHeaders,...denoms]],['测量结果',[outcomeHeaders,...rows]],
+    ['登记统计分析',[analysisHeaders,...analysisRows(measure)]]
   ];
 }
 

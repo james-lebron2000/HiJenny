@@ -77,7 +77,9 @@ function renderPublicEvents() {
                 <p>分析人群 · ${esc(registryValue(measure.populationDescription))}</p>
                 <p>评价时间 · ${esc(registryValue(measure.timeFrame))}</p>
                 <p>统计量 · ${esc(registryValue(measure.paramType))} · ${esc(registryValue(measure.dispersionType))}</p>
-                ${registryTable(denomHeaders,denoms)}${registryTable(outcomeHeaders,rows)}`;
+                ${registryTable(denomHeaders,denoms)}${registryTable(outcomeHeaders,rows)}
+                <h4>登记统计分析</h4>${measure.analyses===undefined ? '<p>此版归档尚未采集统计分析。</p>'
+                  : registryTable(analysisHeaders,analysisRows(measure))}`;
               card.append(detail);
             }
           }

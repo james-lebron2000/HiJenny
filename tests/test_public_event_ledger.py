@@ -189,6 +189,11 @@ def test_primary_result_revisions_keep_denominators_and_prior_snapshot(monkeypat
     measures[0]["denoms"][0]["counts"][0]["value"] = "2"
     revised, = check()
     assert revised["previous"] == first["value"] and revised["value"] != first["value"]
+    measures[0]["analyses"] = [{"groupIds": ["A", "B"], "pValue": "<0.001"}]
+    updated, = check()
+    assert updated["previous"] == revised["value"]
+    assert updated["value"]["primary_outcomes"][0]["analyses"] == measures[0]["analyses"]
+    assert not check()
     measures[0]["type"] = "SECONDARY"
     removed, = check()
-    assert removed["value"] is None and removed["previous"] == revised["value"]
+    assert removed["value"] is None and removed["previous"] == updated["value"]
