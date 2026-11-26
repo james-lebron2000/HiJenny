@@ -45,12 +45,25 @@ function renderPublicEvents() {
         const card = document.createElement('article');
         card.className = 'card';
         const kind = {baseline:'首次收录',change:'字段变化',reviewed:'原文核实'}[r.kind];
+        const documentUpdate = r.kind==='change' && r.source==='Drugs@FDA' && r.previous===r.value && r.previous_date===r.source_date;
         card.innerHTML = `<h2>${esc(r.asset || r.subject)} · ${esc(r.field)}</h2>
-          <p>${esc(kind)} · ${r.kind==='change'?esc(display(r.previous))+' → ':''}${esc(display(r.value))}</p>
+          <p>${documentUpdate?'配套文件更新':esc(kind)} · ${r.kind==='change'&&!documentUpdate?esc(display(r.previous))+' → ':''}${esc(display(r.value))}</p>
           <p>${esc(r.date_label || '来源披露')} ${esc(r.source_date)} · 首次发现 ${esc(fmtDate(r.observed))}</p>
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.documents?.length) {
+          const types = {Label:'药品标签',Letter:'批准函',Review:'审评资料','Medication Guide':'用药指南'};
+          const links = document.createElement('ul');
+          for (const doc of r.documents) {
+            const item = document.createElement('li');
+            const link = document.createElement('a');
+            link.href=doc.url; link.target='_blank'; link.rel='noopener noreferrer';
+            link.textContent=types[doc.type] || doc.type;
+            item.append(link); links.append(item);
+          }
+          card.append(links);
+        }
         const noticeIds = [];
         if (r.category==='publication-status') {
           const notices = new Set(String(r.value).match(/https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\//g) || []);

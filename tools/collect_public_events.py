@@ -80,7 +80,13 @@ def fda_records(target):
         action_day = datetime.strptime(entry["submission_status_date"], "%Y%m%d").date().isoformat()
         field = {"ORIG": "原始申请获批", "SUPPL": "补充申请获批"}.get(kind, f"{kind} 申请获批")
         description = entry.get("submission_class_code_description") or "未列申请分类"
-        yield dict(source="Drugs@FDA", record=f"{application}/{kind}/{number}", subject=product["sponsor_name"],
+        documents = set()
+        for document in entry.get("application_docs", []):
+            link = (document.get("url") or "").replace("http://", "https://", 1)
+            if link.startswith("https://www.accessdata.fda.gov/drugsatfda_docs/"):
+                documents.add((document["type"], link))
+        yield dict(documents=[{"type": t, "url": u} for t, u in sorted(documents)],
+                   source="Drugs@FDA", record=f"{application}/{kind}/{number}", subject=product["sponsor_name"],
                    asset=target["asset"], region="美国", field=field, value=description, source_date=action_day,
                    date_label="FDA 决定日", effective=action_day, url=url)
 
@@ -165,11 +171,20 @@ def changes(records, history, now):
         previous = latest.get(key)
         if previous is None and record.get("category") == "study-interruption" and record["value"] is None:
             continue
-        if previous and (previous["value"] == record["value"] or record["source_date"] < previous["source_date"]):
-            continue
+        if previous:
+            if record["source"] == "Drugs@FDA":
+                fields = ("value", "source_date", "documents")
+                if all(previous.get(k, []) == record.get(k, []) for k in fields):
+                    continue
+            elif previous["value"] == record["value"] or record["source_date"] < previous["source_date"]:
+                continue
         entry = dict(record, previous=previous["value"] if previous else None, kind="change" if previous else "baseline",
                      observed=now)
         entry["id"] = fingerprint([key, record["source_date"], record["value"], previous["id"] if previous else None])
+        if record["source"] == "Drugs@FDA" and previous:
+            entry["previous_date"] = previous["source_date"]
+            entry["previous_documents"] = previous.get("documents", [])
+            entry["id"] = fingerprint([entry["id"], entry["documents"]])
         latest[key] = entry
         yield entry
 

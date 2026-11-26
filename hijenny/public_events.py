@@ -34,6 +34,9 @@ def import_month(db, name, sha, content):
         if not row["url"].startswith(("https://www.sec.gov/Archives/", "https://clinicaltrials.gov/study/", "https://pubmed.ncbi.nlm.nih.gov/",
                                       "https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=")):
             raise ValueError("Unexpected public source")
+        for doc in row.get("documents", []):
+            if row["source"] != "Drugs@FDA" or not doc["url"].startswith("https://www.accessdata.fda.gov/drugsatfda_docs/"):
+                raise ValueError("Unexpected regulatory document source")
         payload = json.dumps(row, sort_keys=True, ensure_ascii=False)
         old = db.execute("SELECT payload FROM events WHERE id=?", (row["id"],)).fetchone()
         if old and old[0] != payload:

@@ -92,14 +92,20 @@ def report(filters=Depends(event_filters)):
         for count, (payload,) in enumerate(rows, 1):
             row = json.loads(payload)
             value = display(row["value"])
-            if row["kind"] == "change":
+            kind = KINDS[row["kind"]]
+            if (row["kind"] == "change" and row["source"] == "Drugs@FDA" and
+                    row["previous"] == row["value"] and row.get("previous_date") == row["source_date"]):
+                kind = "配套文件更新"
+            elif row["kind"] == "change":
                 value = display(row["previous"]) + " → " + value
             lines.extend(["", f'{count}. {row["asset"] or row["subject"]} · {row["field"]}',
-                          f'{KINDS[row["kind"]]} · {value}', f'{row.get("date_label", "来源披露")} {row["source_date"]} · 首次发现 {row["observed"]}'])
+                          f'{kind} · {value}', f'{row.get("date_label", "来源披露")} {row["source_date"]} · 首次发现 {row["observed"]}'])
             if row.get("effective"):
                 lines.append("事件发生或生效 " + row["effective"])
             if row.get("region"):
                 lines.append("地区 " + row["region"])
             lines.append(f'{row["source"]} · {row["record"]} · {row["url"]}')
+            for doc in row.get("documents", []):
+                lines.append(f'{doc["type"]} · {doc["url"]}')
     lines.append(f"\n共 {count} 条")
     return PlainTextResponse("\n".join(lines), headers={"Content-Disposition": 'attachment; filename="HiJenny-public-events.txt"'})

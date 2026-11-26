@@ -124,3 +124,12 @@ def test_fda_approval_actions_keep_submission_identity(monkeypatch):
     assert rows[0]["effective"] == "2022-03-18"
     with pytest.raises(ValueError, match="Unexpected FDA"):
         list(collector.fda_records(dict(target, id="BLA999999")))
+
+    history = list(collector.changes(rows, [], "2026-11-26"))
+    url = "www.accessdata.fda.gov/drugsatfda_docs/label/test.pdf#page=23"
+    original["application_docs"] = [{"type": "Label", "url": "http://" + url},
+                                    {"type": "Label", "url": "https://" + url}]
+    revised, = collector.changes(collector.fda_records(target), history, "2026-11-27")
+    assert revised["documents"] == [{"type": "Label", "url": "https://" + url}]
+    assert revised["previous_documents"] == [] and revised["previous_date"] == revised["source_date"]
+    assert not list(collector.changes(collector.fda_records(target), history + [revised], "2026-11-28"))
