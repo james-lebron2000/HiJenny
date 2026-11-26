@@ -253,3 +253,29 @@ def test_collection_receipt_partial_failure_and_empty_match(tmp_path, monkeypatc
     assert first["new_events"] == 2
     assert collector.collect(root, receipt) == 1
     assert json.loads(receipt.read_text())["new_events"] == 0
+
+
+def test_receipt_retains_last_success_only_for_same_target_configuration(tmp_path, monkeypatch):
+    events = tmp_path / "events"
+    events.mkdir()
+    receipt = events / "collection.json"
+    watch = {"publications": [{"id": "trial", "asset": "asset A"}]}
+    watchfile = tmp_path / "watchlist.json"
+    watchfile.write_text(json.dumps(watch))
+    monkeypatch.setattr(collector, "publication_records", lambda target: [])
+    assert collector.collect(tmp_path, receipt) == 0
+    success = json.loads(receipt.read_text())["checks"][0]["last_success_utc"]
+    assert success
+
+    def unavailable(target):
+        raise OSError("unavailable")
+
+    monkeypatch.setattr(collector, "publication_records", unavailable)
+    for _ in range(2):
+        assert collector.collect(tmp_path, receipt) == 1
+        check = json.loads(receipt.read_text())["checks"][0]
+        assert (check["subject"], check["last_success_utc"], check["records"]) == ("asset A", success, None)
+    watch["publications"][0]["asset"] = "asset B"
+    watchfile.write_text(json.dumps(watch))
+    assert collector.collect(tmp_path, receipt) == 1
+    assert json.loads(receipt.read_text())["checks"][0]["last_success_utc"] is None

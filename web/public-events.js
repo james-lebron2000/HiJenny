@@ -31,8 +31,9 @@ function renderPublicEvents() {
     collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
     const names={sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
     body.innerHTML='<p>公开关注名单全量核对 · 新增 '+esc(receipt.new_events)+' 条归档事件</p>'+
-      registryTable(['来源','目标编号','核对结果','来源记录数','新增事件'],checks.map(r=>[
-        names[r.source] || r.source,r.target,r.status==='ok'?'成功':'失败 · '+r.error,r.records,r.new_events]));
+      registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],checks.map(r=>[
+        names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':'待更新 · '+r.error,
+        r.last_success_utc?fmtDate(r.last_success_utc):r.status==='ok'?fmtDate(receipt.finished_utc):'未记录',r.records ?? '待核',r.new_events ?? '待核']));
     if (/^[0-9]+$/.test(receipt.run_id)) {
       const link=document.createElement('a');
       link.href='https://github.com/james-lebron2000/HiJenny/actions/runs/'+receipt.run_id;

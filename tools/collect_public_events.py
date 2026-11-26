@@ -217,18 +217,30 @@ def collect(root=ROOT, receipt=None):
     files = sorted((root / "events").glob("*.jsonl"))
     history = [json.loads(line) for path in files for line in path.read_text().splitlines()]
     watch = json.loads((root / "watchlist.json").read_text())
+    watch_hash = fingerprint(watch)
+    previous_file = root / "events" / "collection.json"
+    previous = json.loads(previous_file.read_text()) if receipt and previous_file.exists() else {}
+    prior_checks = {(row["source"], row["target"]): row for row in previous.get("checks", [])}
     events, failures, checks = [], [], []
     for group, read in (("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
         for target in watch.get(group, []):
             check = {"source": group, "target": target.get("id") or target.get("cik")}
+            check.update(subject=target.get("asset") or target.get("company"), target_sha256=fingerprint(target))
+            prior = prior_checks.get((group, check["target"]), {})
+            same_target = prior.get("target_sha256") == check["target_sha256"] or previous.get("watchlist_sha256") == watch_hash
+            last_success = prior.get("last_success_utc") if same_target else None
+            if same_target and not last_success and prior.get("status") == "ok":
+                last_success = previous.get("finished_utc")
             try:
                 records = list(read(target))
                 additions = list(changes(records, history, now))
                 events.extend(additions)
+                last_success = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 check.update(status="ok", records=len({row["record"] for row in records}), new_events=len(additions))
             except Exception as err:
                 check.update(status="failed", records=None, new_events=None, error=type(err).__name__)
                 failures.append(f"{group} {target.get('id') or target.get('cik')}: {err}")
+            check["last_success_utc"] = last_success
             checks.append(check)
     if events:
         folder = root / "events"
@@ -240,7 +252,7 @@ def collect(root=ROOT, receipt=None):
         tmp.replace(month)
     if receipt is not None:
         report = {"started_utc": now, "finished_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                  "watchlist_sha256": fingerprint(watch), "checks": checks, "new_events": len(events)}
+                  "watchlist_sha256": watch_hash, "checks": checks, "new_events": len(events)}
         if os.environ.get("GITHUB_RUN_ID", "").isdigit():
             report.update(run_id=os.environ["GITHUB_RUN_ID"], trigger=os.environ.get("GITHUB_EVENT_NAME"))
         receipt.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
