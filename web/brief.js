@@ -86,6 +86,11 @@ function missingExactPublications(step) {
   return step.query.match(/\d+/g).filter(id=>!returned.has(id));
 }
 
+function retrievalHistory(step) {
+  return [step.retrieved, ...(step.recoveries || []).map(r=>'补查 PMID '+r.pmid+' · '+r.time+' · 源底稿 '+r.parent)]
+    .filter(Boolean).join('；');
+}
+
 function briefText(run) {
   const lines = [run.question, '研究底稿 · 待专业复核', '版本 ' + run.id, '创建时间 ' + run.created];
   if (run.publicEvent) lines.push('发起底稿的公开动态编号 '+run.publicEvent);
@@ -98,7 +103,7 @@ function briefText(run) {
     }
     for (const id of missingExactPublications(step)) lines.push('本次未取回指定 PMID '+id);
     const items = step.result.items;
-    lines.push('检索时间 ' + step.retrieved, '数据库命中 ' + step.result.total + '，已取回 ' + items.length);
+    lines.push('检索时间 ' + retrievalHistory(step), '原检索命中 ' + step.result.total + '，已取回 ' + items.length);
     for (const item of items) {
       const decision = run.review[item.id] || '待复核';
       lines.push('', '[' + item.id + '] ' + item.title, decision, sourceLink(item));
@@ -174,8 +179,9 @@ async function renderBrief() {
       ${run.publicEvent?`<a href="#/public-events?event=${encodeURIComponent(run.publicEvent)}">查看发起底稿的公开动态</a>`:''}
       ${run.steps.map(step => `<section class="card"><h3>${briefSources[step.source]}</h3>
       <span>${esc(step.query)} · 已尝试 ${step.attempts} 次</span>
-      ${step.result ? `<p>共命中 ${step.result.total} 条，已取回 ${step.result.items.length} 条；其中 ${step.result.items.filter(i=>!i.passages.length).length} 条缺少来源片段。</p>
-        ${missingExactPublications(step).map(id=>`<p>本次未取回指定 PMID ${esc(id)} · <a href="${esc(sourceLink({id}))}" target="_blank" rel="noopener noreferrer">核对 PubMed</a></p>`).join('')}
+      ${step.result ? `<p>原检索命中 ${step.result.total} 条，本版收录 ${step.result.items.length} 条；其中 ${step.result.items.filter(i=>!i.passages.length).length} 条缺少来源片段。</p>
+        ${(step.recoveries || []).map(r=>`<p>单独补查 PMID ${esc(r.pmid)} · ${esc(fmtDate(r.time))} · <a href="#/brief?version=${encodeURIComponent(r.parent)}">查看补查前的底稿</a></p>`).join('')}
+        ${missingExactPublications(step).map(id=>`<p>本次未取回指定 PMID ${esc(id)} · <a href="${esc(sourceLink({id}))}" target="_blank" rel="noopener noreferrer">核对 PubMed</a> <button class="btn" data-recover-pmid="${esc(id)}" ${busy?'disabled':''}>单独补查并保存新版</button></p>`).join('')}
         ${step.result.items.map(item => `<details><summary>${esc(item.title)}</summary>
         <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.id)} · 核对原始记录</a>
         ${publicationNotices(item)}<p>${esc(item.date)} · ${esc(item.detail)}</p>
@@ -204,6 +210,9 @@ async function renderBrief() {
       <small>生成 Word 时，本版检索记录、纳入的来源片段及审核意见会发送至本项目服务器。</small>
       ${run.steps.some(s=>!s.result) ? '<button class="btn primary" id="brief-resume">继续未完成的检索</button>' : ''}
       </div>`;
+    for (const button of report.querySelectorAll('[data-recover-pmid]')) {
+      button.onclick = ()=>recoverPublication(button.dataset.recoverPmid).catch(fail);
+    }
     const conflictForm=$('#brief-conflict',home);
     if (conflictForm) conflictForm.onsubmit=async event=>{
       event.preventDefault();
@@ -275,7 +284,7 @@ async function renderBrief() {
         await saveReview();
         const saved=await briefStore('readonly',store=>store.get(id));
         const payload={id,publicEvent:saved.publicEvent,question:saved.question,created:saved.created,note:saved.note,publicationCheck:saved.publicationCheck || [],conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
-          source:step.source,query:step.query,retrieved:step.retrieved || '',total:step.result?.total ?? null,error:step.error || '',
+          source:step.source,query:step.query,retrieved:retrievalHistory(step),total:step.result?.total ?? null,error:step.error || '',
           records:(step.result?.items || []).map(item=>({
             id:item.id,title:item.title,date:item.date || '',notices:item.notices || [],decision:saved.review[item.id] || '待复核',
             reason:saved.reasons?.[item.id] || '',postedResult:!!item.postedResult,
@@ -314,6 +323,29 @@ async function renderBrief() {
       Object.assign(record.review, Object.fromEntries(changes));
     });
     if (run?.id === id) run = latest;
+  }
+  async function recoverPublication(pmid) {
+    if (busy) return;
+    busy = true;
+    try {
+      await saveReview(true);
+      paint();
+      const parent = run.id;
+      const result = await api('/api/research/search',jsonOptions('POST',{source:'pubmed',query:pmid+'[pmid]'}));
+      const found = result.items.find(item=>item.id===pmid);
+      if (!found) throw new Error('PubMed 仍未返回 PMID '+pmid+'。原版已保留，可稍后重试。');
+      const next = await briefStore('readonly',store=>store.get(parent));
+      const step = next.steps.find(s=>missingExactPublications(s).includes(pmid));
+      if (!step) return;
+      next.id = crypto.randomUUID();
+      next.created = new Date().toISOString();
+      step.result.items.push({...found,retrieved:next.created});
+      step.recoveries ||= [];
+      step.recoveries.push({pmid,time:next.created,parent});
+      await put(next);
+      run = next;
+      if (home.isConnected) { rememberVersion(); await refreshHistory(); }
+    } finally { busy=false; if (home.isConnected) paint(); }
   }
   async function execute() {
     if (busy) return;

@@ -108,7 +108,7 @@ def export_brief(brief: Brief):
     records = []
     for step in brief.steps:
         name = "PubMed" if step.source == "pubmed" else "ClinicalTrials.gov"
-        status = (f"数据库命中 {step.total}；取回 {len(step.records)}" if step.total is not None
+        status = (f"原检索命中 {step.total}；本版收录 {len(step.records)}" if step.total is not None
                   else clean(step.error) or "未完成检索")
         doc.add_paragraph(f"{name} · {clean(step.query)}\n{status} · 检索时间 {clean(step.retrieved) or '未提供'}")
         if step.source == "pubmed" and step.total is not None and re.fullmatch(

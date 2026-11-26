@@ -7,7 +7,7 @@ const meetingFields = {expert:'讨论对象或专业方向', question:'外部医
 
 function medicalSources(run) {
   return run.steps.flatMap(step => (step.result?.items || []).filter(item => run.review[item.id] === '纳入')
-    .map(item => ({id:item.id, title:item.title, notices:item.notices || [], date:item.date, authors:item.authors || [], author_affiliations:item.author_affiliations || [], passages:item.passages || [], retrieved:step.retrieved})));
+    .map(item => ({id:item.id, title:item.title, notices:item.notices || [], date:item.date, authors:item.authors || [], author_affiliations:item.author_affiliations || [], passages:item.passages || [], retrieved:item.retrieved || step.retrieved})));
 }
 
 function meetingText(v) {
