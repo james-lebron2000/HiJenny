@@ -55,9 +55,13 @@ function studySummary(v, revision) {
     '', '来源会议版本 '+(v.meetingId || '独立起草'),
     ...v.refs.flatMap(r=>[r.title,sourceLink(r),r.label,r.quote,...(r.notices || []),''])].join('\n');
 }
-function renderStudy() {
-  const versions = () => Object.keys(localStorage).filter(k=>k.startsWith(studyPrefix))
+function studyVersions() {
+  return Object.keys(localStorage).filter(k=>k.startsWith(studyPrefix))
     .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>b.created.localeCompare(a.created));
+}
+
+function renderStudy() {
+
   const blank = () => ({id:null,kind:'RWE',values:{},checks:feasibilityItems.map(()=>({status:'待核实',note:''})),
     epi:'',stats:'',refs:[],meetingId:null});
   let base, draft;
@@ -67,14 +71,25 @@ function renderStudy() {
       const src=studySeed; studySeed=null;
       const v=blank(); v.meetingId=src.id; v.refs=src.refs; v.conflicts=(src.conflicts || []).map(c=>({...c,plan:''}));
       v.values.question=src.discussion || src.question; reset(v);
-    } else reset(versions()[0] || blank());
+    } else {
+      const requested=hashParams().get('version');
+      const versions=studyVersions();
+      const selected=requested ? versions.find(v=>v.id===requested) : versions[0];
+      if (requested && !selected) {
+        setView('<section class="research-home"><h1>本浏览器找不到该提案版本</h1><a href="#/study">浏览本机研究提案</a></section>');
+        return;
+      }
+      reset(selected || blank());
+    }
   } catch (error) { setView(errorPanel(error)); return; }
   let dirty=false;
   function paint() {
+    window.history.replaceState(null,'','#/study'+(base?'?version='+encodeURIComponent(base.id):''));
     const fields={...studyCommon,...studySpecific[draft.kind]};
     setView(`<section class="research-home" id="study-workspace" lang="zh-CN"><h1>IIT 与真实世界研究设计</h1>
       <label>历史版本<select id="study-history"><option value="">当前新草稿</option>
-        ${versions().map(v=>option(v.id,base?.id,v.kind+' · '+v.values.question+' · '+fmtDate(v.created))).join('')}</select></label>
+        ${studyVersions().map(v=>option(v.id,base?.id,v.kind+' · '+v.values.question+' · '+fmtDate(v.created))).join('')}</select></label>
+      ${draft.meetingId?`<p><a id="study-meeting-link" href="#/medical?version=${encodeURIComponent(draft.meetingId)}" target="_blank" rel="noopener">在新标签页查看发起研究的会议确认版</a></p>`:''}
       <button type="button" id="study-new" class="btn">新建研究</button>
       <form id="study-form"><label>交付形式<select id="study-kind">${option('RWE',draft.kind,'真实世界研究方案')}${option('IIT',draft.kind,'研究者发起研究概念书')}</select></label>
       ${draft.refs.length?`<details><summary>继承自会议的引文（${draft.refs.length}）</summary>${draft.refs.map(r=>`<p><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></p>${publicationNotices(r)}<blockquote>${esc(r.quote)}</blockquote>`).join('')}</details>`:''}
@@ -117,7 +132,7 @@ function renderStudy() {
     $('#study-new').onclick=()=>{if (!dirty || confirm('放弃未保存的修改？')) {reset(blank());dirty=false;paint();}};
     $('#study-history').onchange=e=>{
       if (dirty && !confirm('放弃未保存的修改？')) {e.target.value=base?.id || '';return;}
-      reset(versions().find(v=>v.id===e.target.value) || blank());dirty=false;paint();
+      reset(studyVersions().find(v=>v.id===e.target.value) || blank());dirty=false;paint();
     };
     function save() {
       collect();

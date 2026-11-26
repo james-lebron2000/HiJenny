@@ -85,13 +85,20 @@ async function renderMedical() {
   if (!body.isConnected) return;
   const fromBrief = runs.find(r=>r.id===medicalBriefId);
   medicalBriefId = null;
-  let version = fromBrief ? null : saved[0];
+  const requested=hashParams().get('version');
+  let version=fromBrief ? null : requested ? saved.find(v=>v.id===requested) : saved[0];
+  if (requested && !fromBrief && !version) {
+    body.innerHTML='<p>本浏览器找不到指定的会议版本。</p><a href="#/medical">浏览本机会议简报</a>';
+    return;
+  }
   let run = fromBrief || runs.find(r=>r.id===version?.briefId) || runs[0];
   let revisionBase=null;
   let dirty = false;
   let answerQuery='', includeEarlier=false;
   function draw() {
     dirty = false;
+    window.history.replaceState(null,'','#/medical'+(version?'?version='+encodeURIComponent(version.id):''));
+    const linkedStudies=version?.confirmed ? studyVersions().filter(v=>v.meetingId===version.id) : [];
     const sourceRecords = version?.sourceRecords || (run ? medicalSources(run) : []);
     const authorPapers = sourceRecords.filter(record=>record.authors?.length);
     const conflictPool = version ? version.conflictPool || [] : run?.conflicts || [];
@@ -129,6 +136,8 @@ async function renderMedical() {
       ${alerts.map(a=>`<p>PMID ${esc(a.id)} · ${a.missing?'最近一次未能核实':'出版标记与本版不一致'} · ${esc(fmtDate(a.created))}</p>
       ${a.missing?'':publicationNotices(a)}<a href="#/brief?version=${encodeURIComponent(a.version)}">打开对应复查底稿</a>
       ${runs.some(r=>r.id===a.version) ? `<button type="button" class="btn" data-revise="${esc(a.version)}">用此底稿修订答复</button>` : '<p>先在复查底稿中核对并纳入可支持答复的来源，再回此页修订。</p>'}`).join('')}</section>` : ''}
+      ${linkedStudies.length?`<details id="meeting-studies"><summary>由此确认版发起的研究提案（${linkedStudies.length} 个版本）</summary><ul>
+        ${linkedStudies.map(v=>`<li><a href="#/study?version=${encodeURIComponent(v.id)}" target="_blank" rel="noopener">${esc(v.kind)} · ${esc(v.values.question)} · ${esc(fmtDate(v.created))}</a></li>`).join('')}</ul></details>`:''}
       <label>历史简报 <select id="meeting-history"><option value="">新草稿</option>
         ${saved.map(v=>option(v.id,version?.id,fmtDate(v.created)+' · '+v.question)).join('')}</select></label>
       <label>选用底稿并新建简报 <select id="meeting-source"><option value="">选择有纳入记录的研究底稿</option>
