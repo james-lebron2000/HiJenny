@@ -29,7 +29,7 @@ function renderPublicEvents() {
     if (!receipt) {body.textContent='服务器尚未同步采集回执。';return;}
     const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
     collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
-    const names={orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
+    const names={orange_book_uses:'FDA 专利用途代码释义',orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
     body.innerHTML='<p>公开关注名单全量核对 · 新增 '+esc(receipt.new_events)+' 条归档事件</p>'+
       registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],checks.map(r=>[
         names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':'待更新 · '+r.error,

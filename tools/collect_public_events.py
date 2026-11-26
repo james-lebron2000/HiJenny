@@ -261,8 +261,10 @@ def collect(root=ROOT, receipt=None):
     events, failures, checks = [], [], []
     ema_dataset = cache(lambda: fetch(EMA_MEDICINES))
     orange_dataset = cache(lambda: fetch(orange_book.DOWNLOAD, orange_book.read_archive))
-    for group, read in (("orange_book", lambda target: orange_book.records(target, orange_dataset)), ("jrct", lambda target: jrct.records(target, fetch)), ("ema", lambda target: ema_records(target, ema_dataset)), ("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
-        for target in watch.get(group, []):
+    use_definitions = cache(lambda: fetch(orange_book.USE_CODES, orange_book.read_definitions))
+    for group, read in (("orange_book_uses", lambda t: orange_book.records(t, orange_dataset, use_definitions, now[:10])),
+                        ("orange_book", lambda target: orange_book.records(target, orange_dataset)), ("jrct", lambda target: jrct.records(target, fetch)), ("ema", lambda target: ema_records(target, ema_dataset)), ("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
+        for target in watch.get("orange_book" if group == "orange_book_uses" else group, []):
             check = {"source": group, "target": target.get("id") or target.get("cik")}
             check.update(subject=target.get("asset") or target.get("company"), target_sha256=fingerprint(target))
             prior = prior_checks.get((group, check["target"]), {})

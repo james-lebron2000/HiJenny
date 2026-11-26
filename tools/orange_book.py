@@ -2,6 +2,7 @@
 import csv
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
 from io import BytesIO, TextIOWrapper
 import re
 from zipfile import ZipFile
@@ -13,7 +14,49 @@ def read_archive(response):
     return parsedate_to_datetime(response.headers["Last-Modified"]).date().isoformat(), response.read()
 
 
-def records(target, dataset):
+USE_CODES = "https://www.accessdata.fda.gov/scripts/cder/ob/results_patent.cfm"
+
+
+class UseCodeTable(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.rows = {}
+        self.cells = []
+        self.in_cell = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "tr":
+            self.cells = []
+        elif tag == "td":
+            self.cells.append([])
+            self.in_cell = True
+        elif tag == "br" and self.in_cell:
+            self.cells[-1].append(" ")
+
+    def handle_data(self, data):
+        if self.in_cell:
+            self.cells[-1].append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "td":
+            self.in_cell = False
+        if tag == "tr" and len(self.cells) == 2:
+            code, text = (" ".join("".join(cell).split()) for cell in self.cells)
+            if re.fullmatch(r"U-[0-9]+", code) and text:
+                if self.rows.setdefault(code, text) != text:
+                    raise ValueError("Conflicting FDA use-code definitions")
+
+
+def read_definitions(response):
+    table = UseCodeTable()
+    table.feed(response.read().decode(response.headers.get_content_charset() or "utf-8"))
+    table.close()
+    if not table.rows:
+        raise ValueError("Empty FDA patent use-code dictionary")
+    return table.rows
+
+
+def records(target, dataset, definitions=None, checked=None):
     application = target["id"]
     if not re.fullmatch(r"NDA[0-9]{6}", application):
         raise ValueError("Invalid Orange Book NDA")
@@ -33,6 +76,19 @@ def records(target, dataset):
 
     for product in products:
         index = product["Product_No"]
+        if definitions is not None:
+            mapping = {}
+            for patent in patents:
+                code = patent["Patent_Use_Code"].strip()
+                if patent["Product_No"] == index and code:
+                    mapping.setdefault(code, set()).add(patent["Patent_No"])
+            dictionary = definitions() if mapping else {}
+            lines = [f"{code} · 专利 {', '.join(sorted(numbers))} · {dictionary[code]}" for code, numbers in sorted(mapping.items())]
+            yield dict(source="FDA Orange Book", record=application+"/"+index, subject=product["Applicant_Full_Name"],
+                       asset=target["asset"], region="美国", field="FDA 专利用途代码释义", category="patent-use-definitions",
+                       value="\n".join([product["Strength"], *(lines or ["本版未列用途代码"])]), source_date=checked,
+                       date_label="释义核对日（UTC）", effective=None, url=USE_CODES)
+            continue
         patent_rows = []
         for r in patents:
             if r["Product_No"] != index:
