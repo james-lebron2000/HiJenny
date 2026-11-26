@@ -46,10 +46,19 @@ def test_review_digest_uses_taipei_discovery_day_and_exports_all_matches(tmp_pat
                        source_date="2024-06-03", url="https://www.sec.gov/Archives/demo")
             db.execute("insert into events values (?,?,?,?,?)",
                        (row["id"], row["asset"], row["region"], row["source_date"], json.dumps(row)))
+        future = dict(row, id="future", source_date="2026-11-28")
+        db.execute("insert into events values (?,?,?,?,?)",
+                   (future["id"], future["asset"], future["region"], future["source_date"], json.dumps(future)))
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    params = dict(discovered_from="2026-11-27", discovered_to="2026-11-27", kind="reviewed")
+    for cutoff, ids in [("2026-11-25", []), ("2026-11-26", ["0"]), ("2026-11-27", ["2"]), ("2026-11-28", ["future"])]:
+        snapshot = client.get("/api/public-events", params={"as_of": cutoff}).json()
+        assert [r["id"] for r in snapshot["items"]] == ids
+        assert snapshot["total"] == len(ids)
+    snapshot_report = client.get("/api/public-events/report.txt", params={"as_of": "2026-11-26"})
+    assert "历史截面" in snapshot_report.text and "共 1 条" in snapshot_report.text
+    params = dict(disclosed_to="2026-11-27", discovered_from="2026-11-27", discovered_to="2026-11-27", kind="reviewed")
     result = client.get("/api/public-events", params=dict(params, limit=1)).json()
     assert result["total"] == 2 and result["items"][0]["id"] == "2"
     report = client.get("/api/public-events/report.txt", params=params)

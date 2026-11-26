@@ -4,6 +4,7 @@ function renderPublicEvents() {
     ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
+    <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
     <label>地区<input name="region" placeholder="例如：中东"></label>
     <label>来源披露起始日期<input type="date" name="since"></label>
     <label>首次发现起始日（台北）<input type="date" name="discovered_from"></label>
@@ -111,7 +112,7 @@ function renderPublicEvents() {
       download.href = '/api/public-events/report.txt?' + reportQuery;
       download.hidden = result.total === 0;
       offset += result.items.length;
-      status.textContent = '已显示 '+offset+' / '+result.total+' 条记录';
+      status.textContent = (query.has('as_of')?'截至 '+query.get('as_of')+' 的历史截面 · ':'')+'已显示 '+offset+' / '+result.total+' 条记录';
       more.hidden = offset >= result.total;
     } catch (err) {
       if (generation===request) { status.textContent='读取失败：'+err.message; more.hidden=false; }
@@ -121,6 +122,7 @@ function renderPublicEvents() {
   $('#public-event-week').onclick = ()=>{
     const day = new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'});
     const now = Date.now();
+    form.elements.as_of.value = '';
     form.elements.discovered_from.value = day.format(now - 6 * 86400000);
     form.elements.discovered_to.value = day.format(now);
     form.requestSubmit();

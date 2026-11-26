@@ -13,7 +13,7 @@ OBSERVED_DAY = "date(json_extract(payload, '$.observed'), '+8 hours')"
 KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原文核实"}
 
 
-def event_filters(asset: str = "", region: str = "", since: date | None = None,
+def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
                   disclosed_to: date | None = None, source: Literal["SEC", "PubMed", "ClinicalTrials.gov"] | None = None,
                   event_id: str | None = None, publication_status: bool = False,
@@ -49,17 +49,28 @@ def event_filters(asset: str = "", region: str = "", since: date | None = None,
     labels = [f"{label}：{value}" for label, value in (
         ("来源", source), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("记录类型", KINDS.get(kind))) if value]
-    return sql, args, order, labels
+    table = "events"
+    if as_of:
+        # Select the last observation per source field before applying display filters.
+        table = f"""(SELECT *, row_number() OVER (
+                       PARTITION BY json_extract(payload, '$.source'), json_extract(payload, '$.record'),
+                                    json_extract(payload, '$.field')
+                       ORDER BY julianday(json_extract(payload, '$.observed')) DESC, rowid DESC
+                     ) AS position FROM events WHERE date<=? AND {OBSERVED_DAY}<=?)"""
+        sql += " AND position=1"
+        args = [as_of.isoformat(), as_of.isoformat(), *args]
+        labels.insert(0, f"历史截面（截至台北日期）：{as_of}，每个来源字段仅列当时最后一次已收录的值。")
+    return table, sql, args, order, labels
 
 
 @router.get("/api/public-events")
 def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
                   limit: int = Query(50, ge=1, le=100)):
-    sql, args, order, _ = filters
+    table, sql, args, order, _ = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
-        count = db.execute("SELECT count(*) FROM events" + sql, args).fetchone()[0]
-        rows = db.execute("SELECT payload FROM events" + sql + order + " LIMIT ? OFFSET ?", (*args, limit, offset))
+        count = db.execute(f"SELECT count(*) FROM {table}" + sql, args).fetchone()[0]
+        rows = db.execute(f"SELECT payload FROM {table}" + sql + order + " LIMIT ? OFFSET ?", (*args, limit, offset))
         return {"total": count, "items": [json.loads(row[0]) for row in rows]}
 
 
@@ -71,10 +82,10 @@ def display(value):
 
 @router.get("/api/public-events/report.txt", response_class=PlainTextResponse)
 def report(filters=Depends(event_filters)):
-    sql, args, order, labels = filters
+    table, sql, args, order, labels = filters
     lines = ["HiJenny 公开资产动态", "筛选范围（发现日期按台北时间）", *labels]
     with closing(connect()) as db:
-        rows = db.execute("SELECT payload FROM events" + sql + order, args)
+        rows = db.execute(f"SELECT payload FROM {table}" + sql + order, args)
         count = 0
         for count, (payload,) in enumerate(rows, 1):
             row = json.loads(payload)
