@@ -13,6 +13,20 @@ function priceScenario(flows, rate) {
   return {presentValues,total};
 }
 
+function scenarioDifferences(plan) {
+  return plan.flows.map((flow,index)=>{
+    const [base,alternate]=flow.cases;
+    const assumptions=[];
+    for (const [key,label,suffix] of [['amount','金额',''],['year','年份',''],['probability','概率','%']]) {
+      if (Number(base[key]) !== Number(alternate[key])) {
+        assumptions.push(label+' '+base[key]+suffix+' → '+alternate[key]+suffix);
+      }
+    }
+    const delta=plan.outputs[1].presentValues[index]-plan.outputs[0].presentValues[index];
+    return {index,delta,assumptions};
+  }).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta) || a.index-b.index);
+}
+
 const dealFields = [
   ['name','交易双方与资产','text'], ['disclosed','披露日','date'],
   ['scope','授权地区、权利范围及资产阶段','text'], ['currency','披露币种','text'],
@@ -104,11 +118,12 @@ async function renderValuation(seq) {
     }
     function show(v) {
       const totals=v.outputs.map(o=>o.total);
+      const differences=scenarioDifferences(v);
       result.innerHTML=`<h2>买方风险调整净现值</h2><p>${esc(v.asOf)} · 百万 ${esc(v.currency)} · 年折现率 ${esc(v.rate)}%</p>
-        <table><thead><tr><th>现金流</th><th>基准现值</th><th>替代现值</th></tr></thead><tbody>
-        ${v.flows.map((f,i)=>`<tr><th>${esc(f.label)}</th>${v.outputs.map((o,j)=>`<td>${number(o.presentValues[i])}${scenarioSources(v,f.cases[j]).map(r=>
-          `<br><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.field)} · ${esc(r.source_date)}</a>`).join('')}</td>`).join('')}</tr>`).join('')}
-        <tr><th>合计</th>${totals.map(t=>`<td>${number(t)}</td>`).join('')}</tr></tbody></table>
+        <table><caption>按现值差额的绝对值排序，差额为替代减基准</caption><thead><tr><th>现金流</th><th>基准现值</th><th>替代现值</th><th>差额</th></tr></thead><tbody>
+        ${differences.map(({index:i,delta,assumptions})=>`<tr><th>${esc(v.flows[i].label)}<br><small>${esc(assumptions.join(' · ') || '金额、年份和概率相同')}</small></th>${v.outputs.map((o,j)=>`<td>${number(o.presentValues[i])}${scenarioSources(v,v.flows[i].cases[j]).map(r=>
+          `<br><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.field)} · ${esc(r.source_date)}</a>`).join('')}</td>`).join('')}<td>${number(delta)}</td></tr>`).join('')}
+        <tr><th>合计</th>${totals.map(t=>`<td>${number(t)}</td>`).join('')}<td>${number(totals[1]-totals[0])}</td></tr></tbody></table>
         <p>替代情景较基准变化 ${number(totals[1]-totals[0])} 百万 ${esc(v.currency)}。</p>
         ${v.deals?.length ? `<h3>本版参照的交易条款</h3><div class="bd-scroll"><table>
         <thead><tr><th>交易与披露日</th><th>授权范围</th><th>原币种</th><th>首付款（百万）</th><th>里程碑上限（百万）</th><th>来源与限制</th></tr></thead>
@@ -135,6 +150,10 @@ async function renderValuation(seq) {
           });
           lines.push('依据 '+f.basis);
         });
+        lines.push('','现金流差额（替代减基准，按绝对值排序）');
+        for (const {index,delta,assumptions} of differences) {
+          lines.push(v.flows[index].label+' · '+delta+' 百万 '+v.currency+' · '+(assumptions.join(' · ') || '金额、年份和概率相同'));
+        }
         lines.push('',...totals.map((t,j)=>scenarioNames[j]+'净现值 '+t),'情景差额 '+(totals[1]-totals[0]));
         const url=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain;charset=utf-8'}));
         const link=document.createElement('a');link.href=url;link.download='HiJenny-内部估值-'+v.id+'.txt';link.click();
