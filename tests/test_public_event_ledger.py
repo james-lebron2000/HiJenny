@@ -93,6 +93,16 @@ def test_pubmed_link_requires_exact_registry_and_preserves_index_date():
     assert not list(collector.publication_links(dict(trial, id="NCT00000001"), root))
     assert not list(collector.publication_links(trial, collector.ElementTree.fromstring(xml.replace("ClinicalTrials.gov", "Other"))))
 
+    unindexed = xml.replace("ClinicalTrials.gov", "Other")
+    def abstract_records(text):
+        with_text = unindexed.replace("</Article>", f"<Abstract><AbstractText>{text}</AbstractText></Abstract></Article>")
+        return list(collector.publication_links(trial, collector.ElementTree.fromstring(with_text)))
+    mention, _ = abstract_records("(nct<i>05499390</i>)")
+    assert mention["field"] == "论文摘要提及登记号 · NCT05499390" and mention["category"] == "publication-mention"
+    assert not abstract_records("XNCT05499390 or NCT054993901")
+    titled = unindexed.replace("Design of", "NCT05499390: Design of")
+    assert list(collector.publication_links(trial, collector.ElementTree.fromstring(titled)))[0]["field"].startswith("论文题名提及")
+
 
 def test_study_stop_reason_revisions_and_resumption(monkeypatch):
     trial = {"id": "NCT07038915", "asset": "demo"}

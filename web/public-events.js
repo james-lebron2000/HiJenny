@@ -89,6 +89,11 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.category==='publication-mention') {
+          const note=document.createElement('p');
+          note.textContent='文献在题名或摘要中提到此登记号；是否报告该试验的结果仍需核对原文。';
+          card.append(note);
+        }
         if (r.category==='safety-summary') {
           for (const [label,version] of [['本次归档',r.value],['上次归档',r.previous]]) {
             const safety=version?.safety_summary;

@@ -166,18 +166,28 @@ def publication_links(trial, root):
         citation = article.find("MedlineCitation")
         pmid = citation.findtext("PMID")
         banks = citation.findall("Article/DataBankList/DataBank")
-        if not any(bank.findtext("DataBankName") == "ClinicalTrials.gov" and
+        registry_link = any(bank.findtext("DataBankName") == "ClinicalTrials.gov" and
                    nct in [entry.text for entry in bank.findall("AccessionNumberList/AccessionNumber")]
-                   for bank in banks):
-            continue
+                   for bank in banks)
+        title = "".join(citation.find("Article/ArticleTitle").itertext()).strip()
+        field = "论文登记关联"
+        if not registry_link:
+            number = re.compile(r"(?<![A-Za-z0-9])" + re.escape(nct) + r"(?![A-Za-z0-9])", re.I)
+            if number.search(title):
+                field = "论文题名提及登记号"
+            elif any(number.search("".join(node.itertext())) for node in citation.findall("Article/Abstract/AbstractText")):
+                field = "论文摘要提及登记号"
+            else:
+                continue
         if not re.fullmatch(r"[0-9]+", pmid or ""):
             raise ValueError("Invalid linked PMID")
         indexed = article.find("PubmedData/History/PubMedPubDate[@PubStatus='pubmed']")
         date = datetime(*(int(indexed.findtext(part)) for part in ("Year", "Month", "Day"))).date()
-        title = "".join(citation.find("Article/ArticleTitle").itertext()).strip()
         link = dict(source="PubMed", record=pmid, subject=trial["asset"], asset=trial["asset"], region=None,
-                   trial=nct, field="论文登记关联 · " + nct, value=title, source_date=date.isoformat(),
+                   trial=nct, field=field + " · " + nct, value=title, source_date=date.isoformat(),
                    date_label="PubMed 收录", effective=None, url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/")
+        if not registry_link:
+            link["category"] = "publication-mention"
         yield link
         types = [node.text for node in citation.findall("Article/PublicationTypeList/PublicationType")]
         notices = sorted(set(publication_notices(citation, types)))
@@ -197,7 +207,7 @@ def publication_records(trial):
     base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
     params = {"db": "pubmed", "tool": "hijenny", "email": AGENT.split()[-1]}
     time.sleep(0.4)
-    search = fetch(base + "esearch.fcgi?" + urlencode(dict(params, term=nct+"[si]", retmax=9999,
+    search = fetch(base + "esearch.fcgi?" + urlencode(dict(params, term=f"{nct}[si] OR {nct}[tiab]", retmax=9999,
                                                           retmode="json")))["esearchresult"]
     ids = search["idlist"]
     if len(ids) != int(search["count"]):
