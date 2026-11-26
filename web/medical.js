@@ -53,6 +53,21 @@ function meetingPublicationAlerts(version, checks, briefDate) {
   });
 }
 
+function confirmedMeetingHistory(saved) {
+  const index=new Map(saved.map(v=>[v.id,v]));
+  const superseded=new Set();
+  for (const version of saved.filter(v=>v.confirmed)) {
+    let parent=index.get(version.parent || version.revisionOf);
+    const seen=new Set([version.id]);
+    while (parent && !seen.has(parent.id)) {
+      seen.add(parent.id);
+      if (parent.confirmed) superseded.add(parent.id);
+      parent=index.get(parent.parent || parent.revisionOf);
+    }
+  }
+  return superseded;
+}
+
 async function renderMedical() {
   setView('<section id="medical-meeting" class="research-home"><h1>准备专家会简报</h1><div id="meeting-body">正在读取本机底稿…</div></section>');
   const body = $('#meeting-body');
@@ -74,6 +89,7 @@ async function renderMedical() {
   let run = fromBrief || runs.find(r=>r.id===version?.briefId) || runs[0];
   let revisionBase=null;
   let dirty = false;
+  let answerQuery='', includeEarlier=false;
   function draw() {
     dirty = false;
     const sourceRecords = version?.sourceRecords || (run ? medicalSources(run) : []);
@@ -103,6 +119,10 @@ async function renderMedical() {
           ${esc(fmtDate(r.created))} · 已完成 ${completed.length}/${r.steps.length} 个来源 · 取回 ${count} 条 · 已纳入 ${medicalSources(r).length} 条</p>`;
       }).join('')}</section>` : ''}
       <button class="btn" data-nav="brief">打开研究底稿</button>
+      ${saved.some(v=>v.confirmed)?`<details id="meeting-answer-library" class="card"><summary>查找已确认的医学答复</summary>
+        <label>问题、答复、复核人、待办或来源编号<input id="meeting-answer-query" type="search" value="${esc(answerQuery)}"></label>
+        <label><input id="meeting-answer-earlier" type="checkbox" ${includeEarlier?'checked':''}> 包含已有后续确认版的历史答复</label>
+        <div id="meeting-answer-hits" aria-live="polite"></div></details>`:''}
       ${affected.length ? `<section class="card"><h2>引文需要复查的已确认简报（${affected.length}）</h2>
       ${affected.map(row=>`<p><button type="button" class="btn" data-affected="${esc(row.version.id)}">${esc(row.version.question)} · ${esc(fmtDate(row.version.created))}</button> · 涉及 ${row.alerts.map(a=>esc(a.id)).join('、')}</p>`).join('')}</section>` : ''}
       ${alerts.length ? `<section class="card"><h3>本版引文的后续复查</h3>
@@ -156,11 +176,37 @@ async function renderMedical() {
       version=null;draw();
       $('#meeting-revision-reason',body)?.focus();
     };
-    for (const button of $$('[data-affected]',body)) button.onclick=()=>{
+    function openSaved(id) {
       if (!switchAllowed()) return;
-      revisionBase=null;version=saved.find(v=>v.id===button.dataset.affected);
+      revisionBase=null;version=saved.find(v=>v.id===id);
       run=runs.find(r=>r.id===version.briefId);draw();
-    };
+      $('#meeting-history',body).focus();
+    }
+    for (const button of $$('[data-affected]',body)) button.onclick=()=>openSaved(button.dataset.affected);
+    const library=$('#meeting-answer-library',body);
+    if (library) {
+      const hits=$('#meeting-answer-hits',library), superseded=confirmedMeetingHistory(saved);
+      const affectedIds=new Set(affected.map(row=>row.version.id));
+      function findAnswers() {
+        answerQuery=$('#meeting-answer-query',library).value;
+        includeEarlier=$('#meeting-answer-earlier',library).checked;
+        const query=answerQuery.trim().toLowerCase();
+        const found=saved.filter(v=>v.confirmed && (includeEarlier || !superseded.has(v.id)) &&
+          [v.question,v.answer,v.expert,v.reviewer,v.action,v.owner,v.due,...v.refs.flatMap(r=>[r.id,r.title,r.quote])]
+            .some(value=>String(value || '').toLowerCase().includes(query)));
+        hits.innerHTML=found.map(v=>`<article><h3>${esc(v.question)}</h3><p>${esc(v.answer)}</p>
+          <p>复核人 ${esc(v.reviewer)} · ${esc(fmtDate(v.created))}${superseded.has(v.id)?' · 已有后续确认版':''}${affectedIds.has(v.id)?' · 引文需复查':''}</p>
+          ${v.action?`<p>会后行动 · ${esc(v.action)} · ${esc(v.owner || '负责人未填')} · ${esc(v.due || '期限未填')}</p>`:''}
+          <p>${v.refs.map(r=>`<a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.id)}</a>`).join(' · ')}</p>
+          <button type="button" class="btn" data-open-answer="${esc(v.id)}">查看此确认版与原文片段</button></article>`).join('') || '<p>未找到匹配的确认版。</p>';
+      }
+      library.oninput=findAnswers;
+      hits.onclick=event=>{
+        const button=event.target.closest('[data-open-answer]');
+        if (button) openSaved(button.dataset.openAnswer);
+      };
+      findAnswers();
+    }
     $('#meeting-history',body).onchange = event => {
       if (!switchAllowed()) { event.target.value=version?.id || ''; return; }
       revisionBase=null;version = saved.find(v=>v.id===event.target.value);
