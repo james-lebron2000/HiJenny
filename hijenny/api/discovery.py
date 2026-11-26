@@ -17,6 +17,16 @@ REGISTRY = "https://clinicaltrials.gov/api/v2/studies"
 class Criteria(BaseModel):
     condition: str = Field(min_length=1, max_length=200)
     sponsor: str = Field(default="", max_length=200)
+    country: str = Field(default="", max_length=120)
+
+    @field_validator("country")
+    @classmethod
+    def country_name(cls, value):
+        value = value.strip()
+        if any(not (c.isalpha() or c in " -'’.,()") for c in value):
+            raise ValueError("请填写登记库使用的国家或地区名称")
+        return value
+
     phase: Literal["", "EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4"] = ""
 
     @field_validator("condition")
@@ -35,11 +45,16 @@ class RegistryScreen(BaseModel):
 async def fetch_screen(client, request):
     criteria = request.criteria
     params = {"query.cond": criteria.condition, "countTotal": "true", "pageSize": 20,
-              "fields": "NCTId,BriefTitle,LeadSponsorName,Condition,Phase,OverallStatus,InterventionName,LastUpdatePostDate"}
+              "fields": "NCTId,BriefTitle,LeadSponsorName,Condition,Phase,OverallStatus,InterventionName,LastUpdatePostDate,LocationCountry"}
     if criteria.sponsor.strip():
         params["query.lead"] = criteria.sponsor.strip()
+    filters = []
     if criteria.phase:
-        params["filter.advanced"] = f"AREA[Phase]{criteria.phase}"
+        filters.append(f"AREA[Phase]{criteria.phase}")
+    if criteria.country:
+        filters.append(f'AREA[LocationCountry]"{criteria.country}"')
+    if filters:
+        params["filter.advanced"] = " AND ".join(filters)
     if request.cursor:
         params["pageToken"] = request.cursor
     response = await client.get(REGISTRY, params=params)
@@ -54,6 +69,8 @@ async def fetch_screen(client, request):
         rows.append({
             "id": ident["nctId"], "title": ident["briefTitle"],
             "sponsor": protocol.get("sponsorCollaboratorsModule", {}).get("leadSponsor", {}).get("name", ""),
+            "countries": sorted({loc["country"] for loc in protocol.get("contactsLocationsModule", {}).get("locations", [])
+                                 if loc.get("country")}),
             "conditions": protocol.get("conditionsModule", {}).get("conditions", []),
             "phases": protocol.get("designModule", {}).get("phases", []),
             "interventions": [item["name"] for item in arms.get("interventions", []) if item.get("name")],
@@ -78,6 +95,7 @@ class Opportunity(BaseModel):
     retrieved: datetime
     criteria: Criteria
     nct: str = Field(pattern=r"^NCT[0-9]{8}$")
+    countries: list[str] = Field(default_factory=list, max_length=300)
     trial_title: str = Field(min_length=1, max_length=3000)
     sponsor: str = Field(default="", max_length=500)
     updated: str = Field(default="", max_length=20)

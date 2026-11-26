@@ -5,11 +5,12 @@ function opportunityOrigin(record) {
   return `<section class="card"><h2>机会来源与入选理由</h2>
     <p>${esc(record.rationale)}</p><a href="${esc(sourceLink({id:record.nct}))}" target="_blank" rel="noopener noreferrer">${esc(record.nct)} · ${esc(record.trial_title)}</a>
     <p>登记申办方 ${esc(record.sponsor || '未披露')} · 登记更新 ${esc(record.updated || '未提供')} · 检索于 ${esc(fmtDate(record.retrieved))}</p>
-    <p>筛选条件 · ${esc([record.criteria?.condition,record.criteria?.phase,record.criteria?.sponsor].filter(Boolean).join(' / '))}</p>
+    <p>筛选条件 · ${esc([record.criteria?.condition,record.criteria?.phase,record.criteria?.sponsor,record.criteria?.country].filter(Boolean).join(' / '))}</p>
+    ${record.countries?.length ? `<p>登记研究中心所在国家或地区 · ${esc(record.countries.join(' / '))}</p>` : ''}
     <small>筛选快照 ${esc(record.snapshot_id)}</small></section>`;
 }
 
-const opportunityFields = {title:'登记标题', sponsor:'申办方', conditions:'适应症', phases:'阶段',
+const opportunityFields = {title:'登记标题', sponsor:'申办方', conditions:'适应症', phases:'阶段', countries:'研究中心所在国家或地区',
   interventions:'登记干预', status:'试验状态', updated:'登记更新日'};
 
 function opportunityChanges(before, after) {
@@ -22,6 +23,7 @@ function opportunityChanges(before, after) {
     if (!old) { changes.push({id, kind:'本次新见', title:row.title}); continue; }
     const fields = [];
     for (const [key,label] of Object.entries(opportunityFields)) {
+      if (key === 'countries' && !Object.hasOwn(old,key)) continue;
       const previous = format(old[key]), current = format(row[key]);
       if (previous !== current) fields.push({label, previous, current});
     }
@@ -43,6 +45,8 @@ function renderDiscovery() {
   setView(`<section class="research-home" id="opportunities"><h1>筛选候选资产与潜在伙伴</h1>
     <form id="screen-form" class="card"><label>适应症（英文）<input name="condition" required maxlength="200" placeholder="例如 melanoma"></label>
     <label>登记的临床阶段<select name="phase">${['','EARLY_PHASE1','PHASE1','PHASE2','PHASE3','PHASE4'].map(v=>option(v,'',v || '全部阶段')).join('')}</select></label>
+    <label>研究中心所在国家或地区（可选）<input name="country" maxlength="120" list="site-countries" placeholder="例如 Japan"></label>
+    <datalist id="site-countries">${['China','United States','Japan','Germany','France','United Kingdom','Canada','Australia'].map(c=>`<option value="${c}"></option>`).join('')}</datalist>
     <label>主要申办方（可选）<input name="sponsor" maxlength="200" placeholder="英文机构名"></label>
     <small>筛选词将发送至 ClinicalTrials.gov。登记申办方与候选干预的交易权属需分别核实。</small>
     <button class="btn primary" type="submit">筛选并保存快照</button></form>
@@ -59,6 +63,7 @@ function renderDiscovery() {
     select.innerHTML='<option value="">选择快照</option>'+history().map(s=>option(s.id,snapshot?.id,
       s.criteria.condition+' · '+s.items.length+' 条 · '+fmtDate(s.created))).join('');
     if (!snapshot) { results.replaceChildren(); return; }
+    form.elements.country.value='';
     for (const [key,value] of Object.entries(snapshot.criteria)) form.elements[key].value=value;
     const baseline = snapshot.recheckedFrom && history().find(row => row.id === snapshot.recheckedFrom);
     const changes = baseline ? opportunityChanges(baseline, snapshot) : [];
@@ -71,6 +76,7 @@ function renderDiscovery() {
         ${(change.fields || []).map(f=>`<p>${esc(f.label)}：${esc(f.previous || '未披露')} → ${esc(f.current || '未披露')}</p>`).join('')}</details>`).join('') : '<p>两次取回的候选记录和登记字段一致。</p>'}</section>` : ''}
       ${snapshot.items.map((r,i)=>`<article class="card"><h3><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h3>
       <p>${esc([r.id,r.sponsor,r.phases.join(' / '),r.status].filter(Boolean).join(' · '))}</p>
+      <p>研究中心所在国家或地区 · ${esc(r.countries?.join(' / ') || (r.countries?'登记未提供':'旧版快照未采集'))}</p>
       <p>登记干预 · ${esc(r.interventions.join(' / ') || '未披露')}</p>
       <button type="button" class="btn" data-watch-trial="${esc(r.id)}">关注试验里程碑</button>
       <details><summary>将候选资产转入尽调</summary><form data-candidate="${i}">
@@ -146,7 +152,7 @@ function renderDiscovery() {
     lock(true);
     try {
       const res=await api('/api/discovery/projects',jsonOptions('POST',{...values,snapshot_id:snapshot.id,
-        criteria:snapshot.criteria,nct:entry.id,trial_title:entry.title,sponsor:entry.sponsor,
+        criteria:snapshot.criteria,nct:entry.id,trial_title:entry.title,countries:entry.countries || [],sponsor:entry.sponsor,
         phase:entry.phases.join(' / '),updated:entry.updated,retrieved:entry.retrieved}));
       if (!root.isConnected) return;
       window.history.pushState(null,'','#/overview?project='+encodeURIComponent(res.project.project_id));
