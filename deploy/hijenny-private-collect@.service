@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect authorized HiJenny project watchlist %i
+ConditionPathExists=%h/.local/share/hijenny/private-watchlists/%i/watchlist.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/hijenny/current
+ExecStart=%h/.local/share/hijenny/runtime-py312/bin/python tools/collect_public_events.py --private-dir %h/.local/share/hijenny/private-watchlists/%i
+UMask=0077
+NoNewPrivileges=true

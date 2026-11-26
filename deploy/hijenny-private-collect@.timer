@@ -1,0 +1,9 @@
+[Unit]
+Description=Check an authorized HiJenny project watchlist once daily
+
+[Timer]
+OnCalendar=*-*-* 00:47:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
