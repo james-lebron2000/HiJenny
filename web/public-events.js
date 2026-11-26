@@ -5,7 +5,7 @@ function renderPublicEvents() {
     <details class="card" id="public-collection"><summary>最近一次公开采集</summary><div aria-live="polite">正在读取核对记录…</div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
-    <label>试验登记号<input name="trial" placeholder="NCT03470922" pattern="[Nn][Cc][Tt][0-9]{8}" title="NCT 加八位数字"></label>
+    <label>试验登记号<input name="trial" placeholder="NCT 或 jRCT 编号" pattern="[Nn][Cc][Tt][0-9]{8}|[Jj][Rr][Cc][Tt][0-9]{10}" title="NCT 加八位数字或 jRCT 加十位数字"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
     <label>数据来源<select name="source"><option value="">全部来源</option><option>Drugs@FDA</option><option>EMA</option><option>jRCT</option><option>ClinicalTrials.gov</option><option>PubMed</option><option>SEC</option></select></label>
     <label>地区<input name="region" placeholder="例如：中东"></label>

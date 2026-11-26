@@ -27,15 +27,32 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                     AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"""
     args = [asset.strip(), asset.strip(), region.strip(), since.isoformat() if since else ""]
     trial = trial.strip().upper()
+    link_query = ""
+    link_args = []
     if trial:
-        if not re.fullmatch(r"NCT[0-9]{8}", trial):
-            raise HTTPException(422, "试验登记号须为 NCT 加八位数字。")
-        sql += """ AND ((json_extract(payload, '$.source')='ClinicalTrials.gov' AND json_extract(payload, '$.record')=?)
-                     OR (json_extract(payload, '$.source') IN ('PubMed','jRCT') AND json_extract(payload, '$.trial')=?)
+        if re.fullmatch(r"NCT[0-9]{8}", trial):
+            link_query = "SELECT ? AS matched_nct"
+            link_args = [trial]
+        elif re.fullmatch(r"JRCT[0-9]{10}", trial):
+            trial = "jRCT" + trial[4:]
+            link_query = """SELECT json_extract(payload, '$.trial') AS matched_nct FROM events
+                            WHERE json_extract(payload, '$.source')='jRCT' AND json_extract(payload, '$.record')=?
+                            AND json_extract(payload, '$.field')='日本登记所列关联试验'
+                            AND json_extract(payload, '$.value')=json_extract(payload, '$.trial')"""
+            link_args = [trial]
+            for cutoff, column in [(as_of, "date"), (as_of, OBSERVED_DAY), (disclosed_to, "date"),
+                                   (discovered_to, OBSERVED_DAY)]:
+                if cutoff:
+                    link_query += f" AND {column}<=?"
+                    link_args.append(cutoff.isoformat())
+            link_query += " ORDER BY julianday(json_extract(payload, '$.observed')) DESC, rowid DESC LIMIT 1"
+        else:
+            raise HTTPException(422, "请输入 NCT 加八位数字或 jRCT 加十位数字。")
+        sql += """ AND ((json_extract(payload, '$.source')='ClinicalTrials.gov' AND json_extract(payload, '$.record')=matched_nct)
+                     OR (json_extract(payload, '$.source') IN ('PubMed','jRCT') AND json_extract(payload, '$.trial')=matched_nct)
                      OR (json_extract(payload, '$.source')='Drugs@FDA' AND EXISTS (
                          SELECT 1 FROM json_each(payload, '$.label_trials') AS citation
-                         WHERE json_extract(citation.value, '$.id')=?)))"""
-        args.extend([trial, trial, trial])
+                         WHERE json_extract(citation.value, '$.id')=matched_nct)))"""
     if disclosed_to:
         sql += " AND date<=?"
         args.append(disclosed_to.isoformat())
@@ -72,9 +89,11 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                        ORDER BY julianday(json_extract(payload, '$.observed')) DESC, rowid DESC
                      ) AS position FROM events WHERE date<=? AND {OBSERVED_DAY}<=?)"""
         sql += " AND position=1"
-        args = [as_of.isoformat(), as_of.isoformat(), *args]
+        link_args = [as_of.isoformat(), as_of.isoformat(), *link_args]
         labels.insert(0, f"历史截面（截至台北日期）：{as_of}，每个来源字段仅列当时最后一次已收录的值。")
-    return table, sql, args, order, labels
+    if link_query:
+        table += f" CROSS JOIN ({link_query}) AS registration"
+    return table, sql, [*link_args, *args], order, labels
 
 
 @router.get("/api/public-events/collection")

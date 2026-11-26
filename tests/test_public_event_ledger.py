@@ -168,6 +168,16 @@ def test_trial_filter_only_accepts_source_specific_links(tmp_path, monkeypatch):
     assert client.get(url, params={"trial": trial, "as_of": "2026-11-26"}).json()["total"] == 0
     assert client.get(url, params={"trial": "NCT0347"}).status_code == 422
 
+    japan = "jRCT2031230688"
+    with closing(public_events.connect()) as db, db:
+        link = dict(id="5", source="jRCT", record=japan, trial=trial, value=trial, field="日本登记所列关联试验",
+                    observed="2026-11-28T02:00:00Z")
+        db.execute("insert into events values (?,?,?,?,?)", ("5", trial, "日本", "2026-11-20", json.dumps(link)))
+    assert {r["id"] for r in client.get(url, params={"trial": japan.upper()}).json()["items"]} == {"0","1","2","5"}
+    assert client.get(url, params={"trial": japan, "as_of": "2026-11-27"}).json()["total"] == 0
+    assert client.get(url, params={"trial": japan, "as_of": "2026-11-28", "source": "PubMed"}).json()["total"] == 1
+    assert client.get(url, params={"trial": "jRCT0000000000"}).json()["total"] == 0
+
 
 def test_primary_result_revisions_keep_denominators_and_prior_snapshot(monkeypatch):
     import copy

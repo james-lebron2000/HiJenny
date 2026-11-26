@@ -25,3 +25,5 @@ Drugs@FDA 按公开名单中的 NDA、ANDA 或 BLA 申请号核对原始与补�
 欧盟监管数据取自 [EMA 人用药集中程序数据](https://www.ema.europa.eu/en/about-us/about-website/download-website-data-json-data-format)。按 EMA 产品编号匹配名单并保存原产品页链接。页面更新日、上市许可日期、欧委会决定日期和首次观察时间分别保存。最近程序编号用于回查产品信息修订范围。
 
 日本试验按 jRCT 编号核对公开英文登记页，收录招募状态、登记日期、申办方和登记所列 NCT 编号。关联号及发号机构须与来源相符。登记更新日与 HiJenny 首次观察时间分别保存。
+
+「公开资产动态」支持输入完整 jRCT 或 NCT 编号查看同一试验已归档的跨来源记录。以 jRCT 编号查看历史截面时，只采用当时已经披露并已收录的登记关联。
