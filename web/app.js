@@ -1873,7 +1873,6 @@ function bindGlobalEvents() {
   }
   const analyzeBtn = $('#btn-analyze-topbar');
   if (analyzeBtn) analyzeBtn.addEventListener('click', () => runAnalysis(false));
-  window.addEventListener('hashchange', () => renderView());
 }
 
 async function init() {
@@ -1910,6 +1909,7 @@ async function init() {
   }
   updateTopbar();
   updateSidebarBadges();
+  window.addEventListener('hashchange', () => renderView());
   await renderView();
 }
 
