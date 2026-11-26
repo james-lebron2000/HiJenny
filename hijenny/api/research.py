@@ -86,13 +86,17 @@ async def pubmed(client, query):
         passages = [{"label": node.get("Label") or "Abstract", "text": "".join(node.itertext()).strip()}
                     for node in article.findall("Abstract/AbstractText")]
         authors = []
+        author_affiliations = []
         for author in article.findall("AuthorList/Author"):
             surname = author.findtext("LastName")
             if surname:
                 name = " ".join(filter(None, (author.findtext("ForeName") or author.findtext("Initials"), surname)))
                 authors.append(name)
+                affiliations = [" ".join("".join(node.itertext()).split())
+                                for node in author.findall("AffiliationInfo/Affiliation")]
+                author_affiliations.append(list(dict.fromkeys(filter(None, affiliations))))
         publication_types = [node.text for node in article.findall("PublicationTypeList/PublicationType") if node.text]
-        items.append({"notices": publication_notices(citation, publication_types), "publication_types": publication_types, "authors": authors, "id": pmid, "title": "".join(title.itertext()) if title is not None else pmid,
+        items.append({"notices": publication_notices(citation, publication_types), "publication_types": publication_types, "authors": authors, "author_affiliations": author_affiliations, "id": pmid, "title": "".join(title.itertext()) if title is not None else pmid,
                       "date": " ".join(date.split()), "detail": article.findtext("Journal/Title", ""),
                       "passages": passages, "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"})
     return int(search["count"]), items

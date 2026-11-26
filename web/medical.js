@@ -7,7 +7,7 @@ const meetingFields = {expert:'讨论对象或专业方向', question:'外部医
 
 function medicalSources(run) {
   return run.steps.flatMap(step => (step.result?.items || []).filter(item => run.review[item.id] === '纳入')
-    .map(item => ({id:item.id, title:item.title, notices:item.notices || [], date:item.date, authors:item.authors || [], passages:item.passages || [], retrieved:step.retrieved})));
+    .map(item => ({id:item.id, title:item.title, notices:item.notices || [], date:item.date, authors:item.authors || [], author_affiliations:item.author_affiliations || [], passages:item.passages || [], retrieved:step.retrieved})));
 }
 
 function meetingText(v) {
@@ -125,7 +125,7 @@ async function renderMedical() {
           <blockquote data-excerpt="${i}">${esc(r.passages[selectedIndex(r)].text)}</blockquote>` : '<p>此条记录缺少摘要，暂不能用作答复引文。</p>'}</section>`).join('')}</fieldset>
       <section class="card" id="meeting-conflicts" hidden></section>
       ${authorPapers.length ? `<details class="card" id="meeting-authors"><summary>从纳入论文查找讨论对象</summary>
-        <label>按作者姓名或论文题名筛选<input type="search" id="meeting-author-query"></label>
+        <label>按姓名、论文署名单位或题名筛选<input type="search" id="meeting-author-query"></label>
         <div id="meeting-author-papers"></div></details>` : ''}
       ${Object.entries(meetingFields).map(([key,label])=>`<label>${label}
         <textarea rows="${['answer','discussion','action'].includes(key)?3:1}" maxlength="8000" data-meeting="${key}">${esc(version?.[key] || (key!=='reviewer' && revisionBase?.[key]) || (key==='question'?run?.question:'') || '')}</textarea></label>`).join('')}
@@ -180,21 +180,24 @@ async function renderMedical() {
         const query = search.value.trim().toLowerCase();
         const papers = authorPapers.map((paper,index)=>{
           const titleMatches = paper.title.toLowerCase().includes(query);
-          const authors = paper.authors.filter(name=>titleMatches || name.toLowerCase().includes(query));
+          const authors = paper.authors.map((name,position)=>({
+            name, position, affiliation:(paper.author_affiliations?.[position] || []).join(' / ')
+          })).filter(author=>titleMatches || [author.name,author.affiliation].some(value=>value.toLowerCase().includes(query)));
           if (!authors.length) return '';
           return `<section><p><a href="${esc(sourceLink(paper))}" target="_blank" rel="noopener noreferrer">${esc(paper.title)} · PMID ${esc(paper.id)}</a></p>
-            <label>此文署名作者<select>${authors.map(name=>`<option>${esc(name)}</option>`).join('')}</select></label>
+            <label>此文署名作者<select>${authors.map(author=>`<option value="${author.position}">${esc(author.name)} · ${esc(author.affiliation || '本底稿无署名单位')}</option>`).join('')}</select></label>
             <button class="btn" type="button" data-add-author="${index}">加入讨论对象</button></section>`;
         });
-        results.innerHTML = papers.join('') || '<p>本次纳入论文中没有匹配的署名或题名。</p>';
+        results.innerHTML = papers.join('') || '<p>本次纳入论文中没有匹配的署名、单位或题名。</p>';
       }
       search.oninput = showAuthors;
       results.onclick = event=>{
         const button = event.target.closest('[data-add-author]');
         if (!button) return;
         const paper = authorPapers[Number(button.dataset.addAuthor)];
-        const name = button.closest('section').querySelector('select').value;
-        const entry = name+'（PMID '+paper.id+'）';
+        const position = Number(button.closest('section').querySelector('select').value);
+        const affiliation = (paper.author_affiliations?.[position] || []).join(' / ');
+        const entry = paper.authors[position]+'（PMID '+paper.id+'）'+(affiliation?' · 论文署名单位：'+affiliation:'');
         const expert = form.querySelector('[data-meeting="expert"]');
         if (!expert.value.split('\n').includes(entry)) {
           const next = [expert.value.trimEnd(),entry].filter(Boolean).join('\n');
