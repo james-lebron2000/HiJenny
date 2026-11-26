@@ -31,3 +31,28 @@ def test_retry_change_reversion_and_sql_replay(tmp_path, monkeypatch):
         assert db.execute("select count(*) from events").fetchone()[0] == 3
         with pytest.raises(ValueError, match="digest"):
             public_events.import_month(db, "2026-11.jsonl", sha, content + b" ")
+
+
+def test_review_digest_uses_taipei_discovery_day_and_exports_all_matches(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from hijenny.api.public_events import router
+
+    monkeypatch.setattr(public_events, "DATA_DIR", tmp_path)
+    with closing(public_events.connect()) as db, db:
+        for i, observed in enumerate(["2026-11-26T15:59:59Z", "2026-11-26T16:00:00Z", "2026-11-27T15:59:59Z"]):
+            row = dict(id=str(i), asset="review asset", subject="company", region="中东", record="123",
+                       source="SEC", field="扩区", value="新地区", previous=None, kind="reviewed", observed=observed,
+                       source_date="2024-06-03", url="https://www.sec.gov/Archives/demo")
+            db.execute("insert into events values (?,?,?,?,?)",
+                       (row["id"], row["asset"], row["region"], row["source_date"], json.dumps(row)))
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    params = dict(discovered_from="2026-11-27", discovered_to="2026-11-27", kind="reviewed")
+    result = client.get("/api/public-events", params=dict(params, limit=1)).json()
+    assert result["total"] == 2 and result["items"][0]["id"] == "2"
+    report = client.get("/api/public-events/report.txt", params=params)
+    assert report.text.count(row["url"]) == 2 and "共 2 条" in report.text
+    assert "15:59:59Z" in report.text and "2026-11-26T15:59:59Z" not in report.text
+    assert client.get("/api/public-events", params=dict(params, discovered_to="2026-11-26")).status_code == 422
