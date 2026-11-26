@@ -41,8 +41,8 @@ class Step(BaseModel):
 
 
 class Conflict(BaseModel):
-    left: str
-    right: str
+    left: str = Field(pattern=r"^([0-9]{1,12}|NCT[0-9]{8})$")
+    right: str = Field(pattern=r"^([0-9]{1,12}|NCT[0-9]{8})$")
     status: Literal["待核对", "口径差异可解释", "仍有分歧"]
     note: str = Field(min_length=1, max_length=2000)
     reviewer: str = Field(min_length=1, max_length=120)

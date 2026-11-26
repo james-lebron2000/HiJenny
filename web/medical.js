@@ -17,6 +17,10 @@ function meetingText(v) {
   for (const ref of v.refs) {
     lines.push('',ref.title,sourceLink(ref), '来源日期 '+(ref.date || '未提供'), '检索时间 '+ref.retrieved,ref.label,ref.quote);
   }
+  for (const c of v.conflicts || []) {
+    lines.push('', '相关证据分歧 · '+c.status, '底稿复核人 '+c.reviewer,c.note,
+      c.left+' · '+sourceLink({id:c.left}),c.right+' · '+sourceLink({id:c.right}));
+  }
   return lines.join('\n');
 }
 
@@ -39,6 +43,8 @@ async function renderMedical() {
   function draw() {
     dirty = false;
     const sourceRecords = version?.sourceRecords || (run ? medicalSources(run) : []);
+    const conflictPool = version ? version.conflictPool || [] : run?.conflicts || [];
+    const relevantConflicts = ids => conflictPool.filter(c=>ids.has(c.left) || ids.has(c.right));
     const selected = new Map((version?.refs || []).map(ref=>[ref.id,ref]));
     const selectedIndex = r => Math.max(0,r.passages.findIndex(p=>p.text===selected.get(r.id)?.quote && p.label===selected.get(r.id)?.label));
     body.innerHTML = `<p>从已纳入的来源中挑选支持答复的原文，记录专家会要讨论的问题、医学复核意见和后续行动。</p>
@@ -55,6 +61,7 @@ async function renderMedical() {
         ${r.passages.length ? `<label>引文片段<select data-passage="${i}">
           ${r.passages.map((p,j)=>option(String(j),String(selectedIndex(r)),p.label+' · '+p.text.slice(0,95))).join('')}</select></label>
           <blockquote data-excerpt="${i}">${esc(r.passages[selectedIndex(r)].text)}</blockquote>` : '<p>此条记录缺少摘要，暂不能用作答复引文。</p>'}</section>`).join('')}</fieldset>
+      <section class="card" id="meeting-conflicts" hidden></section>
       ${Object.entries(meetingFields).map(([key,label])=>`<label>${label}
         <textarea rows="${['answer','discussion','action'].includes(key)?3:1}" maxlength="8000" data-meeting="${key}">${esc(version?.[key] || (key==='question'?run?.question:'') || '')}</textarea></label>`).join('')}
       <label><input id="meeting-confirm" type="checkbox"> 我已核对本版答复和所选来源</label>
@@ -75,7 +82,17 @@ async function renderMedical() {
     };
     const form = $('#meeting-form',body);
     if (!form) return;
-    form.oninput = event => { if (event.target.id !== 'meeting-confirm') $('#meeting-confirm',form).checked=false;
+    const conflictPanel=$('#meeting-conflicts',form);
+    function showConflicts() {
+      const checked=new Set($$('[data-cite]:checked',form).map(box=>sourceRecords[box.dataset.cite].id));
+      const rows=relevantConflicts(checked);
+      conflictPanel.hidden=!rows.length;
+      conflictPanel.innerHTML=rows.length ? '<h3>所选引文涉及的证据分歧</h3>'+rows.map(c=>`<p><b>${esc(c.status)}</b> · 底稿复核人 ${esc(c.reviewer)}</p><p>${esc(c.note)}</p>
+        <p>${[c.left,c.right].map(id=>`<a href="${esc(sourceLink({id}))}" target="_blank" rel="noopener noreferrer">${esc(id)}</a>`).join(' · ')}</p>`).join('') : '';
+    }
+    showConflicts();
+    form.oninput = event => { if (event.target.matches('[data-cite]')) showConflicts();
+      if (event.target.id !== 'meeting-confirm') $('#meeting-confirm',form).checked=false;
       dirty=true; $('#meeting-status',body).textContent='有未保存的修改'; };
     for (const select of $$('[data-passage]',form)) select.onchange = () => {
       const index=select.dataset.passage;
@@ -102,7 +119,7 @@ async function renderMedical() {
         status.textContent='导出前请填写答复、医学复核人，并确认已核对本版来源。'; return;
       }
       const v={...fields,id:crypto.randomUUID(),parent:version?.id || null,briefId:version?.briefId || run.id,
-        created:new Date().toISOString(),sourceRecords,refs,confirmed};
+        created:new Date().toISOString(),sourceRecords,refs,confirmed,conflictPool,conflicts:relevantConflicts(new Set(refs.map(r=>r.id)))};
       try { localStorage.setItem(meetingPrefix+v.id,JSON.stringify(v)); }
       catch { status.textContent='无法保存本机版本，请检查浏览器存储空间。'; return; }
       saved.unshift(v); version=v; if (confirmed) download(v); draw();
@@ -114,7 +131,7 @@ async function renderMedical() {
       original.onclick=()=>download(version);
       const slides = $('#meeting-slides',body);
       slides.onclick = async () => {
-        const {sourceRecords, ...snapshot} = version;
+        const {sourceRecords, conflictPool, ...snapshot} = version;
         slides.disabled = true;
         try {
           const response = await fetch('/api/medical/meeting.pptx', {
