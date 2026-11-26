@@ -25,6 +25,45 @@ async function briefStore(mode, work) {
   });
 }
 
+async function briefBackupDigest(runs) {
+  const bytes = new TextEncoder().encode(JSON.stringify(runs));
+  const digest = await crypto.subtle.digest('SHA-256',bytes);
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function validBackupRun(run) {
+  if (!run || typeof run.id!=='string' || !run.id || typeof run.question!=='string' ||
+      typeof run.created!=='string' || !Number.isFinite(Date.parse(run.created)) ||
+      !run.review || typeof run.review!=='object' || Array.isArray(run.review) || !Array.isArray(run.steps)) return false;
+  return run.steps.every(s=>s && Object.hasOwn(briefSources,s.source) && typeof s.query==='string' &&
+    Number.isInteger(s.attempts) && (!s.result || (Number.isInteger(s.result.total) &&
+    Array.isArray(s.result.items) && s.result.items.every(item=>item && typeof item.id==='string' &&
+      /^(NCT[0-9]{8}|[0-9]+)$/.test(item.id) && typeof item.title==='string' && Array.isArray(item.passages) &&
+      item.passages.every(p=>p && typeof p.text==='string' && typeof p.label==='string')))));
+}
+
+async function restoreBriefBackup(backup) {
+  if (backup?.format!=='HiJenny-research-briefs' || backup.version!==1 || !Array.isArray(backup.runs) ||
+      backup.sha256!==await briefBackupDigest(backup.runs)) throw new Error('底稿备份格式或文件校验失败');
+  const runs=backup.runs;
+  if (!runs.every(validBackupRun) || new Set(runs.map(r=>r.id)).size!==runs.length) throw new Error('底稿记录格式无效');
+  const db=await openBriefDatabase();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('runs','readwrite'), store=tx.objectStore('runs');
+    const result={added:0, identical:0, conflicts:[]};
+    tx.oncomplete=()=>resolve(result);
+    tx.onabort=()=>reject(tx.error || new Error('恢复失败'));
+    for (const run of runs) {
+      const req=store.get(run.id);
+      req.onsuccess=()=>{
+        if (!req.result) {store.add(run);result.added++;}
+        else if (JSON.stringify(req.result)===JSON.stringify(run)) result.identical++;
+        else result.conflicts.push(run.question+'（'+run.id+'）');
+      };
+    }
+  });
+}
+
 // Patch one part of a version without replacing reviews written in another tab.
 async function patchBrief(id, update) {
   const db = await openBriefDatabase();
@@ -136,6 +175,11 @@ async function renderBrief() {
     <small>两条检索式分别发送至对应数据库。研究问题、来源快照与审核意见保存在本浏览器。</small>
     <button class="btn primary" type="submit">运行并保存新版本</button></form>
     <label for="brief-history">打开已有底稿</label><select id="brief-history"><option value="">请选择版本</option></select>
+    <details class="card"><summary>备份与恢复本机研究底稿</summary>
+    <p>包含此浏览器保存的所有底稿版本、检索记录和审核意见。JSON 文件可读，请保存在授权位置。</p>
+    <button type="button" class="btn" id="brief-backup">下载全部底稿备份</button>
+    <label>从备份恢复缺少的版本<input id="brief-restore" type="file" accept=".json,application/json"></label>
+    <p role="status" id="brief-backup-status"></p></details>
     <div id="brief-report" aria-live="polite"></div></section>`);
   const home = $('#brief-home');
   const history = $('#brief-history', home);
@@ -160,6 +204,33 @@ async function renderBrief() {
     if (run) history.value = run.id;
     return runs;
   }
+  const backupStatus=$('#brief-backup-status',home);
+  $('#brief-backup',home).onclick=async ()=>{
+    try {
+      await saveReview();
+      const runs=await briefStore('readonly',store=>store.getAll());
+      const backup={format:'HiJenny-research-briefs',version:1,created:new Date().toISOString(),
+        sha256:await briefBackupDigest(runs),runs};
+      const url=URL.createObjectURL(new Blob([JSON.stringify(backup)],{type:'application/json'}));
+      const a=document.createElement('a');a.href=url;a.download='HiJenny-研究底稿-'+backup.created.slice(0,10)+'.json';a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+      backupStatus.textContent='已导出 '+runs.length+' 个版本。';
+    } catch(err) {backupStatus.textContent='备份失败：'+err.message;}
+  };
+  const restore=$('#brief-restore',home);
+  restore.onchange=async ()=>{
+    const file=restore.files[0];if (!file) return;
+    restore.disabled=true;
+    try {
+      await saveReview();
+      const result=await restoreBriefBackup(JSON.parse(await file.text()));
+      const versions=await refreshHistory();
+      if (!run && versions.length) {run=versions[0];history.value=run.id;rememberVersion();paint();}
+      backupStatus.textContent='已恢复 '+result.added+' 个版本，已有相同版本 '+result.identical+' 个。'+
+        (result.conflicts.length?'以下版本与备份有差异，已保留本机内容：'+result.conflicts.join('、'):'');
+    } catch(err) {backupStatus.textContent='导入失败：'+err.message;}
+    finally {restore.value='';restore.disabled=false;}
+  };
   function rememberVersion() {
     if (!home.isConnected) return;
     const params = hashParams();
