@@ -105,3 +105,22 @@ def test_sales_queue_covers_unassigned_reassignment_and_stages(tmp_path, monkeyp
         store.record_pilot_progress(session, receipt, "已关闭", "SYNTHETIC")
         assert not pilot_sales.queue(session)
         assert pilot_sales.queue(session, include_finished=True)[0]["sales_stage"] == "已关闭"
+
+
+def test_quote_uses_intake_and_explicit_terms_without_recording_sale(tmp_path, monkeypatch):
+    from hijenny.cli import main
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "quote.db")
+    monkeypatch.setattr(store, "_ENGINE", None)
+    monkeypatch.setattr(store, "_SESSION_FACTORY", None)
+    with store.session_scope() as s:
+        receipt = store.submit_pilot_inquiry(s, str(uuid4()), dict(email="pilot@example.invalid", stage="II 期",
+            pages="待确认", meeting="2099-01-01", deployment="待讨论"))["receipt"]
+    path = tmp_path / "quote.html"
+    args = ["pilot-quote", receipt, "--currency", "CNY", "--amount", "1234.50", "--scope", "<交付样例>",
+            "--delivery", "资料齐备后商定", "--tax", "含税", "--valid-until", "2099-01-01", "--out", str(path)]
+    assert main(args) == 0
+    text = path.read_text()
+    assert all(v in text for v in ("CNY 1,234.50", "&lt;交付样例&gt;", receipt, "pilot@example.invalid", "含税"))
+    assert main(args) == 2 and path.read_text() == text
+    with store.session_scope() as s:
+        assert store.list_pilot_inquiries(s, receipt)[0]["progress"] == []

@@ -280,6 +280,28 @@ def cmd_projects(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pilot_quote(args: argparse.Namespace) -> int:
+    import os
+
+    try:
+        with store.session_scope() as session:
+            document = pilot_sales.quote_draft(session, args.receipt, currency=args.currency, amount=args.amount,
+                                              scope=args.scope, delivery=args.delivery, tax=args.tax,
+                                              valid_until=args.valid_until)
+        with tempfile.NamedTemporaryFile(dir=args.out.parent, delete=False) as temp:
+            try:
+                temp.write(document.encode("utf-8"))
+                temp.flush()
+                os.link(temp.name, args.out)
+            finally:
+                Path(temp.name).unlink(missing_ok=True)
+    except (ValueError, OSError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(args.out)
+    return 0
+
+
 def cmd_pilot_assign(args: argparse.Namespace) -> int:
     try:
         with store.session_scope() as session:
@@ -375,6 +397,17 @@ def build_parser() -> argparse.ArgumentParser:
     inquiries = sub.add_parser("pilot-inquiries", help="review pilot inquiries in this server database")
     inquiries.add_argument("--receipt", help="look up one intake receipt")
     inquiries.set_defaults(func=cmd_pilot_inquiries)
+
+    quote = sub.add_parser("pilot-quote", help="generate a private printable quote draft for one inquiry")
+    quote.add_argument("receipt")
+    quote.add_argument("--currency", required=True, choices=["CNY", "USD", "EUR", "JPY"])
+    quote.add_argument("--amount", required=True, help="fixed total using the declared tax basis")
+    quote.add_argument("--scope", required=True, help="deliverables and scope")
+    quote.add_argument("--delivery", required=True, help="proposed delivery schedule")
+    quote.add_argument("--tax", required=True, help="tax basis of the fixed total")
+    quote.add_argument("--valid-until", required=True, type=date.fromisoformat)
+    quote.add_argument("--out", required=True, type=Path, help="new local HTML file")
+    quote.set_defaults(func=cmd_pilot_quote)
 
     assignment = sub.add_parser("pilot-assign", help="set or replace the next action for one intake receipt")
     assignment.add_argument("receipt")
