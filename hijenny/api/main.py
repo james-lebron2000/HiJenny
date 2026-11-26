@@ -1095,6 +1095,20 @@ def create_app() -> FastAPI:
                     "documents": [_doc_json(d) for d in store.list_documents(session, project_id)],
                     "evidence": store.get_evidence(session, project_id, limit=10000)}
 
+    @app.get("/api/projects/{project_id}/followup/{question_id}/valuation-context")
+    def valuation_context(project_id: str, question_id: str):
+        with store.session_scope() as session:
+            session.execute(text("BEGIN"))
+            q = _question_or_404(session, question_id)
+            if q["project_id"] != project_id:
+                raise HTTPException(404, "Question not found in project")
+            events = store.list_review_events(session, project_id, -1, followup_question=question_id)
+            events.sort(key=lambda event: event["after"]["revision"])
+            replies = [dict(event_id=e["event_id"], ts=e["ts"], actor=e["actor"], **e["after"])
+                       for e in events if e["action"] == "reply"]
+            return {"question_id": question_id, "question": q["question"], "status": q["status"],
+                    "revision": events[-1]["after"]["revision"] if events else 0, "replies": replies}
+
     @app.post("/api/projects/{project_id}/followup/{question_id}")
     def record_followup(project_id: str, question_id: str, action: diligence.Action):
         with store.session_scope() as session:

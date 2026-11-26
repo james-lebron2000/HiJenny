@@ -1227,13 +1227,11 @@ def log_review_event(
     }
 
 
-def list_review_events(session: Session, project_id: str, limit: int = 200) -> list[dict]:
-    rows = session.scalars(
-        select(ReviewEvent)
-        .where(ReviewEvent.project_id == project_id)
-        .order_by(ReviewEvent.ts.desc())
-        .limit(limit)
-    ).all()
+def list_review_events(session: Session, project_id: str, limit: int = 200, *, followup_question: str | None = None) -> list[dict]:
+    query = select(ReviewEvent).where(ReviewEvent.project_id == project_id)
+    if followup_question is not None:
+        query = query.where(ReviewEvent.entity_type == "bd_followup", ReviewEvent.entity_id == followup_question)
+    rows = session.scalars(query.order_by(ReviewEvent.ts.desc()).limit(limit)).all()
     return [
         {
             "event_id": r.event_id,

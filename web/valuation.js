@@ -160,6 +160,8 @@ async function renderValuation(seq) {
         <thead><tr><th>交易与披露日</th><th>授权范围</th><th>原币种</th><th>首付款（百万）</th><th>里程碑上限（百万）</th><th>来源与限制</th></tr></thead>
         <tbody>${v.deals.map(d=>`<tr><th>${esc(d.name)}<br>${esc(d.disclosed)}</th><td>${esc(d.scope)}</td><td>${esc(d.currency)}</td>
         <td>${esc(d.upfront || '未披露')}</td><td>${esc(d.milestones || '未披露')}</td><td>${esc(d.source)}<br>${esc(d.limits)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        ${v.question?.replies ? `<details><summary>保存时已登记的卖方答复（${v.question.replies.length}）</summary>
+        ${v.question.replies.map(r=>`<p>${esc(fmtDate(r.ts))} · ${esc(r.actor)} · ${esc(r.note)}<br>${esc(r.filename)} · ${esc(r.locator)}</p>`).join('')}</details>` : ''}
         ${v.question?`<p><a href="#/followup?project=${encodeURIComponent(project)}&question=${encodeURIComponent(v.question.question_id)}">复核关联卖方问题</a> · 保存时状态 ${esc(v.question.status)}</p>`:''}
         <button type="button" id="val-download" class="btn">下载内部估值底稿</button>`;
       $('#val-download').onclick=()=>{
@@ -167,6 +169,10 @@ async function renderValuation(seq) {
           '年折现率 '+v.rate+'% · '+v.basis,'参照交易及限制 '+(v.comparable || '未提供'),
           '关联问题 '+(v.question ? v.question.question_id+' '+v.question.question+' · '+v.question.status : '未关联'),
           '单笔现值 = 有符号金额 × 无条件发生概率 ÷ (1 + 年折现率)^年份'];
+        if (v.question?.replies) {
+          lines.push('保存时的跟进版本 '+v.question.revision+' · 已登记卖方答复 '+v.question.replies.length+' 条');
+          for (const r of v.question.replies) lines.push(r.ts+' · '+r.actor+' · '+r.note,r.filename+' · '+r.locator+' · '+r.event_id);
+        }
         if (late.length) lines.push('', '本版含估值日后披露的依据', ...late);
         if (v.origin) lines.push('', '机会筛选快照 '+v.origin.snapshot_id, v.origin.asset, v.origin.rationale,
           v.origin.trial_title, sourceLink({id:v.origin.nct}), '检索时间 '+v.origin.retrieved);
@@ -248,8 +254,10 @@ async function renderValuation(seq) {
     for (const el of $$('[data-remove-flow]',form)) el.onclick=()=>{
       collect();draft.flows.splice(Number(el.dataset.removeFlow),1);dirty=true;paint();
     };
-    form.onsubmit=e=>{
-      e.preventDefault();collect();
+    form.onsubmit=async e=>{
+      e.preventDefault();
+      if (form.inert) return;
+      collect();
       const late=laterDisclosures(draft);
       if (late.length) {
         result.textContent='以下披露晚于估值日 '+draft.asOf+'，请核对披露日、移除记录或调整估值日：'+late.join('；');
@@ -259,15 +267,21 @@ async function renderValuation(seq) {
       if (draft.deals.some(deal=>dealFields.some(([key,,type])=>type!=='number' && !deal[key]))) {
         result.textContent='请填写可比交易的披露来源、币种和可比性限制等必填项。';return;
       }
-      if (!dirty && prior) {show(prior);return;}
+      form.inert=true;
       try {
+        if (draft.question) {
+          const fresh=await api(projectPath+'/followup/'+encodeURIComponent(draft.question.question_id)+'/valuation-context');
+          if (!form.isConnected) return;
+          draft.question=fresh;
+        }
+        if (!dirty && prior && JSON.stringify(draft.question)===JSON.stringify(prior.question)) {show(prior);return;}
         const outputs=scenarioNames.map((_,j)=>priceScenario(draft.flows.map(f=>({
           year:Number(f.cases[j].year),amount:Number(f.cases[j].amount),probability:Number(f.cases[j].probability)
         })),Number(draft.rate)));
         const next={...draft, outputs,id:crypto.randomUUID(),parent:prior?.id || null,created:new Date().toISOString()};
         localStorage.setItem(prefix+next.id,JSON.stringify(next));
         prior=next;draft=structuredClone(next);dirty=false;rememberVersion();paint();
-      } catch(error) {result.textContent='未保存：'+error.message;}
+      } catch(error) {result.textContent='未保存：'+error.message;} finally {form.inert=false;}
     };
   }
   paint();

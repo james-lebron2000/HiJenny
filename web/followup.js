@@ -79,7 +79,8 @@ async function renderFollowup(seq) {
     ${valuations.length?`<section class="card bd"><h2>此问题关联的本机估值版本（${valuations.length}）</h2>
     <ol>${valuations.map(v=>`<li><a href="#/valuation?${esc(new URLSearchParams({project,question:id,version:v.id}).toString())}">${esc(v.name)} · ${esc(fmtDate(v.created))}</a>
       <p>估值日 ${esc(v.asOf)} · 百万 ${esc(v.currency)} · 基准现值 ${esc(v.outputs[0].total.toLocaleString('zh-CN',{maximumFractionDigits:4}))}
-      · 替代现值 ${esc(v.outputs[1].total.toLocaleString('zh-CN',{maximumFractionDigits:4}))} · 保存时问题状态 ${esc(v.question.status)}</p></li>`).join('')}</ol>
+      · 替代现值 ${esc(v.outputs[1].total.toLocaleString('zh-CN',{maximumFractionDigits:4}))} · 保存时问题状态 ${esc(v.question.status)}</p>
+      <p>${v.question.replies ? `保存时已登记 ${v.question.replies.length} 条答复 · 此后新增 ${events.filter(e=>e.action==='reply' && e.after.revision>v.question.revision).length} 条答复` : '此历史版本未记录答复快照'}</p></li>`).join('')}</ol>
     ${valuations.length>1?`<details id="bd-valuation-compare"><summary>比较两次估值</summary>
     <label>参照版本<select id="bd-val-before">${valuationChoices(valuations.find(v=>v.id===valuations[0].parent)?.id || valuations[1].id)}</select></label>
     <label>比较版本<select id="bd-val-after">${valuationChoices(valuations[0].id)}</select></label>
