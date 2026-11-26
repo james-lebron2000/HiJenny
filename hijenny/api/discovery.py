@@ -50,7 +50,7 @@ class RegistryScreen(BaseModel):
 async def fetch_screen(client, request):
     criteria = request.criteria
     params = {"countTotal": "true", "pageSize": 20,
-              "fields": "NCTId,BriefTitle,LeadSponsorName,Condition,Phase,OverallStatus,InterventionName,LastUpdatePostDate,LocationCountry"}
+              "fields": "NCTId,BriefTitle,LeadSponsorName,Condition,Phase,OverallStatus,InterventionName,InterventionOtherName,LastUpdatePostDate,LocationCountry"}
     if criteria.condition:
         params["query.cond"] = criteria.condition
     if criteria.intervention:
@@ -82,6 +82,8 @@ async def fetch_screen(client, request):
                                  if loc.get("country")}),
             "conditions": protocol.get("conditionsModule", {}).get("conditions", []),
             "phases": protocol.get("designModule", {}).get("phases", []),
+            "intervention_aliases": [{"name": item["name"], "aliases": list(dict.fromkeys(item["otherNames"]))}
+                                     for item in arms.get("interventions", []) if item.get("name") and item.get("otherNames")],
             "interventions": [item["name"] for item in arms.get("interventions", []) if item.get("name")],
             "status": status.get("overallStatus", ""),
             "updated": status.get("lastUpdatePostDateStruct", {}).get("date", ""),
@@ -99,11 +101,17 @@ async def screen(request: RegistryScreen):
         raise HTTPException(502, "暂时无法读取试验登记；已保存的筛选快照仍可打开。") from exc
 
 
+class InterventionAliases(BaseModel):
+    name: str = Field(min_length=1)
+    aliases: list[str]
+
+
 class Opportunity(BaseModel):
     snapshot_id: UUID
     retrieved: datetime
     criteria: Criteria
     nct: str = Field(pattern=r"^NCT[0-9]{8}$")
+    intervention_aliases: list[InterventionAliases] = Field(default_factory=list)
     countries: list[str] = Field(default_factory=list, max_length=300)
     trial_title: str = Field(min_length=1, max_length=3000)
     sponsor: str = Field(default="", max_length=500)

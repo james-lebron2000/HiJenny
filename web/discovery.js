@@ -1,5 +1,15 @@
 'use strict';
 
+function registryAliasLines(groups) {
+  return (groups || []).map(g=>g.name+' · '+[...g.aliases].sort().join(' / ')).sort();
+}
+
+function registryAliasesHtml(groups) {
+  const lines=registryAliasLines(groups);
+  return lines.length ? '<details><summary>核对各项干预的登记别名</summary><ul>'+
+    lines.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ul></details>' : '';
+}
+
 function opportunityOrigin(record) {
   if (!record || !/^NCT[0-9]{8}$/.test(record.nct)) return '';
   return `<section class="card"><h2>机会来源与入选理由</h2>
@@ -7,6 +17,7 @@ function opportunityOrigin(record) {
     <p>登记申办方 ${esc(record.sponsor || '未披露')} · 登记更新 ${esc(record.updated || '未提供')} · 检索于 ${esc(fmtDate(record.retrieved))}</p>
     <p>筛选条件 · ${esc([record.criteria?.condition,record.criteria?.intervention,record.criteria?.phase,record.criteria?.sponsor,record.criteria?.country].filter(Boolean).join(' / '))}</p>
     ${record.countries?.length ? `<p>登记研究中心所在国家或地区 · ${esc(record.countries.join(' / '))}</p>` : ''}
+    ${registryAliasesHtml(record.intervention_aliases)}
     <small>筛选快照 ${esc(record.snapshot_id)}</small></section>`;
 }
 
@@ -26,6 +37,12 @@ function opportunityChanges(before, after) {
       if (key === 'countries' && !Object.hasOwn(old,key)) continue;
       const previous = format(old[key]), current = format(row[key]);
       if (previous !== current) fields.push({label, previous, current});
+    }
+    if (Object.hasOwn(old,'intervention_aliases') && Object.hasOwn(row,'intervention_aliases')) {
+      const previous=registryAliasLines(old.intervention_aliases), current=registryAliasLines(row.intervention_aliases);
+      if (JSON.stringify(previous)!==JSON.stringify(current)) {
+        fields.push({label:'登记干预别名',previous:previous.join('；'),current:current.join('；')});
+      }
     }
     if (fields.length) changes.push({id, kind:'登记字段变化', title:row.title, fields});
   }
@@ -86,6 +103,7 @@ function renderDiscovery() {
       <p>研究中心所在国家或地区 · ${esc(r.countries?.join(' / ') || (r.countries?'登记未提供':'旧版快照未采集'))}</p>
       <p>登记适应症 · ${esc(r.conditions?.join(' / ') || '未披露')}</p>
       <p>登记干预 · ${esc(r.interventions.join(' / ') || '未披露')}</p>
+      ${registryAliasesHtml(r.intervention_aliases)}
       <button type="button" class="btn" data-watch-trial="${esc(r.id)}">关注试验里程碑</button>
       <details><summary>将候选资产转入尽调</summary><form data-candidate="${i}">
       <label>拟评估的具体资产<input name="asset" maxlength="200" required list="assets-${i}"></label>
@@ -166,7 +184,7 @@ function renderDiscovery() {
     lock(true);
     try {
       const res=await api('/api/discovery/projects',jsonOptions('POST',{...values,snapshot_id:snapshot.id,
-        criteria:snapshot.criteria,nct:entry.id,trial_title:entry.title,countries:entry.countries || [],sponsor:entry.sponsor,
+        criteria:snapshot.criteria,nct:entry.id,trial_title:entry.title,countries:entry.countries || [],intervention_aliases:entry.intervention_aliases || [],sponsor:entry.sponsor,
         phase:entry.phases.join(' / '),updated:entry.updated,retrieved:entry.retrieved}));
       if (!root.isConnected) return;
       window.history.pushState(null,'','#/overview?project='+encodeURIComponent(res.project.project_id));

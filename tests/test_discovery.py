@@ -20,7 +20,7 @@ def test_filtered_page_preserves_registry_scope_and_continuation():
         return httpx.Response(200, json={"studies": [{"protocolSection": {
             "identificationModule": {"nctId": "NCT00000001", "briefTitle": "Trial"},
             "contactsLocationsModule": {"locations": [{"country": "Japan"}, {"country": "Japan"}, {"country": "China"}, {}]},
-            "armsInterventionsModule": {"interventions": [{"name": "Drug A"}, {"name": "Placebo"}]},
+            "armsInterventionsModule": {"interventions": [{"name": "Drug A", "otherNames": ["DA-01", "DA-01"]}, {"name": "Placebo"}]},
         }}], "nextPageToken": "cursor-2"})
 
     async def check():
@@ -28,6 +28,7 @@ def test_filtered_page_preserves_registry_scope_and_continuation():
             result = await fetch_screen(client, RegistryScreen(criteria=criteria, cursor="cursor-1"))
         assert result["cursor"] == "cursor-2" and result["total"] is None
         assert result["items"][0]["countries"] == ["China", "Japan"]
+        assert result["items"][0]["intervention_aliases"] == [{"name": "Drug A", "aliases": ["DA-01"]}]
         assert result["items"][0]["interventions"] == ["Drug A", "Placebo"]
     asyncio.run(check())
 
@@ -37,12 +38,13 @@ def test_concurrent_handoff_reuses_project_and_retains_original_reason(tmp_path)
     store.init_db()
     seed = Opportunity(snapshot_id=uuid4(), retrieved="2026-11-26T00:00:00Z",
                        criteria=Criteria(intervention="Drug A", country="Japan"), countries=["Japan", "China"], nct="NCT00000001",
-                       trial_title="Source record", asset="Drug A", rationale="First reason")
+                       intervention_aliases=[{"name": "Drug A", "aliases": ["DA-01"]}], trial_title="Source record", asset="Drug A", rationale="First reason")
     with ThreadPoolExecutor(max_workers=3) as pool:
         replies = list(pool.map(start_project, [seed] * 3))
     assert sum(item["created"] for item in replies) == 1
     assert len({item["project"]["project_id"] for item in replies}) == 1
     restored = start_project(seed.model_copy(update={"rationale": "Later revision"}))["project"]
+    assert restored["meta"]["opportunity"]["intervention_aliases"] == [{"name": "Drug A", "aliases": ["DA-01"]}]
     assert restored["meta"]["opportunity"]["countries"] == ["Japan", "China"]
     assert restored["meta"]["opportunity"]["criteria"]["intervention"] == "Drug A"
     assert restored["meta"]["opportunity"]["criteria"]["country"] == "Japan"
