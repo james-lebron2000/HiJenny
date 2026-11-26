@@ -82,3 +82,26 @@ def test_metrics_distinguish_sessions_receipts_and_recorded_sales_stages(tmp_pat
         assert store.pilot_metrics(session, date(2000, 1, 1))["受理编号数"] == 1
         future = store.pilot_metrics(session, date(9999, 1, 1))
         assert list(future.values())[:3] == [{}, 0, {}]
+
+
+def test_sales_queue_covers_unassigned_reassignment_and_stages(tmp_path, monkeypatch):
+    from datetime import date
+    from hijenny import pilot_sales
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "sales.db")
+    monkeypatch.setattr(store, "_ENGINE", None)
+    monkeypatch.setattr(store, "_SESSION_FACTORY", None)
+    with store.session_scope() as session:
+        fields = dict(email="sales@example.invalid", stage="II 期", pages="待确认", meeting="2027-05-01", deployment="待讨论")
+        receipt = store.submit_pilot_inquiry(session, str(uuid4()), fields)["receipt"]
+        assert pilot_sales.queue(session, waiting_quote=True)[0]["owner"] is None
+        due = date(2027, 2, 1)
+        pilot_sales.assign(session, receipt, "甲", due, "确认范围")
+        pilot_sales.assign(session, receipt, "乙", due, "准备报价")
+        assert not pilot_sales.queue(session, owner="甲")
+        assert pilot_sales.queue(session, owner="乙", due_by=due)[0]["next_action"] == "准备报价"
+        store.record_pilot_progress(session, receipt, "已报价", "SYNTHETIC")
+        assert not pilot_sales.queue(session, waiting_quote=True)
+        store.record_pilot_progress(session, receipt, "已关闭", "SYNTHETIC")
+        assert not pilot_sales.queue(session)
+        assert pilot_sales.queue(session, include_finished=True)[0]["sales_stage"] == "已关闭"

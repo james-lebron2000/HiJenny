@@ -18,7 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from hijenny import config, pipeline, store
+from hijenny import config, pilot_sales, pipeline, store
 
 
 def _load_package(project_id: str, package_dir: Path) -> Path:
@@ -280,6 +280,24 @@ def cmd_projects(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pilot_assign(args: argparse.Namespace) -> int:
+    try:
+        with store.session_scope() as session:
+            pilot_sales.assign(session, args.receipt, args.owner, args.due, args.action)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"{args.receipt} · {args.owner} · {args.due}")
+    return 0
+
+
+def cmd_pilot_queue(args: argparse.Namespace) -> int:
+    with store.session_scope() as session:
+        rows = pilot_sales.queue(session, args.owner, args.due_by, args.waiting_quote, args.include_finished)
+    print(json.dumps(rows, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_pilot_progress(args: argparse.Namespace) -> int:
     try:
         with store.session_scope() as session:
@@ -357,6 +375,20 @@ def build_parser() -> argparse.ArgumentParser:
     inquiries = sub.add_parser("pilot-inquiries", help="review pilot inquiries in this server database")
     inquiries.add_argument("--receipt", help="look up one intake receipt")
     inquiries.set_defaults(func=cmd_pilot_inquiries)
+
+    assignment = sub.add_parser("pilot-assign", help="set or replace the next action for one intake receipt")
+    assignment.add_argument("receipt")
+    assignment.add_argument("owner")
+    assignment.add_argument("due", type=date.fromisoformat)
+    assignment.add_argument("action")
+    assignment.set_defaults(func=cmd_pilot_assign)
+
+    queue = sub.add_parser("pilot-queue", help="show sales follow-ups in due date order")
+    queue.add_argument("--owner")
+    queue.add_argument("--due-by", type=date.fromisoformat)
+    queue.add_argument("--waiting-quote", action="store_true", help="only new or contacted inquiries")
+    queue.add_argument("--include-finished", action="store_true", help="also show closed and paid receipts")
+    queue.set_defaults(func=cmd_pilot_queue)
 
     progress = sub.add_parser("pilot-progress", help="record a sales milestone and its supporting reference")
     progress.add_argument("receipt")
