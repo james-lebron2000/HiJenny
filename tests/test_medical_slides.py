@@ -38,3 +38,20 @@ def test_meeting_preserves_conflict_with_uncited_comparator():
     assert "https://pubmed.ncbi.nlm.nih.gov/123/" in links
     with pytest.raises(ValidationError):
         Meeting(**{**data, "conflicts": [dict(conflict, left="345")]})
+
+
+def test_discussant_pages_keep_each_publication_link_separate_from_answer_evidence():
+    affiliation = "甲单位与乙单位" * 100
+    data = dict(id=uuid4(), briefId=uuid4(), confirmed=True, created="2026-11-26",
+                question="会议问题", reviewer="复核人", answer="会议答复",
+                expert=f"肿瘤学组\n同名作者（PMID 123） · 论文署名单位：{affiliation}\n同名作者（PMID 456）",
+                refs=[dict(id="789", title="答复依据", label="摘要", quote="原文")])
+    deck = Presentation(BytesIO(export_meeting(Meeting(**data)).body))
+    pages = [s for s in deck.slides if s.shapes[0].text.startswith("讨论对象 · 论文署名")]
+    links = [s.shapes[2].text_frame.paragraphs[0].runs[-1].hyperlink.address for s in pages]
+    assert links[:-1] == ["https://pubmed.ncbi.nlm.nih.gov/123/"] * (len(links) - 1)
+    assert len(links) >= 3 and links[-1] == "https://pubmed.ncbi.nlm.nih.gov/456/"
+    assert affiliation in "".join(s.shapes[1].text.replace("\n", "") for s in pages[:-1])
+    assert any(s.shapes[1].text == "肿瘤学组" for s in deck.slides)
+    evidence = [s for s in deck.slides if s.shapes[0].text.startswith("支持引文")]
+    assert len(evidence) == 1 and "789" in evidence[0].shapes[0].text

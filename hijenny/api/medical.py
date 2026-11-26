@@ -1,5 +1,6 @@
 """Editable slides for a browser-confirmed medical meeting brief."""
 from io import BytesIO
+import re
 from typing import Annotated, Literal
 from unicodedata import east_asian_width
 from uuid import UUID
@@ -106,9 +107,25 @@ def export_meeting(meeting: Meeting):
                 run.text = "    " + label
                 run.hyperlink.address = link
 
-    section("专家会 · 医学问题", [meeting.question, "讨论对象：" + (meeting.expert or "待补充"),
+    section("专家会 · 医学问题", [meeting.question,
                            "底稿版本：" + str(meeting.briefId), "用户填写的复核人：" + meeting.reviewer,
                            "确认时间：" + meeting.created])
+    if meeting.expert.strip():
+        # The meeting editor adds a separate, publication-attributed entry on each line.
+        # Keep manual notes and older free-text briefs readable as well.
+        notes = []
+        for line in meeting.expert.splitlines():
+            citation = re.search(r"（PMID ([0-9]{1,24})）(?: · 论文署名单位：.*)?$", line)
+            if citation:
+                if notes:
+                    section("讨论对象或专业方向", notes)
+                    notes.clear()
+                pmid = citation.group(1)
+                section("讨论对象 · 论文署名", [line], [("核对署名 · PMID " + pmid, reference_url(pmid))])
+            else:
+                notes.append(line)
+        if notes:
+            section("讨论对象或专业方向", notes)
     section("已确认的答复", [meeting.answer])
     if meeting.revisionOf:
         section("出版状态复核与答复修订", ["原确认版：" + str(meeting.revisionOf), meeting.revisionReason])
