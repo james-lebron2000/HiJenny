@@ -67,7 +67,18 @@ def test_pubmed_link_requires_exact_registry_and_preserves_index_date():
         <Year>2025</Year><Month>3</Month><Day>7</Day></PubMedPubDate></History></PubmedData></PubmedArticle></PubmedArticleSet>"""
     trial = {"id": "NCT05499390", "asset": "demo"}
     root = collector.ElementTree.fromstring(xml)
-    record, = collector.publication_links(trial, root)
+    record, baseline = collector.publication_links(trial, root)
+    assert baseline["value"] == "本次元数据未见出版提醒"
+    correction = xml.replace("</MedlineCitation>", """<DateRevised><Year>2026</Year><Month>4</Month><Day>1</Day>
+        </DateRevised><CommentsCorrectionsList><CommentsCorrections RefType="ErratumIn"><PMID>456</PMID>
+        </CommentsCorrections></CommentsCorrectionsList></MedlineCitation>""")
+    _, revised = collector.publication_links(trial, collector.ElementTree.fromstring(correction))
+    history = list(collector.changes([baseline], [], "2025-03-10"))
+    event, = collector.changes([revised], history, "2026-04-02")
+    assert event["kind"] == "change" and event["previous"] == baseline["value"]
+    assert event["source_date"] == "2026-04-01" and "本文已有更正通知" in event["value"]
+    assert "https://pubmed.ncbi.nlm.nih.gov/456/" in event["value"]
+    assert not list(collector.changes([revised], history+[event], "2026-04-03"))
     assert (record["record"], record["trial"], record["source_date"], record["value"]) == (
         "123", trial["id"], "2025-03-07", "Design of study")
     assert not list(collector.publication_links(dict(trial, id="NCT00000001"), root))

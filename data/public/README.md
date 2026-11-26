@@ -11,3 +11,5 @@
 授权项目需要定时采集时，在服务器以服务账户创建权限为 0700 的 ~/.local/share/hijenny/private-watchlists/项目代号，将名单以 0600 权限保存为 watchlist.json；安装 deploy 下对应的模板后，启用 hijenny-private-collect@项目代号.timer。该实例每日台北时间 08:47 检查，日志与输出只留在服务器。没有授权项目时无需启用实例。
 
 PubMed 按 publications 名单中的 NCT 编号检索，再核对文献元数据中 ClinicalTrials.gov 数据库的登记号。题名、PMID 与 PubMed 收录日期写入公开索引；是否报告疗效结果需另行复核。
+
+已匹配论文逐次比较 PubMed 的更正、撤稿、重刊和编辑关注标记，保留原文与通知的关系方向。元数据修订日期只表示记录修订时间。状态的首条观察构成基线，可以与后续字段变化分别筛选。

@@ -11,6 +11,10 @@ from pathlib import Path
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from hijenny.publication import publication_notices
+
 ROOT = Path(__file__).resolve().parents[1] / "data/public"
 AGENT = "HiJenny research jakeljm12@163.com"
 FORMS = {"8-K", "6-K", "10-Q", "10-K", "20-F", "40-F"}
@@ -89,9 +93,19 @@ def publication_links(trial, root):
         indexed = article.find("PubmedData/History/PubMedPubDate[@PubStatus='pubmed']")
         date = datetime(*(int(indexed.findtext(part)) for part in ("Year", "Month", "Day"))).date()
         title = "".join(citation.find("Article/ArticleTitle").itertext()).strip()
-        yield dict(source="PubMed", record=pmid, subject=trial["asset"], asset=trial["asset"], region=None,
+        link = dict(source="PubMed", record=pmid, subject=trial["asset"], asset=trial["asset"], region=None,
                    trial=nct, field="论文登记关联 · " + nct, value=title, source_date=date.isoformat(),
                    date_label="PubMed 收录", effective=None, url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/")
+        yield link
+        types = [node.text for node in citation.findall("Article/PublicationTypeList/PublicationType")]
+        notices = sorted(set(publication_notices(citation, types)))
+        revised = citation.find("DateRevised")
+        status = dict(link, field="论文出版状态 · " + nct, category="publication-status",
+                      value="；".join(notices) if notices else "本次元数据未见出版提醒")
+        if revised is not None:
+            status["source_date"] = datetime(*(int(revised.findtext(part)) for part in ("Year", "Month", "Day"))).date().isoformat()
+            status["date_label"] = "PubMed 元数据修订"
+        yield status
 
 
 def publication_records(trial):
