@@ -37,7 +37,9 @@ function renderDiscovery() {
   const prefix = 'hijenny.opportunity.';
   const history = () => Object.keys(localStorage).filter(k=>k.startsWith(prefix))
     .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>b.created.localeCompare(a.created));
-  let snapshot = history()[0];
+  const requested = hashParams().get('snapshot');
+  const snapshots = history();
+  let snapshot = requested ? snapshots.find(row => row.id === requested) : snapshots[0];
   setView(`<section class="research-home" id="opportunities"><h1>筛选候选资产与潜在伙伴</h1>
     <form id="screen-form" class="card"><label>适应症（英文）<input name="condition" required maxlength="200" placeholder="例如 melanoma"></label>
     <label>登记的临床阶段<select name="phase">${['','EARLY_PHASE1','PHASE1','PHASE2','PHASE3','PHASE4'].map(v=>option(v,'',v || '全部阶段')).join('')}</select></label>
@@ -70,6 +72,7 @@ function renderDiscovery() {
       ${snapshot.items.map((r,i)=>`<article class="card"><h3><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h3>
       <p>${esc([r.id,r.sponsor,r.phases.join(' / '),r.status].filter(Boolean).join(' · '))}</p>
       <p>登记干预 · ${esc(r.interventions.join(' / ') || '未披露')}</p>
+      <button type="button" class="btn" data-watch-trial="${esc(r.id)}">关注试验里程碑</button>
       <details><summary>将候选资产转入尽调</summary><form data-candidate="${i}">
       <label>拟评估的具体资产<input name="asset" maxlength="200" required list="assets-${i}"></label>
       <datalist id="assets-${i}">${r.interventions.map(name=>`<option value="${esc(name)}"></option>`).join('')}</datalist>
@@ -110,12 +113,30 @@ function renderDiscovery() {
       const next={id:crypto.randomUUID(),criteria,created:retrieved,total,cursor,pages,
         items:[...byId.values()],parent:previous?.id || null,recheckedFrom:recheck ? previous.id : null};
       localStorage.setItem(prefix+next.id,JSON.stringify(next));
-      snapshot=next;paint();status.textContent='候选集已保存在本浏览器。';
+      snapshot=next;window.history.replaceState(null,'','#/discovery?snapshot='+encodeURIComponent(next.id));paint();status.textContent='候选集已保存在本浏览器。';
     } catch (err) {status.textContent='筛选未保存：'+err.message;}
     finally {lock(false);}
   }
   form.onsubmit=e=>{e.preventDefault();retrieve(null);};
-  select.onchange=()=>{snapshot=history().find(s=>s.id===select.value);paint();status.textContent='';};
+  select.onchange=()=>{
+    snapshot=history().find(s=>s.id===select.value);
+    window.history.replaceState(null,'','#/discovery'+(snapshot?'?snapshot='+encodeURIComponent(snapshot.id):''));
+    paint();status.textContent='';
+  };
+  results.addEventListener('click',async event=>{
+    const button=event.target.closest('[data-watch-trial]');
+    if (!button || busy) return;
+    const id=button.dataset.watchTrial;
+    const origin={snapshot:snapshot.id,condition:snapshot.criteria.condition,created:snapshot.created};
+    lock(true);
+    status.textContent='正在核对登记编号和里程碑日期…';
+    try {
+      const item=await lookupWatchedTrial(id);
+      await followTrial(item,new Date().toISOString(),origin);
+      if (root.isConnected) nav('watch');
+    } catch (err) {status.textContent='关注未保存：'+err.message;}
+    finally {lock(false);}
+  });
   results.onsubmit=async e=>{
     e.preventDefault();
     const candidate=e.target.closest('form[data-candidate]');
@@ -134,4 +155,5 @@ function renderDiscovery() {
     finally {lock(false);}
   };
   paint();
+  if (requested && !snapshot) status.textContent='当前浏览器找不到此候选集快照。';
 }

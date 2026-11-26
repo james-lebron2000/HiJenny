@@ -15,13 +15,26 @@ function trialFields(item) {
   return fields;
 }
 
-function followTrial(item, checked) {
+function followTrial(item, checked, origin) {
   const key = watchKey(item.id);
   return navigator.locks.request(key, () => {
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({
+    const stored = localStorage.getItem(key);
+    const row = stored ? JSON.parse(stored) : {
       id:item.id, title:item.title, updated:item.date, checked, fields:trialFields(item), changes:[]
-    }));
+    };
+    if (origin) {
+      row.origins ||= [];
+      if (!row.origins.some(entry => entry.snapshot === origin.snapshot)) row.origins.push(origin);
+    }
+    localStorage.setItem(key, JSON.stringify(row));
   });
+}
+
+async function lookupWatchedTrial(id) {
+  const result = await api('/api/research/search', jsonOptions('POST', {source:'trials',query:id}));
+  const item = result.items.find(row => row.id === id);
+  if (!item) throw new Error('登记来源未返回此编号。');
+  return item;
 }
 
 async function refreshWatchedTrial(id) {
@@ -30,9 +43,7 @@ async function refreshWatchedTrial(id) {
     const raw = localStorage.getItem(key);
     if (!raw) return;
     const saved = JSON.parse(raw);
-    const result = await api('/api/research/search', jsonOptions('POST', {source:'trials',query:id}));
-    const item = result.items.find(row => row.id === id);
-    if (!item) throw new Error('登记来源未返回此编号，已保留上次快照。');
+    const item = await lookupWatchedTrial(id);
     const fields = trialFields(item);
     const changed = Object.keys(fields).filter(k => JSON.stringify(fields[k]) !== JSON.stringify(saved.fields[k]));
     const checked = new Date().toISOString();
@@ -131,6 +142,7 @@ function renderWatch() {
     entries.innerHTML = rows.map(row => `<article class="card"><h2>${esc(row.title)}</h2>
       <a href="${esc(sourceLink(row))}" target="_blank" rel="noopener noreferrer">${esc(row.id)} · 登记原文</a>
       <p>${esc(row.fields['登记状态'])} · 登记更新 ${esc(row.updated || '未提供')} · 本机核查 ${esc(fmtDate(row.checked))}</p>
+      ${(row.origins || []).map(origin => `<p>候选来源 · <a href="#/discovery?snapshot=${encodeURIComponent(origin.snapshot)}">${esc(origin.condition)} · ${esc(fmtDate(origin.created))} 筛选快照</a></p>`).join('')}
       <dl>${['主要完成日期','研究完成日期'].map(k=>`<dt>${k}</dt><dd>${esc(display(row.fields[k]))}</dd>`).join('')}</dl>
       <details><summary>登记变更（${row.changes.length}）</summary>${row.changes.map(c=>`<p>${esc(fmtDate(c.checked))} · 登记版本 ${esc(c.updated)}</p>
       <ul>${c.fields.map(f=>`<li>${esc(f.name)}：${esc(display(f.before))} → ${esc(display(f.after))}</li>`).join('')}</ul>`).join('') || '尚无已观察到的字段变化。'}</details>
