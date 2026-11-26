@@ -29,7 +29,7 @@ const pilotCopy = {
     question:'Ask the seller for the source tables behind both counts and the analysis population, cutoff date and assessment method for each. The decision brief flags the valuation assumption for review.',
     sources:['Clinical study report, page 10','Commercial forecast, slide 3'],original:'Download synthetic source file',recheck:'Recalculate both response rates',reported:'Reported',computed:'Recalculated',
     finding:'The study report differs from the recalculated rate by 0.1 percentage point. The forecast agrees with its counts. Request the signed tables and reconcile the eight additional responders.',
-    decision:'Download the internal decision brief (Chinese Word)',seller:'Download the seller response sheet (Chinese Excel)',
+    decision:'Download the internal decision brief (English Word)',seller:'Download the seller response sheet (Chinese Excel)',
     download:'Download the synthetic diligence report (English Markdown)',quote:'Request a pilot quote',select:'Select an option',email:'Work email',stage:'Asset stage',pages:'Estimated document volume',meeting:'Expected review date',deployment:'Preferred deployment',
     choices:{stage:['Preclinical','Phase I','Phase II','Phase III','Postmarketing','To be confirmed'],pages:['Up to 50 pages','51–200 pages','201–500 pages','Over 500 pages','To be confirmed'],deployment:['HiJenny-hosted pilot','Customer environment','To be discussed']},
     terms:'Both parties agree on document transfer, fees and delivery dates when confirming the scope.',submit:'Submit quote request',
@@ -44,7 +44,7 @@ const pilotCopy = {
     question:'導出側に、両方の奏効例数の集計表、解析対象集団、データカットオフ日、評価方法を確認します。社内審査用の要約には、資産評価に用いる前提の確認事項として記載します。',
     sources:['治験総括報告書 10 ページ','売上予測資料 スライド 3'],original:'架空の原資料をダウンロード',recheck:'奏効率を再計算する',reported:'記載値',computed:'再計算値',
     finding:'報告書の記載値と再計算値には 0.1 ポイントの差があります。売上予測の値は例数と一致します。奏効例数が 8 例異なる理由と、承認済みの集計表を導出側に確認します。',
-    decision:'社内審査用の要約（中国語・Word）',seller:'導出側への質問票（中国語・Excel）',
+    decision:'社内審査資料（日本語・Word）',seller:'導出側への質問票（中国語・Excel）',
     download:'架空の審査報告書をダウンロード（英語・Markdown）',quote:'パイロットの見積もり依頼',select:'選択してください',email:'勤務先メールアドレス',stage:'開発段階',pages:'資料の想定ページ数',meeting:'審査予定日',deployment:'希望する利用環境',
     choices:{stage:['非臨床','第 I 相','第 II 相','第 III 相','製造販売後','未定'],pages:['50 ページ以下','51～200 ページ','201～500 ページ','501 ページ以上','未定'],deployment:['HiJenny の環境','自社専用環境','要相談']},
     terms:'資料の受け渡し方法、料金、納期は、対象範囲の確認時に双方で決定します。',submit:'見積もりを依頼する',
@@ -80,7 +80,7 @@ function renderPilot() {
         <a href="/api/pilot/sources/${e.source}">${t.original} · ${e.source==='csr'?'PDF':'PowerPoint'}</a></details>`).join('')}
       <details class="pilot-math"><summary>${t.recheck}</summary>${pilotEvidence.map((e,i)=>`<p>${t.sources[i]} · ${t.reported} ${e.reported}% · ${t.computed} ${e.responders} ÷ ${e.total} × 100 = <strong>${(100*e.responders/e.total).toFixed(1)}%</strong></p>`).join('')}
         <p>${t.finding}</p></details><p>${t.question}</p>
-      <p><a href="/api/pilot/decision-brief.docx">${t.decision}</a></p><p><a href="/api/pilot/seller-reply.xlsx">${t.seller}</a></p>
+      <p><a href="/api/pilot/decision-brief.docx?lang=${lang}">${t.decision}</a></p><p><a href="/api/pilot/seller-reply.xlsx">${t.seller}</a></p>
       <a href="/api/pilot/sample-report?${new URLSearchParams(analytics)}">${t.download}</a></details>
       <form id="pilot-form" class="card"><h2>${t.quote}</h2>
       <label>${t.email}<input name="email" type="email" required maxlength="254" autocomplete="email"></label>
