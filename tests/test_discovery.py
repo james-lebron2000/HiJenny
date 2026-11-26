@@ -9,16 +9,17 @@ from hijenny.api.discovery import Criteria, Opportunity, RegistryScreen, fetch_s
 
 
 def test_filtered_page_preserves_registry_scope_and_continuation():
-    criteria = Criteria(condition="melanoma", phase="PHASE2", intervention="Drug A", sponsor="Example", country="Japan")
+    criteria = Criteria(condition="melanoma", phase="PHASE2", results="Yes", intervention="Drug A", sponsor="Example", country="Japan")
 
     def respond(request):
         assert request.url.params["query.cond"] == "melanoma"
         assert request.url.params["query.intr"] == "Drug A"
         assert request.url.params["query.lead"] == "Example"
-        assert request.url.params["filter.advanced"] == 'AREA[Phase]PHASE2 AND AREA[LocationCountry]"Japan"'
+        assert request.url.params["filter.advanced"] == 'AREA[Phase]PHASE2 AND AREA[HasResults]Yes AND AREA[LocationCountry]"Japan"'
         assert request.url.params["pageToken"] == "cursor-1"
-        return httpx.Response(200, json={"studies": [{"protocolSection": {
+        return httpx.Response(200, json={"studies": [{"hasResults": True, "protocolSection": {
             "identificationModule": {"nctId": "NCT00000001", "briefTitle": "Trial"},
+            "statusModule": {"resultsFirstPostDateStruct": {"date": "2024-01-01"}},
             "contactsLocationsModule": {"locations": [{"country": "Japan"}, {"country": "Japan"}, {"country": "China"}, {}]},
             "armsInterventionsModule": {"interventions": [{"name": "Drug A", "otherNames": ["DA-01", "DA-01"]}, {"name": "Placebo"}]},
         }}], "nextPageToken": "cursor-2"})
@@ -27,6 +28,7 @@ def test_filtered_page_preserves_registry_scope_and_continuation():
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
             result = await fetch_screen(client, RegistryScreen(criteria=criteria, cursor="cursor-1"))
         assert result["cursor"] == "cursor-2" and result["total"] is None
+        assert result["items"][0]["has_results"] is True and result["items"][0]["results_posted"] == "2024-01-01"
         assert result["items"][0]["countries"] == ["China", "Japan"]
         assert result["items"][0]["intervention_aliases"] == [{"name": "Drug A", "aliases": ["DA-01"]}]
         assert result["items"][0]["interventions"] == ["Drug A", "Placebo"]

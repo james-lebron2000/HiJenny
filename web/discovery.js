@@ -10,13 +10,18 @@ function registryAliasesHtml(groups) {
     lines.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ul></details>' : '';
 }
 
+function registryResultLabel(value) {
+  return value===true ? '已公布登记结果' : value===false ? '尚无登记结果' : '结果状态未采集';
+}
+
 function opportunityOrigin(record) {
   if (!record || !/^NCT[0-9]{8}$/.test(record.nct)) return '';
   return `<section class="card"><h2>机会来源与入选理由</h2>
     <p>${esc(record.rationale)}</p><a href="${esc(sourceLink({id:record.nct}))}" target="_blank" rel="noopener noreferrer">${esc(record.nct)} · ${esc(record.trial_title)}</a>
     <p>登记申办方 ${esc(record.sponsor || '未披露')} · 登记更新 ${esc(record.updated || '未提供')} · 检索于 ${esc(fmtDate(record.retrieved))}</p>
-    <p>筛选条件 · ${esc([record.criteria?.condition,record.criteria?.intervention,record.criteria?.phase,record.criteria?.sponsor,record.criteria?.country].filter(Boolean).join(' / '))}</p>
+    <p>筛选条件 · ${esc([record.criteria?.condition,record.criteria?.intervention,record.criteria?.phase,record.criteria?.sponsor,record.criteria?.country,record.criteria?.results && registryResultLabel(record.criteria.results==='Yes')].filter(Boolean).join(' / '))}</p>
     ${record.countries?.length ? `<p>登记研究中心所在国家或地区 · ${esc(record.countries.join(' / '))}</p>` : ''}
+    ${record.has_results!=null ? `<p>${registryResultLabel(record.has_results)} · 首次公布日期 ${esc(record.results_posted || '未提供')}</p>` : ''}
     ${registryAliasesHtml(record.intervention_aliases)}
     <small>筛选快照 ${esc(record.snapshot_id)}</small></section>`;
 }
@@ -37,6 +42,9 @@ function opportunityChanges(before, after) {
       if (key === 'countries' && !Object.hasOwn(old,key)) continue;
       const previous = format(old[key]), current = format(row[key]);
       if (previous !== current) fields.push({label, previous, current});
+    }
+    if (old.has_results!=null && row.has_results!=null && old.has_results!==row.has_results) {
+      fields.push({label:'登记结果',previous:registryResultLabel(old.has_results),current:registryResultLabel(row.has_results)});
     }
     if (Object.hasOwn(old,'intervention_aliases') && Object.hasOwn(row,'intervention_aliases')) {
       const previous=registryAliasLines(old.intervention_aliases), current=registryAliasLines(row.intervention_aliases);
@@ -70,6 +78,7 @@ function renderDiscovery() {
     <label>登记的临床阶段<select name="phase">${['','EARLY_PHASE1','PHASE1','PHASE2','PHASE3','PHASE4'].map(v=>option(v,'',v || '全部阶段')).join('')}</select></label>
     <label>研究中心所在国家或地区（可选）<input name="country" maxlength="120" list="site-countries" placeholder="例如 Japan"></label>
     <datalist id="site-countries">${['China','United States','Japan','Germany','France','United Kingdom','Canada','Australia'].map(c=>`<option value="${c}"></option>`).join('')}</datalist>
+    <label>登记结果<select name="results"><option value="">全部</option><option value="Yes">已公布登记结果</option><option value="No">尚无登记结果</option></select></label>
     <label>主要申办方（可选）<input name="sponsor" maxlength="200" placeholder="英文机构名"></label>
     <small>筛选词将发送至 ClinicalTrials.gov。登记申办方与候选干预的交易权属需分别核实。</small>
     <button class="btn primary" type="submit">筛选并保存快照</button></form>
@@ -88,6 +97,7 @@ function renderDiscovery() {
     if (!snapshot) { results.replaceChildren(); return; }
     form.elements.intervention.value='';
     form.elements.country.value='';
+    form.elements.results.value='';
     for (const [key,value] of Object.entries(snapshot.criteria)) form.elements[key].value=value;
     const baseline = snapshot.recheckedFrom && history().find(row => row.id === snapshot.recheckedFrom);
     const changes = baseline ? opportunityChanges(baseline, snapshot) : [];
@@ -104,6 +114,9 @@ function renderDiscovery() {
       <p>登记适应症 · ${esc(r.conditions?.join(' / ') || '未披露')}</p>
       <p>登记干预 · ${esc(r.interventions.join(' / ') || '未披露')}</p>
       ${registryAliasesHtml(r.intervention_aliases)}
+      <p>${registryResultLabel(r.has_results)}${r.results_posted?' · 首次公布 '+esc(r.results_posted):''}</p>
+      ${r.has_results===true ? `<a href="${esc(sourceLink({id:r.id,postedResult:true}))}" target="_blank" rel="noopener noreferrer">核对登记结果原文</a>
+      <button type="button" class="btn" data-load-results="${esc(r.id)}">查看公布终点与安全性</button><section class="trial-posted" aria-live="polite"></section>` : ''}
       <button type="button" class="btn" data-watch-trial="${esc(r.id)}">关注试验里程碑</button>
       <details><summary>将候选资产转入尽调</summary><form data-candidate="${i}">
       <label>拟评估的具体资产<input name="asset" maxlength="200" required list="assets-${i}"></label>
@@ -112,6 +125,7 @@ function renderDiscovery() {
       <button type="submit" class="btn">建立或打开尽调项目</button></form></details></article>`).join('') ||
       '<p>没有匹配记录。可放宽阶段或申办方筛选。</p>'}
       ${snapshot.cursor?'<button type="button" class="btn" id="screen-next">继续取下一页并保存新版</button>':''}`;
+    bindTrialResultButtons(results);
     $('#screen-recheck',root).onclick=()=>retrieve(snapshot, true);
     const more=$('#screen-next',root);
     if (more) more.onclick=()=>retrieve(snapshot);
@@ -184,7 +198,7 @@ function renderDiscovery() {
     lock(true);
     try {
       const res=await api('/api/discovery/projects',jsonOptions('POST',{...values,snapshot_id:snapshot.id,
-        criteria:snapshot.criteria,nct:entry.id,trial_title:entry.title,countries:entry.countries || [],intervention_aliases:entry.intervention_aliases || [],sponsor:entry.sponsor,
+        criteria:snapshot.criteria,nct:entry.id,trial_title:entry.title,has_results:entry.has_results ?? null,results_posted:entry.results_posted || '',countries:entry.countries || [],intervention_aliases:entry.intervention_aliases || [],sponsor:entry.sponsor,
         phase:entry.phases.join(' / '),updated:entry.updated,retrieved:entry.retrieved}));
       if (!root.isConnected) return;
       window.history.pushState(null,'','#/overview?project='+encodeURIComponent(res.project.project_id));

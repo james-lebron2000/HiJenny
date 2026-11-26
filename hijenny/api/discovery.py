@@ -28,6 +28,7 @@ class Criteria(BaseModel):
             raise ValueError("请填写登记库使用的国家或地区名称")
         return value
 
+    results: Literal["", "Yes", "No"] = ""
     phase: Literal["", "EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4"] = ""
 
     @field_validator("condition", "intervention")
@@ -50,7 +51,7 @@ class RegistryScreen(BaseModel):
 async def fetch_screen(client, request):
     criteria = request.criteria
     params = {"countTotal": "true", "pageSize": 20,
-              "fields": "NCTId,BriefTitle,LeadSponsorName,Condition,Phase,OverallStatus,InterventionName,InterventionOtherName,LastUpdatePostDate,LocationCountry"}
+              "fields": "NCTId,BriefTitle,LeadSponsorName,Condition,Phase,OverallStatus,InterventionName,InterventionOtherName,LastUpdatePostDate,LocationCountry,HasResults,ResultsFirstPostDate"}
     if criteria.condition:
         params["query.cond"] = criteria.condition
     if criteria.intervention:
@@ -60,6 +61,8 @@ async def fetch_screen(client, request):
     filters = []
     if criteria.phase:
         filters.append(f"AREA[Phase]{criteria.phase}")
+    if criteria.results:
+        filters.append(f"AREA[HasResults]{criteria.results}")
     if criteria.country:
         filters.append(f'AREA[LocationCountry]"{criteria.country}"')
     if filters:
@@ -86,6 +89,8 @@ async def fetch_screen(client, request):
                                      for item in arms.get("interventions", []) if item.get("name") and item.get("otherNames")],
             "interventions": [item["name"] for item in arms.get("interventions", []) if item.get("name")],
             "status": status.get("overallStatus", ""),
+            "has_results": study.get("hasResults"),
+            "results_posted": (status.get("resultsFirstPostDateStruct") or {}).get("date", ""),
             "updated": status.get("lastUpdatePostDateStruct", {}).get("date", ""),
         })
     return {"items": rows, "total": data.get("totalCount") if request.cursor else data["totalCount"], "cursor": data.get("nextPageToken", ""),
@@ -113,6 +118,8 @@ class Opportunity(BaseModel):
     nct: str = Field(pattern=r"^NCT[0-9]{8}$")
     intervention_aliases: list[InterventionAliases] = Field(default_factory=list)
     countries: list[str] = Field(default_factory=list, max_length=300)
+    has_results: bool | None = None
+    results_posted: str = Field(default="", max_length=20)
     trial_title: str = Field(min_length=1, max_length=3000)
     sponsor: str = Field(default="", max_length=500)
     updated: str = Field(default="", max_length=20)
