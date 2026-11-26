@@ -30,3 +30,11 @@ def test_proposal_export_keeps_kind_specific_design_and_saved_evidence():
     legacy = client.post("/api/medical/study.docx", json=data)
     assert legacy.status_code == 200
     assert "RWE索引日期" in [p.text for p in Document(BytesIO(legacy.content)).paragraphs]
+    data["conflicts"] = [dict(left="123", right="NCT00000001", status="仍有分歧",
+                              reviewer="底稿审阅甲", note="人群不同", plan="核对亚组定义")]
+    payload = client.post("/api/medical/study.docx", json=data)
+    assert payload.status_code == 200
+    text = "\n".join(p.text for p in Document(BytesIO(payload.content)).paragraphs)
+    assert all(value in text for value in ("核对亚组定义", "底稿审阅甲", "NCT00000001", "人群不同"))
+    data["conflicts"][0]["left"] = "999"
+    assert client.post("/api/medical/study.docx", json=data).status_code == 422

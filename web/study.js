@@ -25,6 +25,8 @@ function studySummary(v) {
     '', '仍需解决', ...(v.gaps.length?v.gaps:['已填完结构化项目，需专业人员评判研究质量']),
     '', '流行病学复核记录',v.epi || '未记录','统计复核记录',v.stats || '未记录',
     '', '本版修改',...(v.changes.length?v.changes:['首版']),
+    ...(v.conflicts || []).flatMap((c,i)=>['','会议证据分歧 '+(i+1)+' · '+c.status,'底稿复核人 '+c.reviewer,c.note,
+      sourceLink({id:c.left}),sourceLink({id:c.right}),'本研究的处理安排 · '+(c.plan || '待填写')]),
     '', '来源会议版本 '+(v.meetingId || '独立起草'),
     ...v.refs.flatMap(r=>[r.title,sourceLink(r),r.label,r.quote,''])].join('\n');
 }
@@ -38,7 +40,7 @@ function renderStudy() {
   try {
     if (studySeed) {
       const src=studySeed; studySeed=null;
-      const v=blank(); v.meetingId=src.id; v.refs=src.refs;
+      const v=blank(); v.meetingId=src.id; v.refs=src.refs; v.conflicts=(src.conflicts || []).map(c=>({...c,plan:''}));
       v.values.question=src.discussion || src.question; reset(v);
     } else reset(versions()[0] || blank());
   } catch (error) { setView(errorPanel(error)); return; }
@@ -51,6 +53,10 @@ function renderStudy() {
       <button type="button" id="study-new" class="btn">新建研究</button>
       <form id="study-form"><label>交付形式<select id="study-kind">${option('RWE',draft.kind,'真实世界研究方案')}${option('IIT',draft.kind,'研究者发起研究概念书')}</select></label>
       ${draft.refs.length?`<details><summary>继承自会议的引文（${draft.refs.length}）</summary>${draft.refs.map(r=>`<p><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></p><blockquote>${esc(r.quote)}</blockquote>`).join('')}</details>`:''}
+      ${(draft.conflicts || []).map((c,i)=>`<fieldset class="card"><legend>会议证据分歧 ${i+1} · ${esc(c.status)}</legend>
+        <p>${esc(c.note)} · 底稿复核人 ${esc(c.reviewer)}</p>
+        <p>${[c.left,c.right].map(id=>`<a href="${esc(sourceLink({id}))}" target="_blank" rel="noopener noreferrer">${esc(id)}</a>`).join(' · ')}</p>
+        <label>本研究如何处理这项分歧？<textarea data-conflict-plan="${i}" maxlength="2000" placeholder="说明拟核对的数据、设计调整或暂不处理的依据">${esc(c.plan || '')}</textarea></label></fieldset>`).join('')}
       ${Object.entries(fields).map(([k,label])=>`<label>${label}<textarea data-field="${k}" rows="2" maxlength="8000">${esc(draft.values[k] || '')}</textarea></label>`).join('')}
       <fieldset class="card"><legend>偏倚评估</legend>
       ${Object.entries(biasFields).map(([key,label])=>`<label>${label}<textarea data-bias="${key}" maxlength="8000">${esc(draft.bias?.[key] || '')}</textarea></label>`).join('')}</fieldset>
@@ -67,6 +73,7 @@ function renderStudy() {
       for (const el of $$('[data-field]',form)) draft.values[el.dataset.field]=el.value.trim();
       for (const el of $$('[data-check]',form)) draft.checks[el.dataset.check].status=el.value;
       for (const el of $$('[data-reason]',form)) draft.checks[el.dataset.reason].note=el.value.trim();
+      for (const el of $$('[data-conflict-plan]',form)) draft.conflicts[el.dataset.conflictPlan].plan=el.value.trim();
       draft.bias=Object.fromEntries($$('[data-bias]',form).map(el=>[el.dataset.bias,el.value.trim()]));
       draft.epi=$('#study-epi').value.trim(); draft.stats=$('#study-stats').value.trim();
     }
@@ -91,6 +98,8 @@ function renderStudy() {
         if (c.status!=='可用' || !c.note) gaps.push(feasibilityItems[i]+' · '+c.status+(c.note?'':'，依据待补充'));
       });
       for (const [key,label] of Object.entries(biasFields)) if (!draft.bias[key]) gaps.push(label+'待评估');
+      const pending=(draft.conflicts || []).filter(c=>!c.plan).length;
+      if (pending) gaps.push('尚有 '+pending+' 项会议证据分歧待填写处理安排');
       if (!draft.epi) gaps.push('待流行病学复核');
       if (!draft.stats) gaps.push('待统计复核');
       const changes=[];
@@ -100,6 +109,7 @@ function renderStudy() {
         draft.checks.forEach((c,i)=>{if(JSON.stringify(c)!==JSON.stringify(base.checks[i])) changes.push(feasibilityItems[i]);});
         for (const [key,label] of Object.entries(biasFields))
           if ((base.bias?.[key] || '')!==draft.bias[key]) changes.push(label);
+        if ((draft.conflicts || []).some((c,i)=>c.plan!==base.conflicts?.[i]?.plan)) changes.push('会议证据分歧处理安排');
         const designChanged=changes.length>0;
         for (const [key,label] of [['epi','流行病学'],['stats','统计']]) {
           const renewal=label+'复核记录沿用上一版，需确认本版';

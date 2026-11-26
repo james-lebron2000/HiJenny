@@ -5,11 +5,11 @@ from typing import Literal
 
 from docx import Document
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from .brief import clean
+from .brief import Conflict, clean
 from .clinical import word_download
-from .medical import Reference, Text
+from .medical import Reference, Text, reference_url
 
 router = APIRouter()
 COMMON = {"question": "研究问题", "population": "目标人群和入选条件", "exposure": "暴露或干预及对照",
@@ -26,6 +26,10 @@ class Check(BaseModel):
     note: Text = ""
 
 
+class StudyConflict(Conflict):
+    plan: str = Field(default="", max_length=2000)
+
+
 class Study(BaseModel):
     id: UUID
     parent: UUID | None = None
@@ -38,8 +42,17 @@ class Study(BaseModel):
     stats: Text = ""
     meetingId: UUID | None = None
     refs: list[Reference] = Field(default_factory=list, max_length=100)
+    conflicts: list[StudyConflict] = Field(default_factory=list, max_length=200)
     gaps: list[Text] = Field(default_factory=list, max_length=40)
     changes: list[Text] = Field(default_factory=list, max_length=40)
+
+    @model_validator(mode="after")
+    def check_meeting_conflicts(self):
+        cited = {r.id for r in self.refs}
+        for c in self.conflicts:
+            if not self.meetingId or c.left == c.right or not cited.intersection((c.left, c.right)):
+                raise ValueError("研究提案中的来源分歧须关联来源会议及所引记录")
+        return self
 
 
 @router.post("/api/medical/study.docx")
@@ -71,6 +84,12 @@ def export_study(plan: Study):
             doc.add_paragraph(clean(item))
     doc.add_heading("会议来源与引文", 1)
     doc.add_paragraph(f"会议版本：{plan.meetingId or '独立起草'}")
+    if plan.conflicts:
+        doc.add_heading("会议证据分歧与本研究的处理安排", 2)
+        for i, c in enumerate(plan.conflicts, 1):
+            doc.add_paragraph(f"{i}. {c.status} · 底稿复核人 {clean(c.reviewer)}\n{clean(c.note)}")
+            doc.add_paragraph(reference_url(c.left) + "\n" + reference_url(c.right))
+            doc.add_paragraph("本研究的处理安排：" + (clean(c.plan) or "待填写"))
     for ref in plan.refs:
         doc.add_heading(clean(ref.title), 2)
         url = f"https://clinicaltrials.gov/study/{ref.id}" if ref.id.startswith("NCT") else f"https://pubmed.ncbi.nlm.nih.gov/{ref.id}/"
