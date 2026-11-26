@@ -40,6 +40,22 @@ function researchResults(data) {
     ${data.source === 'trials' ? '<button id="follow-trials" class="btn" type="button">关注选中的试验</button><button id="compare-trials" type="button" class="btn">并排比较选中的试验</button><div id="trial-comparison"></div>' : ''}`;
 }
 
+function libraryMatches(item, filter) {
+  const contains = value => String(value ?? '').toLowerCase().includes(filter);
+  const passages = item.passages || [];
+  const matching = filter ? passages.filter(p => contains(p.text) || contains(p.label)) : [];
+  return {visible:matching.length > 0 || [item.title,item.detail,item.query,item.id,item.date,...(item.notices || [])].some(contains), matching};
+}
+
+function libraryEvidence(item, matching) {
+  const passages = matching.length ? matching : item.passages || [];
+  const empty = item.passages ? '本次检索未返回来源片段。' : '旧收藏仅保存了索引。重新检索并收藏可保存当前来源片段。';
+  return `<details ${matching.length?'open':''}><summary>${matching.length?'匹配的来源片段':'收藏时的来源片段'}（${passages.length}）</summary>
+    <p>${esc(item.id)} · 来源日期 ${esc(item.date || '未记录')} · 检索时间 ${esc(item.retrieved || '未记录')}</p>
+    ${item.query?`<p>检索式 <code>${esc(item.query)}</code></p>`:''}
+    ${passages.map(p=>`<p><strong>${esc(p.label)}</strong><br>${esc(p.text)}</p>`).join('') || `<p>${empty}</p>`}</details>`;
+}
+
 function renderResearch() {
   setView(`<section class="research-home" lang="zh-CN"><h1>查文献与临床试验</h1>
     <p>输入公开药物名、适应症或检索式，查看数据库记录与原始来源。</p>
@@ -57,7 +73,7 @@ function renderResearch() {
     <button class="btn" type="button" id="make-brief">用这个主题整理多来源底稿 →</button>
     <div id="research-output" aria-live="polite"></div>
     <details id="public-library"><summary>我的公开资料收藏（本浏览器）</summary>
-    <label>筛选收藏 <input id="library-filter" type="search"></label><ul id="library-list"></ul><button class="btn" type="button" id="library-compare">对照已选试验的公布终点</button><div id="library-outcomes" aria-live="polite"></div></details>
+    <label>按题名、编号、检索式或来源片段筛选 <input id="library-filter" type="search"></label><ul id="library-list"></ul><button class="btn" type="button" id="library-compare">对照已选试验的公布终点</button><div id="library-outcomes" aria-live="polite"></div></details>
     <button data-nav="projects" class="btn" type="button">进入资料包尽调工作区 →</button></section>`);
   $('#make-brief').onclick = () => { briefSeed = $('#research-query').value.trim(); nav('brief'); };
   const source = $('#research-source');
@@ -74,10 +90,15 @@ function renderResearch() {
   function renderLibrary() {
     const filter = $('#library-filter').value.trim().toLowerCase();
     const list = $('#library-list');
-    const entries = readPublicLibrary().filter(item =>
-      [item.title, item.detail, item.query, item.id].join(' ').toLowerCase().includes(filter));
-    list.innerHTML = entries.map(item => `<li>${/^NCT[0-9]{8}$/.test(item.id)?`<label><input type="checkbox" data-compare-id="${esc(item.id)}" ${chosenTrials.has(item.id)?"checked":""}> ${esc(item.id)}</label>`:""}<a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
-      ${publicationNotices(item)}<button class="btn sm" type="button" data-remove="${esc(item.id)}">移除</button></li>`).join('') || '<li>暂无匹配记录</li>';
+    const rows = [];
+    for (const item of readPublicLibrary()) {
+      const {visible,matching} = libraryMatches(item, filter);
+      if (!visible) continue;
+      rows.push(`<li>${/^NCT[0-9]{8}$/.test(item.id)?`<label><input type="checkbox" data-compare-id="${esc(item.id)}" ${chosenTrials.has(item.id)?"checked":""}> ${esc(item.id)}</label>`:""}
+        <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
+        ${publicationNotices(item)}${libraryEvidence(item,matching)}<button class="btn sm" type="button" data-remove="${esc(item.id)}">移除</button></li>`);
+    }
+    list.innerHTML = rows.join('') || '<li>暂无匹配记录</li>';
   }
   function persist(entries) {
     try {
@@ -155,7 +176,8 @@ function renderResearch() {
       if (!picked.size) { toast('请先勾选需要收藏的记录。'); return; }
       const entries = new Map(readPublicLibrary().map(item => [item.id, item]));
       for (const item of data.items.filter(item => picked.has(item.id))) {
-        entries.set(item.id, {id:item.id, title:item.title, detail:item.detail, notices:item.notices || [], query:data.effective_query || data.query});
+        entries.set(item.id, {id:item.id, title:item.title, detail:item.detail, date:item.date, retrieved:data.retrieved,
+          passages:item.passages || [], notices:item.notices || [], query:data.effective_query || data.query});
       }
       if (persist([...entries.values()])) toast('记录已加入本浏览器收藏。');
     };
