@@ -1,8 +1,18 @@
 {
-  "started_utc": "2026-11-26T23:31:41+00:00",
-  "finished_utc": "2026-11-26T23:31:50+00:00",
-  "watchlist_sha256": "d94dfc3ccc8de6ce1b64d7a60588237a1c1265032b09ced95e07a68a678567fb",
+  "started_utc": "2026-11-26T23:36:41+00:00",
+  "finished_utc": "2026-11-26T23:36:51+00:00",
+  "watchlist_sha256": "c2108631a78ea4e2370cd425bf4ef5bdf14146c703dbc7adb22062d5c3d20a8f",
   "checks": [
+    {
+      "source": "jrct",
+      "target": "jRCT2031230688",
+      "subject": "ivonescimab",
+      "target_sha256": "2ec823dedcb07aa48bb46f682d113938e2331399c972e37e248e63be12c70f70",
+      "status": "ok",
+      "records": 1,
+      "new_events": 4,
+      "last_success_utc": "2026-11-26T23:36:43+00:00"
+    },
     {
       "source": "ema",
       "target": "EMEA/H/C/005481",
@@ -10,8 +20,8 @@
       "target_sha256": "6fdbf1b3b412b8f5c3c07c37dd15cf8a3a6bb033c7d6da95bee061878bc16e22",
       "status": "ok",
       "records": 1,
-      "new_events": 5,
-      "last_success_utc": "2026-11-26T23:31:43+00:00"
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:36:44+00:00"
     },
     {
       "source": "sec",
@@ -21,7 +31,7 @@
       "status": "ok",
       "records": 5,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:43+00:00"
+      "last_success_utc": "2026-11-26T23:36:44+00:00"
     },
     {
       "source": "fda",
@@ -31,7 +41,7 @@
       "status": "ok",
       "records": 3,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:44+00:00"
+      "last_success_utc": "2026-11-26T23:36:45+00:00"
     },
     {
       "source": "trials",
@@ -41,7 +51,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:44+00:00"
+      "last_success_utc": "2026-11-26T23:36:45+00:00"
     },
     {
       "source": "trials",
@@ -51,7 +61,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:44+00:00"
+      "last_success_utc": "2026-11-26T23:36:45+00:00"
     },
     {
       "source": "trials",
@@ -61,7 +71,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:44+00:00"
+      "last_success_utc": "2026-11-26T23:36:45+00:00"
     },
     {
       "source": "trials",
@@ -71,7 +81,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:44+00:00"
+      "last_success_utc": "2026-11-26T23:36:45+00:00"
     },
     {
       "source": "trials",
@@ -81,7 +91,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:44+00:00"
+      "last_success_utc": "2026-11-26T23:36:46+00:00"
     },
     {
       "source": "publications",
@@ -91,7 +101,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:45+00:00"
+      "last_success_utc": "2026-11-26T23:36:46+00:00"
     },
     {
       "source": "publications",
@@ -101,7 +111,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:46+00:00"
+      "last_success_utc": "2026-11-26T23:36:47+00:00"
     },
     {
       "source": "publications",
@@ -111,7 +121,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:47+00:00"
+      "last_success_utc": "2026-11-26T23:36:48+00:00"
     },
     {
       "source": "publications",
@@ -121,7 +131,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:48+00:00"
+      "last_success_utc": "2026-11-26T23:36:49+00:00"
     },
     {
       "source": "publications",
@@ -131,10 +141,10 @@
       "status": "ok",
       "records": 9,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:31:50+00:00"
+      "last_success_utc": "2026-11-26T23:36:51+00:00"
     }
   ],
-  "new_events": 5,
-  "run_id": "45911448499",
+  "new_events": 4,
+  "run_id": "45911947900",
   "trigger": "workflow_dispatch"
 }
