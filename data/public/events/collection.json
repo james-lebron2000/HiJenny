@@ -1,8 +1,18 @@
 {
-  "started_utc": "2026-11-26T23:27:56+00:00",
-  "finished_utc": "2026-11-26T23:28:02+00:00",
-  "watchlist_sha256": "5f9b4d8289e714dd72da398b31ec40b3fec3de76ec5956454248cb8e3da3447b",
+  "started_utc": "2026-11-26T23:31:41+00:00",
+  "finished_utc": "2026-11-26T23:31:50+00:00",
+  "watchlist_sha256": "d94dfc3ccc8de6ce1b64d7a60588237a1c1265032b09ced95e07a68a678567fb",
   "checks": [
+    {
+      "source": "ema",
+      "target": "EMEA/H/C/005481",
+      "subject": "Opdualag (nivolumab + relatlimab-rmbw)",
+      "target_sha256": "6fdbf1b3b412b8f5c3c07c37dd15cf8a3a6bb033c7d6da95bee061878bc16e22",
+      "status": "ok",
+      "records": 1,
+      "new_events": 5,
+      "last_success_utc": "2026-11-26T23:31:43+00:00"
+    },
     {
       "source": "sec",
       "target": "0001599298",
@@ -11,7 +21,7 @@
       "status": "ok",
       "records": 5,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:56+00:00"
+      "last_success_utc": "2026-11-26T23:31:43+00:00"
     },
     {
       "source": "fda",
@@ -21,7 +31,7 @@
       "status": "ok",
       "records": 3,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:57+00:00"
+      "last_success_utc": "2026-11-26T23:31:44+00:00"
     },
     {
       "source": "trials",
@@ -31,7 +41,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:57+00:00"
+      "last_success_utc": "2026-11-26T23:31:44+00:00"
     },
     {
       "source": "trials",
@@ -41,7 +51,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:57+00:00"
+      "last_success_utc": "2026-11-26T23:31:44+00:00"
     },
     {
       "source": "trials",
@@ -51,7 +61,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:57+00:00"
+      "last_success_utc": "2026-11-26T23:31:44+00:00"
     },
     {
       "source": "trials",
@@ -61,7 +71,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:57+00:00"
+      "last_success_utc": "2026-11-26T23:31:44+00:00"
     },
     {
       "source": "trials",
@@ -71,7 +81,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:57+00:00"
+      "last_success_utc": "2026-11-26T23:31:44+00:00"
     },
     {
       "source": "publications",
@@ -81,7 +91,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:58+00:00"
+      "last_success_utc": "2026-11-26T23:31:45+00:00"
     },
     {
       "source": "publications",
@@ -91,7 +101,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:27:59+00:00"
+      "last_success_utc": "2026-11-26T23:31:46+00:00"
     },
     {
       "source": "publications",
@@ -101,7 +111,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:28:00+00:00"
+      "last_success_utc": "2026-11-26T23:31:47+00:00"
     },
     {
       "source": "publications",
@@ -111,7 +121,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:28:01+00:00"
+      "last_success_utc": "2026-11-26T23:31:48+00:00"
     },
     {
       "source": "publications",
@@ -121,10 +131,10 @@
       "status": "ok",
       "records": 9,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:28:02+00:00"
+      "last_success_utc": "2026-11-26T23:31:50+00:00"
     }
   ],
-  "new_events": 0,
-  "run_id": "45911081323",
+  "new_events": 5,
+  "run_id": "45911448499",
   "trigger": "workflow_dispatch"
 }
