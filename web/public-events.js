@@ -101,6 +101,15 @@ function renderPublicEvents() {
             paragraph.append(link); card.append(paragraph);
           }
         }
+        if (r.source==='ClinicalTrials.gov' && r.field==='结果首次公布' && r.value?.date) {
+          const current = document.createElement('section');
+          current.innerHTML = `<p>登记结果首次公布于 ${esc(r.value.date)}。下方按需读取登记库当前版本，历史简报保留当时的公布日期。</p>
+            <button type="button" class="btn" data-load-results="${esc(r.record)}">核对当前登记终点与安全性</button>
+            <section class="trial-posted" aria-live="polite"></section>`;
+          card.append(current);
+          bindTrialResultButtons(current,{event_id:r.id, first_posted:r.value.date,
+            observed:r.observed, as_of:query.get('as_of') || null});
+        }
         const trialId = r.source==='ClinicalTrials.gov' ? r.record : r.trial;
         if (/^NCT[0-9]{8}$/.test(trialId)) {
           if (!query.has('trial') || query.has('source')) card.append(trialTrail(trialId));

@@ -54,6 +54,7 @@ function showPostedResults(panel, snapshot) {
   const summary=safetySummary(safety);
   panel.innerHTML=`<h3>登记结果 · ${esc(snapshot.id)}</h3>
     <p><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">核对 ClinicalTrials.gov 结果页</a> · 登记更新 ${esc(registryValue(snapshot.updated))}</p>
+    ${snapshot.origin? `<p>本次读取 ${esc(snapshot.retrieved)} · <a href="#/public-events?event=${encodeURIComponent(snapshot.origin.event_id)}">查看发起核对的公开记录</a></p>` : ''}
     ${!snapshot.has_results?'<p>此登记记录当前未发布试验结果。</p>':''}
     ${outcomes.length?`<label>公布的终点（${outcomes.length}）<select data-outcome>${outcomes.map((m,i)=>option(String(i),'0',(m.type || '')+' · '+m.title)).join('')}</select></label>
       <div data-outcome-view></div>` : '<p>无已发布的终点测量表。</p>'}
@@ -111,6 +112,7 @@ function showPostedResults(panel, snapshot) {
       const run={id:crypto.randomUUID(),created:new Date().toISOString(),question:m.title,review:{},note:'',
         steps:[{source:'trials',query:snapshot.id,attempts:1,retrieved:snapshot.retrieved,
           result:{total:1,items:[item]}}]};
+      if (snapshot.origin) run.publicEvent=snapshot.origin.event_id;
       await briefStore('readwrite',store=>store.put(run));
       nav('brief');
     } catch(err) {panel.querySelector('[data-result-status]').textContent='底稿保存失败：'+err.message;}
@@ -118,12 +120,13 @@ function showPostedResults(panel, snapshot) {
   };
 }
 
-function bindTrialResultButtons(output) {
+function bindTrialResultButtons(output, origin) {
   for (const button of output.querySelectorAll('[data-load-results]')) button.onclick=async ()=>{
     const panel=button.nextElementSibling;
     button.disabled=true;panel.textContent='正在读取登记结果…';
     try {
       const snapshot=await api('/api/research/trials/'+encodeURIComponent(button.dataset.loadResults)+'/results');
+      if (origin) snapshot.origin=origin;
       if (panel.isConnected) {showPostedResults(panel,snapshot);button.textContent='重新读取登记结果';}
     } catch(err) {panel.textContent=err.message;}
     finally {button.disabled=false;}
