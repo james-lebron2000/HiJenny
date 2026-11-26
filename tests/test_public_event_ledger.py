@@ -167,3 +167,28 @@ def test_trial_filter_only_accepts_source_specific_links(tmp_path, monkeypatch):
     assert {r["id"] for r in client.get(url, params={"trial": trial.lower()}).json()["items"]} == {"0", "1", "2"}
     assert client.get(url, params={"trial": trial, "as_of": "2026-11-26"}).json()["total"] == 0
     assert client.get(url, params={"trial": "NCT0347"}).status_code == 422
+
+
+def test_primary_result_revisions_keep_denominators_and_prior_snapshot(monkeypatch):
+    import copy
+    target = {"id": "NCT03470922", "asset": "demo"}
+    measures = []
+    data = {"protocolSection": {"identificationModule": {"nctId": target["id"]},
+                                "statusModule": {"overallStatus": "COMPLETED", "lastUpdatePostDateStruct": {"date": "2026-01-01"}}},
+            "resultsSection": {"outcomeMeasuresModule": {"outcomeMeasures": measures}}}
+    monkeypatch.setattr(collector, "fetch", lambda _: copy.deepcopy(data))
+    history = []
+    def check():
+        new = list(collector.changes(collector.trial_records(target), history, "2026-01-01"))
+        history.extend(new)
+        return [r for r in new if r.get("category") == "primary-outcomes"]
+    assert not check()
+    measures.append({"type": "PRIMARY", "title": "test", "denoms": [{"counts": [{"groupId":"A","value":"0"}]}]})
+    first, = check()
+    assert not check()
+    measures[0]["denoms"][0]["counts"][0]["value"] = "2"
+    revised, = check()
+    assert revised["previous"] == first["value"] and revised["value"] != first["value"]
+    measures[0]["type"] = "SECONDARY"
+    removed, = check()
+    assert removed["value"] is None and removed["previous"] == revised["value"]

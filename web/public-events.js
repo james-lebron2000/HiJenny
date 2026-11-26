@@ -38,6 +38,7 @@ function renderPublicEvents() {
   }
   function display(value) {
     if (value == null) return '未披露';
+    if (value.primary_outcomes) return value.primary_outcomes.map(m=>m.title).join('、');
     if (typeof value === 'object') return [value.date, {ACTUAL:'实际', ESTIMATED:'预计'}[value.type] || value.type].filter(Boolean).join(' · ');
     return String(value);
   }
@@ -67,6 +68,20 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.category==='primary-outcomes') {
+          for (const [label, version] of [['本次归档',r.value],['上次归档',r.previous]]) {
+            for (const measure of version?.primary_outcomes || []) {
+              const {rows,denoms}=measureRows(measure);
+              const detail=document.createElement('details');
+              detail.innerHTML=`<summary>${label} · ${esc(measure.title)}</summary>
+                <p>分析人群 · ${esc(registryValue(measure.populationDescription))}</p>
+                <p>评价时间 · ${esc(registryValue(measure.timeFrame))}</p>
+                <p>统计量 · ${esc(registryValue(measure.paramType))} · ${esc(registryValue(measure.dispersionType))}</p>
+                ${registryTable(denomHeaders,denoms)}${registryTable(outcomeHeaders,rows)}`;
+              card.append(detail);
+            }
+          }
+        }
         if (r.documents?.length) {
           const types = {Label:'药品标签',Letter:'批准函',Review:'审评资料','Medication Guide':'用药指南'};
           const links = document.createElement('ul');
