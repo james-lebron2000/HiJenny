@@ -970,3 +970,8 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 
 .pilot-source img { display: block; width: 100%; max-width: 54rem; height: auto; margin: .6rem 0; border: 1px solid #cbd5e1; }
 .pilot-source, .pilot-math { margin: .75rem 0; }
+
+.task-home header { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px; }
+.task-home .task-groups { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px;margin:24px 0; }
+.task-groups .card { margin:0;align-content:start; }
+.task-home a[aria-current="page"] { font-weight:700;text-decoration:underline; }

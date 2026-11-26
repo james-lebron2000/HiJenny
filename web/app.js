@@ -179,8 +179,8 @@ function relativeFileUrl(path) {
 function currentView() {
   const hash = (location.hash || '').replace(/^#\/?/, '');
   const view = hash.split('?')[0];
-  if (!view) return 'research';
-  return ['pilot', 'discovery', 'research', 'brief', 'watch', 'clinical', 'medical', 'study', 'valuation', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
+  if (!view) return 'home';
+  return ['home', 'pilot', 'discovery', 'research', 'brief', 'watch', 'clinical', 'medical', 'study', 'valuation', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
 }
 
 function hashParams() {
@@ -228,6 +228,7 @@ function statStrip(items) {
 /* ---------------------------------------------------------------- topbar */
 function updateTopbar() {
   const titles = {
+    home: ['HiJenny Agent', ''],
     study: ['IIT / RWE', '研究概念书与数据可行性'],
     medical: ['医学交流', '专家会与证据答复'],
     clinical: ['临床设计', '研究方案比较与评审'],
@@ -251,7 +252,7 @@ function updateTopbar() {
   if (titleEl) titleEl.textContent = title;
   if (subEl) subEl.textContent = sub;
 
-  const publicView = ['discovery', 'research', 'brief', 'watch', 'clinical', 'medical', 'study'].includes(currentView());
+  const publicView = ['home', 'pilot', 'discovery', 'research', 'brief', 'watch', 'clinical', 'medical', 'study'].includes(currentView());
   for (const el of $$('.project-select, #project-status, #btn-analyze-topbar')) el.hidden = publicView;
   $('#mobile-nav').value = currentView();
   const select = $('#project-select');
@@ -313,6 +314,7 @@ async function renderView() {
   const seq = ++state.renderSeq;
   updateTopbar();
 
+  if (state.view === 'home') { renderHome(); return; }
   if (state.view === 'pilot') { renderPilot(); return; }
   if (state.view === 'discovery') { renderDiscovery(); return; }
   if (state.view === 'study') { renderStudy(); return; }
