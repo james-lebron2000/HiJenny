@@ -1,0 +1,94 @@
+{
+  "started_utc": "2026-11-26T22:33:09+00:00",
+  "finished_utc": "2026-11-26T22:33:13+00:00",
+  "watchlist_sha256": "5f9b4d8289e714dd72da398b31ec40b3fec3de76ec5956454248cb8e3da3447b",
+  "checks": [
+    {
+      "source": "sec",
+      "target": "0001599298",
+      "status": "ok",
+      "records": 5,
+      "new_events": 0
+    },
+    {
+      "source": "fda",
+      "target": "BLA761234",
+      "status": "ok",
+      "records": 3,
+      "new_events": 0
+    },
+    {
+      "source": "trials",
+      "target": "NCT05899608",
+      "status": "ok",
+      "records": 1,
+      "new_events": 0
+    },
+    {
+      "source": "trials",
+      "target": "NCT07264075",
+      "status": "ok",
+      "records": 1,
+      "new_events": 0
+    },
+    {
+      "source": "trials",
+      "target": "NCT05499390",
+      "status": "ok",
+      "records": 1,
+      "new_events": 0
+    },
+    {
+      "source": "trials",
+      "target": "NCT07038915",
+      "status": "ok",
+      "records": 1,
+      "new_events": 0
+    },
+    {
+      "source": "trials",
+      "target": "NCT03470922",
+      "status": "ok",
+      "records": 1,
+      "new_events": 0
+    },
+    {
+      "source": "publications",
+      "target": "NCT05899608",
+      "status": "ok",
+      "records": 0,
+      "new_events": 0
+    },
+    {
+      "source": "publications",
+      "target": "NCT07264075",
+      "status": "ok",
+      "records": 0,
+      "new_events": 0
+    },
+    {
+      "source": "publications",
+      "target": "NCT05499390",
+      "status": "ok",
+      "records": 2,
+      "new_events": 0
+    },
+    {
+      "source": "publications",
+      "target": "NCT07038915",
+      "status": "ok",
+      "records": 0,
+      "new_events": 0
+    },
+    {
+      "source": "publications",
+      "target": "NCT03470922",
+      "status": "ok",
+      "records": 9,
+      "new_events": 0
+    }
+  ],
+  "new_events": 0,
+  "run_id": "45905499456",
+  "trigger": "workflow_dispatch"
+}
