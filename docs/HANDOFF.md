@@ -391,3 +391,14 @@ curl -X POST http://127.0.0.1:8123/api/projects/<id>/exports/report
 ---
 
 交接人：HiJenny 项目组。如文档与代码不一致，以仓库 main 分支和 docs/ 最新版本为准。
+
+### 私有部署状态目录的冷备份与隔离恢复
+
+在原服务账户下使用 Python 3.11 或以上版本。下列命令适用于部署模板的单个状态目录，数据库为该目录下的 `hijenny.db`。备份前由管理员安排维护窗口，停止 API、公开索引同步及其他写入这个目录的任务，直至备份完成。备份目录包含客户文件，保存到仅服务账户可读的授权存储。
+
+```bash
+python3 tools/state_backup.py backup "$HOME/.local/share/hijenny/state" /private-storage/hijenny-backup-001
+python3 tools/state_backup.py restore /private-storage/hijenny-backup-001 /private-storage/hijenny-restore-001
+```
+
+两个目标均需使用新目录。备份包含状态目录内的数据库、项目文件和导出件，并校验 SHA-256。恢复会核验数据库完整性与登记文件的摘要，将原状态目录内的绝对文档路径改成相对路径。外置数据库、目录外的原始文件、浏览器本地底稿、密钥及独立私有关注名单需要各自的备份安排。验收可将隔离实例的 `HIJENNY_DATA_DIR` 指向恢复目录，核对项目、原件与导出件后再另行安排切换。
