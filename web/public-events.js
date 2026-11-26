@@ -1,13 +1,13 @@
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
-    <p>跟踪公开演示名单中的公司申报、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
+    <p>跟踪公开演示名单中的公司申报、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、日本 jRCT 登记、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
     ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
     <details class="card" id="public-collection"><summary>最近一次公开采集</summary><div aria-live="polite">正在读取核对记录…</div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
     <label>试验登记号<input name="trial" placeholder="NCT03470922" pattern="[Nn][Cc][Tt][0-9]{8}" title="NCT 加八位数字"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
-    <label>数据来源<select name="source"><option value="">全部来源</option><option>Drugs@FDA</option><option>EMA</option><option>ClinicalTrials.gov</option><option>PubMed</option><option>SEC</option></select></label>
+    <label>数据来源<select name="source"><option value="">全部来源</option><option>Drugs@FDA</option><option>EMA</option><option>jRCT</option><option>ClinicalTrials.gov</option><option>PubMed</option><option>SEC</option></select></label>
     <label>地区<input name="region" placeholder="例如：中东"></label>
     <label>来源披露起始日期<input type="date" name="since"></label>
     <label>首次发现起始日（台北）<input type="date" name="discovered_from"></label>
@@ -29,7 +29,7 @@ function renderPublicEvents() {
     if (!receipt) {body.textContent='服务器尚未同步采集回执。';return;}
     const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
     collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
-    const names={ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
+    const names={jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
     body.innerHTML='<p>公开关注名单全量核对 · 新增 '+esc(receipt.new_events)+' 条归档事件</p>'+
       registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],checks.map(r=>[
         names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':'待更新 · '+r.error,

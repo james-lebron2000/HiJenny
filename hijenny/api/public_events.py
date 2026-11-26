@@ -17,7 +17,7 @@ KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原�
 
 def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
-                  disclosed_to: date | None = None, source: Literal["SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA"] | None = None,
+                  disclosed_to: date | None = None, source: Literal["SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA", "jRCT"] | None = None,
                   trial: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None):
     if discovered_from and discovered_to and discovered_from > discovered_to:
@@ -31,7 +31,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
         if not re.fullmatch(r"NCT[0-9]{8}", trial):
             raise HTTPException(422, "试验登记号须为 NCT 加八位数字。")
         sql += """ AND ((json_extract(payload, '$.source')='ClinicalTrials.gov' AND json_extract(payload, '$.record')=?)
-                     OR (json_extract(payload, '$.source')='PubMed' AND json_extract(payload, '$.trial')=?)
+                     OR (json_extract(payload, '$.source') IN ('PubMed','jRCT') AND json_extract(payload, '$.trial')=?)
                      OR (json_extract(payload, '$.source')='Drugs@FDA' AND EXISTS (
                          SELECT 1 FROM json_each(payload, '$.label_trials') AS citation
                          WHERE json_extract(citation.value, '$.id')=?)))"""
@@ -130,6 +130,8 @@ def report(filters=Depends(event_filters)):
             if row.get("region"):
                 lines.append("地区 " + row["region"])
             lines.append(f'{row["source"]} · {row["record"]} · {row["url"]}')
+            if row["source"] == "jRCT":
+                lines.append("登记所列关联试验 · https://clinicaltrials.gov/study/" + row["trial"])
             for trial in row.get("label_trials", []):
                 lines.extend([f'标签所列试验 · {trial["name"]} · https://clinicaltrials.gov/study/{trial["id"]}',
                               f'{trial["section"]} · 第 {trial["page"]} 页 · {trial["label"]}#page={trial["page"]}'])

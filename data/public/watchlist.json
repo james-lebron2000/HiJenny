@@ -72,5 +72,12 @@
       "id": "EMEA/H/C/005481",
       "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
     }
+  ],
+  "jrct": [
+    {
+      "id": "jRCT2031230688",
+      "trial": "NCT05899608",
+      "asset": "ivonescimab"
+    }
   ]
 }
