@@ -50,6 +50,7 @@ class Conflict(BaseModel):
 
 
 class Brief(BaseModel):
+    publicEvent: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     id: UUID
     question: Text
     created: Text
@@ -89,10 +90,13 @@ def source_link(paragraph, record):
 @router.post("/api/research/brief.docx")
 def export_brief(brief: Brief):
     doc = Document()
-    snapshot = hashlib.sha256(brief.model_dump_json().encode()).hexdigest()[:16]
+    serialized = brief.model_dump_json(exclude={"publicEvent"} if brief.publicEvent is None else set())
+    snapshot = hashlib.sha256(serialized.encode()).hexdigest()[:16]
     doc.add_heading("研究证据报告 · 供复核", 0)
     doc.add_paragraph(clean(brief.question))
     doc.add_paragraph(f"底稿 {brief.id}  ·  内容指纹 {snapshot}\n创建时间 {clean(brief.created)}")
+    if brief.publicEvent:
+        doc.add_paragraph("发起底稿的公开动态编号 " + brief.publicEvent)
     doc.add_heading("审核意见、冲突与未解决问题", 1)
     doc.add_paragraph(clean(brief.note) or "尚未填写审核意见")
     if brief.publicationCheck:

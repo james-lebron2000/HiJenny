@@ -146,7 +146,7 @@ async function renderMedical() {
       const query = fields.query.value.trim();
       if (!question || !query) { toast('请填写会议问题和公开检索词。'); return; }
       if (!switchAllowed()) return;
-      briefSeed = {question, pubmed:query, trials:query, startSearch:true};
+      briefSeed = {question, pubmed:query, trials:query, purpose:'medical-meeting', startSearch:true};
       nav('brief');
     };
     for (const button of $$('[data-revise]',body)) button.onclick=()=>{

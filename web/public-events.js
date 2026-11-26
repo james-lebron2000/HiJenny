@@ -69,6 +69,17 @@ function renderPublicEvents() {
           };
           card.append(button,feedback);
         }
+        if (r.source==='PubMed' && /^[0-9]+$/.test(r.record) && /^NCT[0-9]{8}$/.test(r.trial)) {
+          const pair = document.createElement('button');
+          pair.type = 'button'; pair.className = 'btn';
+          pair.textContent = '核对论文与登记，建立底稿';
+          pair.onclick = ()=>{
+            briefSeed = {question:'论文 PMID '+r.record+' 与试验 '+r.trial+' 的报告内容是否一致？',
+              pubmed:r.record+'[pmid]', trials:r.trial, publicEvent:r.id, startSearch:true};
+            nav('brief');
+          };
+          card.append(pair);
+        }
         list.append(card);
       }
       const reportQuery = new URLSearchParams(query);

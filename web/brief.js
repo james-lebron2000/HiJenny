@@ -82,6 +82,7 @@ async function recheckBriefPublications(original) {
 
 function briefText(run) {
   const lines = [run.question, '研究底稿 · 待专业复核', '版本 ' + run.id, '创建时间 ' + run.created];
+  if (run.publicEvent) lines.push('发起底稿的公开动态编号 '+run.publicEvent);
   lines.push(...(run.publicationCheck || []));
   for (const step of run.steps) {
     lines.push('', briefSources[step.source], '检索式 ' + step.query, '查询尝试 ' + step.attempts);
@@ -129,7 +130,8 @@ async function renderBrief() {
   const report = $('#brief-report', home);
   const form = $('#brief-plan', home);
   const startSearch = briefSeed?.startSearch === true;
-  let meetingPlan = startSearch;
+  let meetingPlan = briefSeed?.purpose === 'medical-meeting';
+  let publicEvent = briefSeed?.publicEvent;
   if (briefSeed) {
     for (const input of form.querySelectorAll('input')) input.value = typeof briefSeed==='string' ? briefSeed : briefSeed[input.id.slice(6)];
     briefSeed = '';
@@ -162,6 +164,7 @@ async function renderBrief() {
     const choices=[...items.values()].map(row=>option(row.id,'',row.id+' · '+row.title)).join('');
     const conflictLink=id=>`<a href="${esc(sourceLink(items.get(id)))}" target="_blank" rel="noopener noreferrer">${esc(id)} · ${esc(items.get(id).title)}</a>`;
     report.innerHTML = `<h2>${esc(run.question)}</h2><p>来源快照 · ${esc(new Date(run.created).toLocaleString())}</p>
+      ${run.publicEvent?`<a href="#/public-events?event=${encodeURIComponent(run.publicEvent)}">查看发起底稿的公开动态</a>`:''}
       ${run.steps.map(step => `<section class="card"><h3>${briefSources[step.source]}</h3>
       <span>${esc(step.query)} · 已尝试 ${step.attempts} 次</span>
       ${step.result ? `<p>共命中 ${step.result.total} 条，已取回 ${step.result.items.length} 条；其中 ${step.result.items.filter(i=>!i.passages.length).length} 条缺少来源片段。</p>
@@ -239,6 +242,7 @@ async function renderBrief() {
       finally {busy=false;if (home.isConnected) paint();}
     };
     $('#brief-copy', home).onclick = () => {
+      publicEvent = run.publicEvent;
       meetingPlan = run.purpose === 'medical-meeting';
       $('#brief-question', form).value = run.question;
       for (const step of run.steps) $('#brief-' + step.source, form).value = step.query;
@@ -262,7 +266,7 @@ async function renderBrief() {
         const id=run.id;
         await saveReview();
         const saved=await briefStore('readonly',store=>store.get(id));
-        const payload={id,question:saved.question,created:saved.created,note:saved.note,publicationCheck:saved.publicationCheck || [],conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
+        const payload={id,publicEvent:saved.publicEvent,question:saved.question,created:saved.created,note:saved.note,publicationCheck:saved.publicationCheck || [],conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
           source:step.source,query:step.query,retrieved:step.retrieved || '',total:step.result?.total ?? null,error:step.error || '',
           records:(step.result?.items || []).map(item=>({
             id:item.id,title:item.title,date:item.date || '',notices:item.notices || [],decision:saved.review[item.id] || '待复核',
@@ -346,7 +350,9 @@ async function renderBrief() {
       await saveReview();
       run = {id:crypto.randomUUID(), created:new Date().toISOString(), question, steps, review:{}, note:''};
       if (meetingPlan) run.purpose = 'medical-meeting';
+      if (publicEvent) run.publicEvent = publicEvent;
       await put(run);
+      publicEvent = null;
       meetingPlan = false;
       rememberVersion();
       await refreshHistory();
