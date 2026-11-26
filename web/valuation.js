@@ -41,21 +41,43 @@ const dealFields = [
   ['source','披露来源及页码或链接','text'], ['limits','与本资产的可比性限制','text']
 ];
 
+function projectValuations(project) {
+  const prefix='hijenny.valuation.'+project+'.';
+  const versions=[];
+  for (const key of Object.keys(localStorage).filter(k=>k.startsWith(prefix))) {
+    let value;
+    try {value=JSON.parse(localStorage.getItem(key));} catch {continue;}
+    if (value?.id && key===prefix+value.id && typeof value.created==='string') versions.push(value);
+  }
+  return versions.sort((a,b)=>b.created.localeCompare(a.created));
+}
+
 async function renderValuation(seq) {
   const project = state.projectId;
   const prefix = 'hijenny.valuation.' + project + '.';
   const projectPath = '/api/projects/' + encodeURIComponent(project);
   const [response, detail] = await Promise.all([api(projectPath+'/questions'), api(projectPath)]);
   if (seq !== state.renderSeq) return;
-  const versions = () => Object.keys(localStorage).filter(k=>k.startsWith(prefix))
-    .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>b.created.localeCompare(a.created));
+  const versions = () => projectValuations(project);
   const newFlow = () => ({label:'',basis:'',cases:[{},{}]});
   const newPlan = () => ({name:detail.project.asset_name || '',origin:detail.project.meta?.opportunity || null,deals:[],asOf:'',currency:'USD',rate:'',basis:'',comparable:'', flows:[newFlow()],question:null});
   const requested = response.questions.find(q=>q.question_id===hashParams().get('question'));
   const previous = versions();
-  let prior = (requested ? previous.find(v=>v.question?.question_id===requested.question_id) : previous[0]) || null;
+  const requestedVersion=hashParams().get('version');
+  const exact=previous.find(v=>v.id===requestedVersion);
+  if (requestedVersion && (!exact || (hashParams().has('question') && exact.question?.question_id!==hashParams().get('question')))) {
+    setView(`<section class="card"><h1>当前浏览器找不到对应的项目估值版本</h1>
+      <a href="#/valuation?project=${encodeURIComponent(project)}">查看本项目的估值</a></section>`);return;
+  }
+  let prior = exact || (requested ? previous.find(v=>v.question?.question_id===requested.question_id) : previous[0]) || null;
   let draft = structuredClone(prior || newPlan());
   if (requested && !prior) draft.question=requested;
+  function rememberVersion() {
+    const params=new URLSearchParams({project});
+    if (prior) params.set('version',prior.id);
+    if (draft.question) params.set('question',draft.question.question_id);
+    window.history.replaceState(null,'','#/valuation?'+params);
+  }
   let dirty = false;
   const number = value => Number(value).toLocaleString('zh-CN',{maximumFractionDigits:4});
   let searchAsset = '';
@@ -174,7 +196,7 @@ async function renderValuation(seq) {
     form.oninput=e=>{if(e.target.id==='val-public-query') {searchAsset=e.target.value;return;} dirty=true;result.textContent='输入已修改，请重新计算。';};
     $('#val-history').onchange=e=>{
       if (dirty && !confirm('放弃未保存的修改并切换版本？')) {e.target.value=prior?.id || '';return;}
-      prior=versions().find(v=>v.id===e.target.value) || null;draft=structuredClone(prior || newPlan());dirty=false;paint();
+      prior=versions().find(v=>v.id===e.target.value) || null;draft=structuredClone(prior || newPlan());dirty=false;rememberVersion();paint();
     };
     const search=$('#val-public-search',form), list=$('#val-public-list',form);
     search.onclick=async ()=>{
@@ -244,7 +266,7 @@ async function renderValuation(seq) {
         })),Number(draft.rate)));
         const next={...draft, outputs,id:crypto.randomUUID(),parent:prior?.id || null,created:new Date().toISOString()};
         localStorage.setItem(prefix+next.id,JSON.stringify(next));
-        prior=next;draft=structuredClone(next);dirty=false;paint();
+        prior=next;draft=structuredClone(next);dirty=false;rememberVersion();paint();
       } catch(error) {result.textContent='未保存：'+error.message;}
     };
   }

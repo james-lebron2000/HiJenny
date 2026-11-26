@@ -57,6 +57,7 @@ async function renderFollowup(seq) {
     if (q) $('#bd-question').onchange = e => navigate(stage, e.target.value);
   };
   if (!q) { setView(queue); bindQueue(); return; }
+  const valuations = projectValuations(project).filter(v=>v.question?.question_id===id);
   const events = data.history[id] || [];
   const sources = data.evidence.filter(e => q.evidence_ids.includes(e.evidence_id));
   const documents = new Map(data.documents.map(d => [d.document_id, d]));
@@ -73,6 +74,10 @@ async function renderFollowup(seq) {
   function cells(row) { return cols.map(k => `<td>${esc(row[k] || '待核')}</td>`).join(''); }
   setView(`${queue}<section class="card bd"><div class="card-head"><h2>问题与来源</h2></div>
     <p>${esc(q.question)}</p><a class="btn sm" href="#/valuation?project=${encodeURIComponent(project)}&question=${encodeURIComponent(id)}">评估此问题对交易估值的影响</a>${quote ? `<blockquote>${esc(quote.quote)} · ${evidenceLink(quote)}</blockquote>` : ''}<details><summary>查看关联证据（${sources.length}）</summary>${sources.map(e => '<p>'+evidenceLink(e)+'</p>').join('')}</details></section>
+    ${valuations.length?`<section class="card bd"><h2>此问题关联的本机估值版本（${valuations.length}）</h2>
+    <ol>${valuations.map(v=>`<li><a href="#/valuation?${esc(new URLSearchParams({project,question:id,version:v.id}).toString())}">${esc(v.name)} · ${esc(fmtDate(v.created))}</a>
+      <p>估值日 ${esc(v.asOf)} · 百万 ${esc(v.currency)} · 基准现值 ${esc(v.outputs[0].total.toLocaleString('zh-CN',{maximumFractionDigits:4}))}
+      · 替代现值 ${esc(v.outputs[1].total.toLocaleString('zh-CN',{maximumFractionDigits:4}))} · 保存时问题状态 ${esc(v.question.status)}</p></li>`).join('')}</ol></section>`:''}
     <section class="card bd"><h2>可比资产表</h2><div class="bd-scroll"><table><thead><tr>${Object.values(bdColumns).map(x=>'<th>'+x+'</th>').join('')}<th>来源</th></tr></thead><tbody>
     ${reference ? '<tr>'+cells(reference)+'<td>'+evidenceLink(quote)+'</td></tr>' : ''}
     ${rows.map(r=>'<tr>'+cells(r)+'<td>'+sourceLink(r)+'</td></tr>').join('')}</tbody></table></div></section>
