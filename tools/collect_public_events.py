@@ -85,7 +85,12 @@ def fda_records(target):
             link = (document.get("url") or "").replace("http://", "https://", 1)
             if link.startswith("https://www.accessdata.fda.gov/drugsatfda_docs/"):
                 documents.add((document["type"], link))
-        yield dict(documents=[{"type": t, "url": u} for t, u in sorted(documents)],
+        label_trials = target.get("label_trials", {}).get(f"{kind}/{number}", [])
+        for trial in label_trials:
+            if (("Label", trial["label"]) not in documents or not re.fullmatch(r"NCT[0-9]{8}", trial["id"])
+                    or not isinstance(trial["page"], int) or trial["page"] < 1):
+                raise ValueError("Invalid trial citation for FDA submission")
+        yield dict(label_trials=label_trials, documents=[{"type": t, "url": u} for t, u in sorted(documents)],
                    source="Drugs@FDA", record=f"{application}/{kind}/{number}", subject=product["sponsor_name"],
                    asset=target["asset"], region="美国", field=field, value=description, source_date=action_day,
                    date_label="FDA 决定日", effective=action_day, url=url)
@@ -173,7 +178,7 @@ def changes(records, history, now):
             continue
         if previous:
             if record["source"] == "Drugs@FDA":
-                fields = ("value", "source_date", "documents")
+                fields = ("value", "source_date", "documents", "label_trials")
                 if all(previous.get(k, []) == record.get(k, []) for k in fields):
                     continue
             elif previous["value"] == record["value"] or record["source_date"] < previous["source_date"]:
@@ -184,7 +189,9 @@ def changes(records, history, now):
         if record["source"] == "Drugs@FDA" and previous:
             entry["previous_date"] = previous["source_date"]
             entry["previous_documents"] = previous.get("documents", [])
-            entry["id"] = fingerprint([entry["id"], entry["documents"]])
+            if previous.get("label_trials", []) != record.get("label_trials", []):
+                entry["label_trials_changed"] = True
+            entry["id"] = fingerprint([entry["id"], entry["documents"], entry.get("label_trials", [])])
         latest[key] = entry
         yield entry
 

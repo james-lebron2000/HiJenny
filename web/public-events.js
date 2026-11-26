@@ -47,7 +47,7 @@ function renderPublicEvents() {
         const kind = {baseline:'首次收录',change:'字段变化',reviewed:'原文核实'}[r.kind];
         const documentUpdate = r.kind==='change' && r.source==='Drugs@FDA' && r.previous===r.value && r.previous_date===r.source_date;
         card.innerHTML = `<h2>${esc(r.asset || r.subject)} · ${esc(r.field)}</h2>
-          <p>${documentUpdate?'配套文件更新':esc(kind)} · ${r.kind==='change'&&!documentUpdate?esc(display(r.previous))+' → ':''}${esc(display(r.value))}</p>
+          <p>${r.label_trials_changed?'标签试验关联更新':documentUpdate?'配套文件更新':esc(kind)} · ${r.kind==='change'&&!documentUpdate?esc(display(r.previous))+' → ':''}${esc(display(r.value))}</p>
           <p>${esc(r.date_label || '来源披露')} ${esc(r.source_date)} · 首次发现 ${esc(fmtDate(r.observed))}</p>
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
@@ -63,6 +63,14 @@ function renderPublicEvents() {
             item.append(link); links.append(item);
           }
           card.append(links);
+        }
+        for (const trial of r.label_trials || []) {
+          const p = document.createElement('p');
+          const label = r.documents?.find(doc=>doc.type==='Label' && doc.url===trial.label);
+          if (!label || !/^NCT[0-9]{8}$/.test(trial.id)) continue;
+          p.innerHTML = `标签所列试验 · ${esc(trial.name)} · <a href="https://clinicaltrials.gov/study/${esc(trial.id)}" target="_blank" rel="noopener noreferrer">${esc(trial.id)}</a>
+            · <a href="${esc(label.url)}#page=${Number(trial.page)}" target="_blank" rel="noopener noreferrer">${esc(trial.section)} · 第 ${Number(trial.page)} 页</a>`;
+          card.append(p);
         }
         const noticeIds = [];
         if (r.category==='publication-status') {

@@ -133,3 +133,11 @@ def test_fda_approval_actions_keep_submission_identity(monkeypatch):
     assert revised["documents"] == [{"type": "Label", "url": "https://" + url}]
     assert revised["previous_documents"] == [] and revised["previous_date"] == revised["source_date"]
     assert not list(collector.changes(collector.fda_records(target), history + [revised], "2026-11-28"))
+
+    trial = dict(id="NCT03470922", label="https://" + url, page=18, name="trial", section="14")
+    target["label_trials"] = {"ORIG/1": [trial]}
+    linked, = collector.changes(collector.fda_records(target), history + [revised], "2026-11-29")
+    assert linked["label_trials_changed"] and linked["label_trials"] == [trial]
+    target["label_trials"] = {"SUPPL/1": [trial]}
+    with pytest.raises(ValueError, match="Invalid trial citation"):
+        list(collector.fda_records(target))

@@ -22,6 +22,10 @@
     {
       "id": "NCT07038915",
       "asset": "tiragolumab + ivonescimab"
+    },
+    {
+      "id": "NCT03470922",
+      "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
     }
   ],
   "publications": [
@@ -40,12 +44,27 @@
     {
       "id": "NCT07038915",
       "asset": "tiragolumab + ivonescimab"
+    },
+    {
+      "id": "NCT03470922",
+      "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
     }
   ],
   "fda": [
     {
       "id": "BLA761234",
-      "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
+      "asset": "Opdualag (nivolumab + relatlimab-rmbw)",
+      "label_trials": {
+        "ORIG/1": [
+          {
+            "id": "NCT03470922",
+            "name": "RELATIVITY-047",
+            "label": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2022/761234s000lbl.pdf",
+            "page": 18,
+            "section": "14 Clinical Studies"
+          }
+        ]
+      }
     }
   ]
 }

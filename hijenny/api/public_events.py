@@ -95,7 +95,7 @@ def report(filters=Depends(event_filters)):
             kind = KINDS[row["kind"]]
             if (row["kind"] == "change" and row["source"] == "Drugs@FDA" and
                     row["previous"] == row["value"] and row.get("previous_date") == row["source_date"]):
-                kind = "配套文件更新"
+                kind = "标签试验关联更新" if row.get("label_trials_changed") else "配套文件更新"
             elif row["kind"] == "change":
                 value = display(row["previous"]) + " → " + value
             lines.extend(["", f'{count}. {row["asset"] or row["subject"]} · {row["field"]}',
@@ -105,6 +105,9 @@ def report(filters=Depends(event_filters)):
             if row.get("region"):
                 lines.append("地区 " + row["region"])
             lines.append(f'{row["source"]} · {row["record"]} · {row["url"]}')
+            for trial in row.get("label_trials", []):
+                lines.extend([f'标签所列试验 · {trial["name"]} · https://clinicaltrials.gov/study/{trial["id"]}',
+                              f'{trial["section"]} · 第 {trial["page"]} 页 · {trial["label"]}#page={trial["page"]}'])
             for doc in row.get("documents", []):
                 lines.append(f'{doc["type"]} · {doc["url"]}')
     lines.append(f"\n共 {count} 条")
