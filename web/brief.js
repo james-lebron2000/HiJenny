@@ -128,6 +128,7 @@ async function renderBrief() {
   const history = $('#brief-history', home);
   const report = $('#brief-report', home);
   const form = $('#brief-plan', home);
+  const startSearch = briefSeed?.startSearch === true;
   if (briefSeed) {
     for (const input of form.querySelectorAll('input')) input.value = typeof briefSeed==='string' ? briefSeed : briefSeed[input.id.slice(6)];
     briefSeed = '';
@@ -340,6 +341,10 @@ async function renderBrief() {
   };
   try {
     const runs = await refreshHistory();
+    if (startSearch) {
+      if (home.isConnected) form.requestSubmit();
+      return;
+    }
     const requested=hashParams().get('version');
     run=requested ? runs.find(r=>r.id===requested) : runs[0];
     if (run) {history.value=run.id;paint();}

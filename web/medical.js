@@ -84,6 +84,13 @@ async function renderMedical() {
     const alerts=affected.find(row=>row.version.id===version?.id)?.alerts || [];
     const selectedIndex = r => Math.max(0,r.passages.findIndex(p=>p.text===selected.get(r.id)?.quote && p.label===selected.get(r.id)?.label));
     body.innerHTML = `<p>从已纳入的来源中挑选支持答复的原文，记录专家会要讨论的问题、医学复核意见和后续行动。</p>
+      <details class="card" ${runs.length || saved.length ? '' : 'open'}><summary>从新的医学问题准备会议</summary>
+      <form id="meeting-search"><label>本次专家会要回答什么问题？
+        <input name="question" required maxlength="400" placeholder="例如：会上需要讨论哪些已发表的临床证据？"></label>
+      <label>公开检索词（药物英文名或主题）
+        <input name="query" required maxlength="400" placeholder="例如 imatinib"></label>
+      <p>会议问题保存在本浏览器。仅将公开检索词提交给 PubMed 和 ClinicalTrials.gov。核对来源并标记「纳入」后，即可带回原问题和引文。</p>
+      <button class="btn primary" type="submit">检索证据并建立底稿</button></form></details>
       <button class="btn" data-nav="brief">打开研究底稿</button>
       ${affected.length ? `<section class="card"><h2>引文需要复查的已确认简报（${affected.length}）</h2>
       ${affected.map(row=>`<p><button type="button" class="btn" data-affected="${esc(row.version.id)}">${esc(row.version.question)} · ${esc(fmtDate(row.version.created))}</button> · 涉及 ${row.alerts.map(a=>esc(a.id)).join('、')}</p>`).join('')}</section>` : ''}
@@ -115,6 +122,16 @@ async function renderMedical() {
       <p role="status" id="meeting-status">${version ? esc((version.confirmed?'已确认':'草稿')+' · '+fmtDate(version.created)) : ''}</p></form>`
       : '<p>请先在研究底稿标记并保存至少一项纳入记录。</p>'}`;
     function switchAllowed() { return !dirty || confirm('放弃本页未保存的修改？'); }
+    $('#meeting-search',body).onsubmit = event => {
+      event.preventDefault();
+      const fields = event.currentTarget.elements;
+      const question = fields.question.value.trim();
+      const query = fields.query.value.trim();
+      if (!question || !query) { toast('请填写会议问题和公开检索词。'); return; }
+      if (!switchAllowed()) return;
+      briefSeed = {question, pubmed:query, trials:query, startSearch:true};
+      nav('brief');
+    };
     for (const button of $$('[data-revise]',body)) button.onclick=()=>{
       if (!switchAllowed()) return;
       revisionBase=version;
