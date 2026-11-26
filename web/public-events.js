@@ -48,12 +48,15 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        const noticeIds = [];
         if (r.category==='publication-status') {
           const notices = new Set(String(r.value).match(/https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\//g) || []);
           for (const url of notices) {
             const link = document.createElement('a');
             link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-            link.textContent = '核对关联记录 · PMID '+url.split('/').at(-2);
+            const pmid = url.split('/').at(-2);
+            if (pmid !== r.record) noticeIds.push(pmid);
+            link.textContent = '核对关联记录 · PMID '+pmid;
             const paragraph = document.createElement('p');
             paragraph.append(link); card.append(paragraph);
           }
@@ -84,9 +87,19 @@ function renderPublicEvents() {
           const pair = document.createElement('button');
           pair.type = 'button'; pair.className = 'btn';
           pair.textContent = r.category==='publication-status' ? '复核出版状态与试验登记' : '核对论文与登记，建立底稿';
+          let noticeSelect;
+          if (noticeIds.length > 1) {
+            const label = document.createElement('label');
+            label.textContent = '本次底稿要核对的关联记录';
+            noticeSelect = document.createElement('select');
+            for (const id of noticeIds) noticeSelect.add(new Option('PMID '+id,id));
+            label.append(noticeSelect); card.append(label);
+          }
+          if (noticeIds.length) pair.textContent = '核对论文、关联通知与试验登记';
           pair.onclick = ()=>{
+            const notice = noticeSelect?.value || noticeIds[0];
             briefSeed = {question:r.category==='publication-status' ? 'PMID '+r.record+' 的出版状态是否影响对试验 '+r.trial+' 的判断？' : '论文 PMID '+r.record+' 与试验 '+r.trial+' 的报告内容是否一致？',
-              pubmed:r.record+'[pmid]', trials:r.trial, publicEvent:r.id, startSearch:true};
+              pubmed:[r.record,notice].filter(Boolean).map(id=>id+'[pmid]').join(' OR '), trials:r.trial, publicEvent:r.id, startSearch:true};
             nav('brief');
           };
           card.append(pair);

@@ -1,4 +1,5 @@
 """Export a reviewed public-evidence snapshot as an editable research report."""
+import re
 import hashlib
 from io import BytesIO
 from typing import Annotated, Literal
@@ -110,6 +111,12 @@ def export_brief(brief: Brief):
         status = (f"数据库命中 {step.total}；取回 {len(step.records)}" if step.total is not None
                   else clean(step.error) or "未完成检索")
         doc.add_paragraph(f"{name} · {clean(step.query)}\n{status} · 检索时间 {clean(step.retrieved) or '未提供'}")
+        if step.source == "pubmed" and step.total is not None and re.fullmatch(
+                r"\d+\[pmid\](?: OR \d+\[pmid\])*", step.query, re.IGNORECASE):
+            returned = {r.id for r in step.records}
+            for pmid in re.findall(r"\d+", step.query):
+                if pmid not in returned:
+                    doc.add_paragraph(f"本次未取回指定 PMID {pmid}")
         records.extend(step.records)
     counts = [f"{status} {sum(r.decision == status for r in records)}" for status in ("纳入", "排除", "待复核")]
     doc.add_paragraph("取回记录筛选结果：" + "，".join(counts))

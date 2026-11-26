@@ -80,6 +80,12 @@ async function recheckBriefPublications(original) {
   return {...next,id:crypto.randomUUID(),created:checked,publicationCheck:log,unavailablePublications:unavailable};
 }
 
+function missingExactPublications(step) {
+  if (!step.result || step.source!=='pubmed' || !/^\d+\[pmid\](?: OR \d+\[pmid\])*$/i.test(step.query)) return [];
+  const returned = new Set(step.result.items.map(item=>item.id));
+  return step.query.match(/\d+/g).filter(id=>!returned.has(id));
+}
+
 function briefText(run) {
   const lines = [run.question, '研究底稿 · 待专业复核', '版本 ' + run.id, '创建时间 ' + run.created];
   if (run.publicEvent) lines.push('发起底稿的公开动态编号 '+run.publicEvent);
@@ -90,6 +96,7 @@ function briefText(run) {
       lines.push(step.error || '尚未完成检索');
       continue;
     }
+    for (const id of missingExactPublications(step)) lines.push('本次未取回指定 PMID '+id);
     const items = step.result.items;
     lines.push('检索时间 ' + step.retrieved, '数据库命中 ' + step.result.total + '，已取回 ' + items.length);
     for (const item of items) {
@@ -168,6 +175,7 @@ async function renderBrief() {
       ${run.steps.map(step => `<section class="card"><h3>${briefSources[step.source]}</h3>
       <span>${esc(step.query)} · 已尝试 ${step.attempts} 次</span>
       ${step.result ? `<p>共命中 ${step.result.total} 条，已取回 ${step.result.items.length} 条；其中 ${step.result.items.filter(i=>!i.passages.length).length} 条缺少来源片段。</p>
+        ${missingExactPublications(step).map(id=>`<p>本次未取回指定 PMID ${esc(id)} · <a href="${esc(sourceLink({id}))}" target="_blank" rel="noopener noreferrer">核对 PubMed</a></p>`).join('')}
         ${step.result.items.map(item => `<details><summary>${esc(item.title)}</summary>
         <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.id)} · 核对原始记录</a>
         ${publicationNotices(item)}<p>${esc(item.date)} · ${esc(item.detail)}</p>
