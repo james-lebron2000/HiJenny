@@ -21,3 +21,4 @@ exports/
 
 demo_workspace/
 demo_recording/
+!data/public/

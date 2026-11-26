@@ -475,6 +475,8 @@ def create_app() -> FastAPI:
         description="Evidence-first pharma BD due-diligence API and review UI.",
         lifespan=_lifespan,
     )
+    from .public_events import router as public_events_router
+    app.include_router(public_events_router)
     from .research import router as research_router
     from .discovery import router as discovery_router
     app.include_router(discovery_router)

@@ -125,6 +125,7 @@ function watchCalendar(events, now=new Date(), reminderDays=0) {
 function renderWatch() {
   setView(`<section id="trial-watch" class="research-home"><h1>试验关注列表</h1>
     <p>查看已关注试验的预计与实际完成日期。点击更新后，从 ClinicalTrials.gov 核对登记变化。</p>
+    <button class="btn" data-nav="public-events">查看公开资产动态</button>
     <button class="btn" data-nav="research">查找并关注试验</button>
     <button class="btn primary" id="update-watch">更新全部</button>
     <p id="watch-status" role="status"></p><section id="watch-calendar"></section><div id="watch-entries"></div></section>`);

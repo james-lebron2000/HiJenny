@@ -1,0 +1,19 @@
+{
+  "sec": [
+    {
+      "cik": "0001599298",
+      "company": "Summit Therapeutics",
+      "since": "2026-11-01"
+    }
+  ],
+  "trials": [
+    {
+      "id": "NCT05899608",
+      "asset": "ivonescimab"
+    },
+    {
+      "id": "NCT07264075",
+      "asset": "ivonescimab"
+    }
+  ]
+}

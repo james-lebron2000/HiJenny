@@ -1,0 +1,10 @@
+[Unit]
+Description=Import public HiJenny events from GitHub
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/hijenny/current
+Environment=HIJENNY_DATA_DIR=%h/.local/share/hijenny/state
+ExecStart=%h/.local/share/hijenny/runtime-py312/bin/python -m hijenny.public_events
+UMask=0077

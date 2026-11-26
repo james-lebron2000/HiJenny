@@ -180,7 +180,7 @@ function currentView() {
   const hash = (location.hash || '').replace(/^#\/?/, '');
   const view = hash.split('?')[0];
   if (!view) return 'home';
-  return ['home', 'pilot', 'discovery', 'research', 'brief', 'watch', 'clinical', 'medical', 'study', 'valuation', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
+  return ['home', 'pilot', 'discovery', 'research', 'brief', 'public-events', 'watch', 'clinical', 'medical', 'study', 'valuation', 'projects', 'overview', 'upload', 'evidence', 'findings', 'followup', 'report'].includes(view) ? view : 'projects';
 }
 
 function hashParams() {
@@ -232,6 +232,7 @@ function updateTopbar() {
     study: ['IIT / RWE', '研究概念书与数据可行性'],
     medical: ['医学交流', '专家会与证据答复'],
     clinical: ['临床设计', '研究方案比较与评审'],
+    'public-events': ['公开资产动态', '公司申报与临床登记变化'],
     watch: ['试验关注', '登记日期与变更记录'],
     brief: ['研究底稿', '多来源检索与证据复核'],
     pilot: ['单资产付费试点', '首轮临床尽调报价申请'],
@@ -252,7 +253,7 @@ function updateTopbar() {
   if (titleEl) titleEl.textContent = title;
   if (subEl) subEl.textContent = sub;
 
-  const publicView = ['home', 'pilot', 'discovery', 'research', 'brief', 'watch', 'clinical', 'medical', 'study'].includes(currentView());
+  const publicView = ['home', 'pilot', 'discovery', 'research', 'brief', 'public-events', 'watch', 'clinical', 'medical', 'study'].includes(currentView());
   for (const el of $$('.project-select, #project-status, #btn-analyze-topbar')) el.hidden = publicView;
   $('#mobile-nav').value = currentView();
   const select = $('#project-select');
@@ -320,6 +321,7 @@ async function renderView() {
   if (state.view === 'study') { renderStudy(); return; }
   if (state.view === 'medical') { await renderMedical(); return; }
   if (state.view === 'clinical') { renderClinical(); return; }
+  if (state.view === 'public-events') { renderPublicEvents(); return; }
   if (state.view === 'watch') { renderWatch(); return; }
   if (state.view === 'brief') { await renderBrief(); return; }
   if (state.view === 'research') { renderResearch(); return; }

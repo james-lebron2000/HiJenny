@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh HiJenny public event index hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
