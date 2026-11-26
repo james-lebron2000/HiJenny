@@ -41,5 +41,11 @@
       "id": "NCT07038915",
       "asset": "tiragolumab + ivonescimab"
     }
+  ],
+  "fda": [
+    {
+      "id": "BLA761234",
+      "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
+    }
   ]
 }

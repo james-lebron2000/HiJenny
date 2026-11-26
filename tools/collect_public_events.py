@@ -63,6 +63,28 @@ def sec_records(company):
                     yield dict(row, field="重大协议申报项目 " + code, value=label + "（具体交易和资产待核实）")
 
 
+def fda_records(target):
+    application = target["id"]
+    if not re.fullmatch(r"(NDA|BLA|ANDA)[0-9]{6}", application):
+        raise ValueError("Invalid FDA application number")
+    query = urlencode({"search": f'application_number:"{application}"'})
+    records = fetch("https://api.fda.gov/drug/drugsfda.json?" + query)["results"]
+    if len(records) != 1 or records[0]["application_number"] != application:
+        raise ValueError("Unexpected FDA application")
+    product = records[0]
+    url = "https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=" + application[-6:]
+    for entry in product["submissions"]:
+        if entry["submission_status"] != "AP":
+            continue
+        kind, number = entry["submission_type"], entry["submission_number"]
+        action_day = datetime.strptime(entry["submission_status_date"], "%Y%m%d").date().isoformat()
+        field = {"ORIG": "原始申请获批", "SUPPL": "补充申请获批"}.get(kind, f"{kind} 申请获批")
+        description = entry.get("submission_class_code_description") or "未列申请分类"
+        yield dict(source="Drugs@FDA", record=f"{application}/{kind}/{number}", subject=product["sponsor_name"],
+                   asset=target["asset"], region="美国", field=field, value=description, source_date=action_day,
+                   date_label="FDA 决定日", effective=action_day, url=url)
+
+
 def trial_records(trial):
     nct = trial["id"]
     if not re.fullmatch(r"NCT[0-9]{8}", nct):
@@ -158,7 +180,7 @@ def collect(root=ROOT):
     history = [json.loads(line) for path in files for line in path.read_text().splitlines()]
     watch = json.loads((root / "watchlist.json").read_text())
     events, failures = [], []
-    for group, read in (("sec", sec_records), ("trials", trial_records), ("publications", publication_records)):
+    for group, read in (("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
         for target in watch.get(group, []):
             try:
                 events.extend(list(changes(read(target), history, now)))

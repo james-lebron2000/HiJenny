@@ -108,3 +108,19 @@ def test_study_stop_reason_revisions_and_resumption(monkeypatch):
     assert [e["value"] for e in notes] == [
         "暂停 · 登记记录未提供原因", "暂停 · review", None, "入组前撤回 · 0 participants"]
     assert notes[2]["previous"] == notes[1]["value"]
+
+
+def test_fda_approval_actions_keep_submission_identity(monkeypatch):
+    target = {"id": "BLA761234", "asset": "demo"}
+    original = dict(submission_type="ORIG", submission_number="1", submission_status="AP",
+                    submission_status_date="20220318", submission_class_code_description="Type 1")
+    supplement = dict(original, submission_type="SUPPL", submission_class_code_description="Labeling")
+    response = {"application_number": target["id"], "sponsor_name": "example",
+                "submissions": [original, supplement, dict(supplement, submission_status="TA")]}
+    monkeypatch.setattr(collector, "fetch", lambda _: {"results": [response]})
+    rows = list(collector.fda_records(target))
+    assert [r["record"] for r in rows] == ["BLA761234/ORIG/1", "BLA761234/SUPPL/1"]
+    assert rows[1]["field"] == "补充申请获批" and rows[1]["value"] == "Labeling"
+    assert rows[0]["effective"] == "2022-03-18"
+    with pytest.raises(ValueError, match="Unexpected FDA"):
+        list(collector.fda_records(dict(target, id="BLA999999")))

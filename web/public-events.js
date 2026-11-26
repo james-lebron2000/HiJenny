@@ -1,10 +1,11 @@
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
-    <p>跟踪公开演示名单中的公司申报、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
+    <p>跟踪公开演示名单中的公司申报、美国 FDA 批准记录、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
     ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
+    <label>数据来源<select name="source"><option value="">全部来源</option><option>Drugs@FDA</option><option>ClinicalTrials.gov</option><option>PubMed</option><option>SEC</option></select></label>
     <label>地区<input name="region" placeholder="例如：中东"></label>
     <label>来源披露起始日期<input type="date" name="since"></label>
     <label>首次发现起始日（台北）<input type="date" name="discovered_from"></label>
