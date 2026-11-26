@@ -30,6 +30,12 @@ class StudyConflict(Conflict):
     plan: str = Field(default="", max_length=2000)
 
 
+class RevisionField(BaseModel):
+    label: Text
+    prior: Text
+    current: Text
+
+
 class Study(BaseModel):
     id: UUID
     parent: UUID | None = None
@@ -44,6 +50,7 @@ class Study(BaseModel):
     refs: list[Reference] = Field(default_factory=list, max_length=100)
     conflicts: list[StudyConflict] = Field(default_factory=list, max_length=200)
     gaps: list[Text] = Field(default_factory=list, max_length=40)
+    revision: list[RevisionField] | None = Field(default=None, max_length=250)
     changes: list[Text] = Field(default_factory=list, max_length=40)
 
     @model_validator(mode="after")
@@ -82,6 +89,14 @@ def export_study(plan: Study):
         doc.add_heading(label, 1)
         for item in items or [empty]:
             doc.add_paragraph(clean(item))
+    if plan.parent and plan.revision:
+        doc.add_heading("逐项对照上版与本版", 2)
+        for change in plan.revision:
+            doc.add_paragraph(clean(change.label)).runs[0].bold = True
+            doc.add_paragraph("上版：" + (clean(change.prior) or "未填写"))
+            doc.add_paragraph("本版：" + (clean(change.current) or "未填写"))
+    elif plan.parent and "revision" in plan.model_fields_set and plan.revision is None:
+        doc.add_paragraph("本浏览器缺少前一版本，无法对照原文。")
     doc.add_heading("会议来源与引文", 1)
     doc.add_paragraph(f"会议版本：{plan.meetingId or '独立起草'}")
     if plan.conflicts:

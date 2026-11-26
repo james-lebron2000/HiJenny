@@ -15,7 +15,30 @@ const studySpecific = {
 const biasFields={risk:'主要偏倚及发生环节',impact:'可能的影响方向与依据',mitigation:'拟采取的控制措施',residual:'剩余不确定性与验证方式'};
 const feasibilityItems = ['人群可识别','暴露或干预可测量','结局可捕获','随访窗口可覆盖','关键混杂变量可获得'];
 const feasibilityStates = ['待核实','可用','部分可用','不可用'];
-function studySummary(v) {
+function studyRevision(v) {
+  if (!v.parent) return [];
+  const raw=localStorage.getItem(studyPrefix+v.parent);
+  if (!raw) return null;
+  const before=JSON.parse(raw);
+  const rows=[];
+  function compare(label, prior='', current='') {
+    if (prior!==current) rows.push({label,prior,current});
+  }
+  compare('交付形式',before.kind,v.kind);
+  for (const [key,label] of Object.entries({...studyCommon,...studySpecific[before.kind],...studySpecific[v.kind]}))
+    compare(label,before.values[key],v.values[key]);
+  for (const [key,label] of Object.entries(biasFields)) compare(label,before.bias?.[key],v.bias?.[key]);
+  feasibilityItems.forEach((label,i)=>{
+    compare(label+' · 状态',before.checks[i].status,v.checks[i].status);
+    compare(label+' · 依据',before.checks[i].note,v.checks[i].note);
+  });
+  (v.conflicts || []).forEach((c,i)=>compare('会议分歧 '+(i+1)+' · 处理安排',before.conflicts?.[i]?.plan,c.plan));
+  compare('流行病学复核记录',before.epi,v.epi);
+  compare('统计复核记录',before.stats,v.stats);
+  return rows;
+}
+
+function studySummary(v, revision) {
   const fields = {...studyCommon,...studySpecific[v.kind]};
   return [v.kind === 'IIT' ? '研究者发起研究概念书' : '真实世界研究方案',
     '团队评审草稿 · '+v.created,'版本 '+v.id,'前一版本 '+(v.parent || '首版'),
@@ -25,6 +48,8 @@ function studySummary(v) {
     '', '仍需解决', ...(v.gaps.length?v.gaps:['已填完结构化项目，需专业人员评判研究质量']),
     '', '流行病学复核记录',v.epi || '未记录','统计复核记录',v.stats || '未记录',
     '', '本版修改',...(v.changes.length?v.changes:['首版']),
+    ...(revision || []).flatMap(r=>[r.label,'上版：'+(r.prior || '未填写'),'本版：'+(r.current || '未填写')]),
+    ...(revision===null?['本浏览器缺少前一版本，无法对照原文。']:[]),
     ...(v.conflicts || []).flatMap((c,i)=>['','会议证据分歧 '+(i+1)+' · '+c.status,'底稿复核人 '+c.reviewer,c.note,
       sourceLink({id:c.left}),sourceLink({id:c.right}),'本研究的处理安排 · '+(c.plan || '待填写')]),
     '', '来源会议版本 '+(v.meetingId || '独立起草'),
@@ -78,8 +103,13 @@ function renderStudy() {
       draft.epi=$('#study-epi').value.trim(); draft.stats=$('#study-stats').value.trim();
     }
     function showReview(v) {
+      const revision=studyRevision(v);
       $('#study-review').innerHTML='<h2>仍需解决</h2><ul>'+v.gaps.map(g=>'<li>'+esc(g)+'</li>').join('')+'</ul>'+
-        (v.gaps.length?'':'结构化项目已填写。')+'<h2>本版修改</h2><p>'+esc(v.changes.join('、') || '首版')+'</p>';
+        (v.gaps.length?'':'结构化项目已填写。')+'<h2>本版修改</h2><p>'+esc(v.changes.join('、') || '首版')+'</p>'+
+        (revision===null?'<p>本浏览器缺少前一版本，无法对照原文。</p>':revision.length?
+          `<details id="study-revision"><summary>逐项对照上版与本版（${revision.length}）</summary>
+          ${revision.map(r=>`<section><h3>${esc(r.label)}</h3><dl><dt>上版</dt><dd>${esc(r.prior || '未填写')}</dd>
+          <dt>本版</dt><dd>${esc(r.current || '未填写')}</dd></dl></section>`).join('')}</details>`:'');
     }
     if (base && !dirty) showReview(base);
     form.oninput=()=>{dirty=true;$('#study-review').textContent='有未保存的修改';};
@@ -129,7 +159,7 @@ function renderStudy() {
     $('#study-word').onclick=async ()=>{
       const v=save();if (!v) return;
       try {
-        const res=await fetch('/api/medical/study.docx',jsonOptions('POST',v));
+        const res=await fetch('/api/medical/study.docx',jsonOptions('POST',{...v,revision:studyRevision(v)}));
         if (!res.ok) throw new Error('Word 导出失败（'+res.status+'），可重新导出本版。');
         const url=URL.createObjectURL(await res.blob());
         const a=document.createElement('a');a.href=url;a.download='HiJenny-'+v.kind+'-'+v.id+'.docx';a.click();
@@ -138,7 +168,7 @@ function renderStudy() {
     };
     $('#study-export').onclick=()=>{
       const v=save();if (!v) return;
-      const url=URL.createObjectURL(new Blob([studySummary(v)],{type:'text/plain;charset=utf-8'}));
+      const url=URL.createObjectURL(new Blob([studySummary(v,studyRevision(v))],{type:'text/plain;charset=utf-8'}));
       const a=document.createElement('a');a.href=url;a.download='HiJenny-'+v.kind+'-'+v.id+'.txt';a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
     };
