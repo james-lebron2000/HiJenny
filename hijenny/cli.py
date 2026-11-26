@@ -323,6 +323,10 @@ def cmd_pilot_queue(args: argparse.Namespace) -> int:
 def cmd_pilot_delivery(args: argparse.Namespace) -> int:
     try:
         with store.session_scope() as session:
+            if args.operation == "queue":
+                rows = pilot_sales.delivery_queue(session, args.status, args.owner, args.due_by)
+                print(json.dumps(rows, ensure_ascii=False, indent=2))
+                return 0
             if args.operation == "record":
                 pilot_sales.delivery_record(session, args.receipt, args.version, args.file, args.reference)
             elif args.operation == "feedback":
@@ -443,6 +447,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     delivery = sub.add_parser("pilot-delivery", help="record package delivery and customer acceptance evidence")
     ops = delivery.add_subparsers(dest="operation", required=True)
+    work = ops.add_parser("queue", help="show the latest delivery per receipt, pending or needing rework by default")
+    work.add_argument("--status", choices=["待客户反馈", "需返工", "已验收"])
+    work.add_argument("--owner")
+    work.add_argument("--due-by", type=date.fromisoformat)
     record = ops.add_parser("record", help="register an already delivered artifact")
     record.add_argument("receipt")
     record.add_argument("version")

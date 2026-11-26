@@ -81,16 +81,20 @@ def deliveries(session, receipt):
     return [{c.name: getattr(row, c.name) for c in PilotDelivery.__table__.columns} for row in records]
 
 
-def delivery_metrics(session, since=None):
-    """Use the intake cohort for both sales and delivery outcomes."""
+def ranked_deliveries(since=None):
     deliveries = select(
-        PilotDelivery.receipt.label("receipt"), PilotDelivery.outcome.label("outcome"),
+        PilotDelivery.receipt, PilotDelivery.version, PilotDelivery.outcome,
         func.row_number().over(partition_by=PilotDelivery.receipt,
                                order_by=(PilotDelivery.recorded_at.desc(), PilotDelivery.version.desc())).label("rank"),
     ).join(PilotInquiry, PilotInquiry.receipt == PilotDelivery.receipt)
     if since:
         deliveries = deliveries.where(PilotInquiry.created_at >= since.isoformat())
-    versions = deliveries.subquery()
+    return deliveries.subquery()
+
+
+def delivery_metrics(session, since=None):
+    """Use the intake cohort for both sales and delivery outcomes."""
+    versions = ranked_deliveries(since)
     latest = {"待客户反馈": 0, "需返工": 0, "已验收": 0}
     for status, count in session.execute(select(versions.c.outcome, func.count()).where(versions.c.rank == 1)
                                          .group_by(versions.c.outcome)):
@@ -110,6 +114,27 @@ def delivery_metrics(session, since=None):
         "既登记下单又有验收的受理编号数": accepted_with_stage("已下单"),
         "既登记回款又有验收的受理编号数": accepted_with_stage("已回款"),
     }
+
+
+def delivery_queue(session, status=None, owner=None, due_by=None):
+    """Work from the most recently delivered version regardless of payment status."""
+    ranked = ranked_deliveries()
+    state = func.coalesce(ranked.c.outcome, "待客户反馈")
+    query = (select(PilotDelivery.receipt, PilotDelivery.version, state.label("status"),
+                    PilotDelivery.filename, PilotDelivery.feedback, PilotDelivery.response_ref,
+                    PilotAssignment.owner, PilotAssignment.due, PilotAssignment.action.label("next_action"))
+             .select_from(ranked)
+             .join(PilotDelivery, (PilotDelivery.receipt == ranked.c.receipt) & (PilotDelivery.version == ranked.c.version))
+             .outerjoin(PilotAssignment, PilotAssignment.receipt == ranked.c.receipt)
+             .where(ranked.c.rank == 1))
+    query = query.where(state == status) if status else query.where(state != "已验收")
+    if owner:
+        query = query.where(PilotAssignment.owner == owner)
+    if due_by:
+        query = query.where(PilotAssignment.due <= due_by.isoformat())
+    query = query.order_by(PilotAssignment.due.is_(None), PilotAssignment.due, PilotDelivery.recorded_at,
+                           PilotDelivery.receipt)
+    return [dict(row) for row in session.execute(query).mappings()]
 
 
 def assign(session, receipt, owner, due, action):

@@ -182,3 +182,30 @@ def test_delivery_metrics_keep_revisions_orders_and_cohort_distinct(tmp_path, mo
         assert metrics["至少一版已验收的受理编号数"] == metrics["既登记下单又有验收的受理编号数"] == 1
         assert metrics["既登记回款又有验收的受理编号数"] == 0
         assert pilot_sales.delivery_metrics(s, date(9999, 1, 1))["交付版本数"] == 0
+
+
+def test_delivery_work_queue_latest_version_even_after_payment(tmp_path, monkeypatch):
+    from datetime import date
+    from hijenny import pilot_sales
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "work.db")
+    monkeypatch.setattr(store, "_ENGINE", None)
+    monkeypatch.setattr(store, "_SESSION_FACTORY", None)
+    with store.session_scope() as s:
+        fields = dict(email="pilot@example.invalid", stage="II 期", pages="待确认", meeting="2099-01-01", deployment="待讨论")
+        a, b = [store.submit_pilot_inquiry(s, str(uuid4()), fields)["receipt"] for _ in range(2)]
+        pilot_sales.assign(s, a, "负责人", date(2027, 1, 1), "修订")
+        store.record_pilot_progress(s, a, "已回款", "synthetic")
+    file = tmp_path / "report.txt"
+    file.write_text("synthetic")
+    for receipt, version, outcome in [(a, "v1", "已验收"), (a, "v2", "需返工"), (b, "v1", None)]:
+        with store.session_scope() as s:
+            pilot_sales.delivery_record(s, receipt, version, file, "synthetic")
+        if outcome:
+            with store.session_scope() as s:
+                pilot_sales.delivery_feedback(s, receipt, version, outcome, "客户反馈", "synthetic-response")
+    with store.session_scope() as s:
+        assert [r["receipt"] for r in pilot_sales.delivery_queue(s)] == [a, b]
+        row, = pilot_sales.delivery_queue(s, "需返工", "负责人", date(2027, 1, 1))
+        assert (row["version"], row["feedback"], row["response_ref"]) == ("v2", "客户反馈", "synthetic-response")
+        assert not pilot_sales.delivery_queue(s, "已验收")
+        assert not pilot_sales.delivery_queue(s, due_by=date(2026, 12, 31))
