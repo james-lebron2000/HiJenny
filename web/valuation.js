@@ -37,6 +37,11 @@ async function renderValuation(seq) {
   if (requested && !prior) draft.question=requested;
   let dirty = false;
   const number = value => Number(value).toLocaleString('zh-CN',{maximumFractionDigits:4});
+  let searchAsset = '';
+  function disclosureText(r) {
+    return [r.asset || r.subject,r.field,r.value,r.region,'披露 '+r.source_date,
+      r.effective?'发生或生效 '+r.effective:''].filter(Boolean).join(' · ');
+  }
   function paint() {
     const questions = [...response.questions];
     if (draft.question && !questions.some(q=>q.question_id===draft.question.question_id)) questions.push(draft.question);
@@ -54,6 +59,12 @@ async function renderValuation(seq) {
       <label>参照交易、披露日期、出处和可比性限制（如有）<textarea maxlength="4000" data-head="comparable">${esc(draft.comparable)}</textarea></label>
       <label>关联卖方问题<select id="val-question"><option value="">无关联</option>${questions.map(q=>option(q.question_id,draft.question?.question_id,q.question)).join('')}</select></label>
       </fieldset><h2>可比交易披露</h2><p>每笔交易按原币种记录。未披露金额留空，已披露为零填 0。里程碑上限单独展示，现金流假设由评审人填写。</p>
+      <section class="card"><h3>公开交易依据</h3>
+      <label>按资产或公司查已核实的 SEC 披露<input id="val-public-query" value="${esc(searchAsset)}" placeholder="例如 ivonescimab"></label>
+      <button type="button" class="btn" id="val-public-search">查找估值日已披露的记录</button>
+      <div id="val-public-list" aria-live="polite"></div>
+      ${(draft.disclosures || []).map((r,i)=>`<p>${esc(disclosureText(r))} · <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">SEC 原文</a>
+      <button type="button" class="btn" data-remove-disclosure="${i}">移除依据</button></p>`).join('')}</section>
       ${(draft.deals || []).map((deal,i)=>`<fieldset class="card" data-deal="${i}"><legend>可比交易 ${i+1}</legend>
       ${dealFields.map(([key,label,type])=>`<label>${label}<input data-term="${key}" type="${type}" ${type==='number'?'min="0" step="any"':'required maxlength="2000"'} value="${esc(deal[key] ?? '')}"></label>`).join('')}
       <button type="button" class="btn" data-remove-deal="${i}">移除此交易</button></fieldset>`).join('')}
@@ -103,6 +114,7 @@ async function renderValuation(seq) {
           '单笔现值 = 有符号金额 × 无条件发生概率 ÷ (1 + 年折现率)^年份'];
         if (v.origin) lines.push('', '机会筛选快照 '+v.origin.snapshot_id, v.origin.asset, v.origin.rationale,
           v.origin.trial_title, sourceLink({id:v.origin.nct}), '检索时间 '+v.origin.retrieved);
+        for (const r of v.disclosures || []) lines.push('', '公开交易依据 · '+disclosureText(r), r.url, '公开动态编号 '+r.id);
         for (const deal of v.deals || []) {
           lines.push('', '可比交易披露', ...dealFields.map(([key,label])=>label+' · '+(deal[key] || '未披露')));
         }
@@ -116,10 +128,47 @@ async function renderValuation(seq) {
       };
     }
     if (prior && !dirty) show(prior);
-    form.oninput=()=>{dirty=true;result.textContent='输入已修改，请重新计算。';};
+    form.oninput=e=>{if(e.target.id==='val-public-query') {searchAsset=e.target.value;return;} dirty=true;result.textContent='输入已修改，请重新计算。';};
     $('#val-history').onchange=e=>{
       if (dirty && !confirm('放弃未保存的修改并切换版本？')) {e.target.value=prior?.id || '';return;}
       prior=versions().find(v=>v.id===e.target.value) || null;draft=structuredClone(prior || newPlan());dirty=false;paint();
+    };
+    const search=$('#val-public-search',form), list=$('#val-public-list',form);
+    search.onclick=async ()=>{
+      const asOf=form.querySelector('[data-head="asOf"]').value;
+      if (!asOf) {list.textContent='请先填写估值日。';return;}
+      search.disabled=true; list.textContent='正在读取公开披露…';
+      const params=new URLSearchParams({asset:searchAsset.trim(),kind:'reviewed',source:'SEC',disclosed_to:asOf});
+      let offset=0;
+      async function loadPage() {
+        params.set('offset',String(offset));
+        const page=await api('/api/public-events?'+params);
+        if (!list.isConnected) return;
+        if (!offset) list.replaceChildren();
+        for (const r of page.items) {
+          const entry=document.createElement('p');
+          entry.innerHTML=`${esc(disclosureText(r))} · <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">核对原文</a> <button type="button" class="btn">加入估值依据</button>`;
+          const add=entry.querySelector('button');
+          add.disabled=(draft.disclosures || []).some(d=>d.id===r.id);
+          add.onclick=()=>{
+            collect();
+            if (r.source_date>draft.asOf || !draft.asOf) {list.textContent='估值日已改变，请重新检索。';return;}
+            draft.disclosures ||= [];draft.disclosures.push(r);dirty=true;paint();
+          };
+          list.append(entry);
+        }
+        offset+=page.items.length;
+        if (!page.total) list.textContent='当前范围没有已核实的交易披露。';
+        if (offset<page.total) {
+          const more=document.createElement('button');more.type='button';more.className='btn';more.textContent='加载更多披露';
+          list.append(more);more.onclick=()=>{more.remove();loadPage().catch(err=>list.textContent=err.message);};
+        }
+      }
+      try {await loadPage();} catch(err) {list.textContent='读取失败：'+err.message;}
+      finally {search.disabled=false;}
+    };
+    for (const el of $$('[data-remove-disclosure]',form)) el.onclick=()=>{
+      collect();draft.disclosures.splice(Number(el.dataset.removeDisclosure),1);dirty=true;paint();
     };
     $('#val-add-deal').onclick=()=>{collect();draft.deals.push({});dirty=true;paint();};
     for (const el of $$('[data-remove-deal]',form)) el.onclick=()=>{
@@ -131,6 +180,9 @@ async function renderValuation(seq) {
     };
     form.onsubmit=e=>{
       e.preventDefault();collect();
+      if ((draft.disclosures || []).some(r=>r.source_date>draft.asOf)) {
+        result.textContent='有公开依据晚于估值日，请移除该记录或调整估值日。';return;
+      }
       if (!draft.name || !draft.basis || draft.flows.some(f=>!f.basis || !f.label)) {result.textContent='请填写现金流名称和假设依据。';return;}
       if (draft.deals.some(deal=>dealFields.some(([key,,type])=>type!=='number' && !deal[key]))) {
         result.textContent='请填写可比交易的披露来源、币种和可比性限制等必填项。';return;

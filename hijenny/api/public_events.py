@@ -15,6 +15,7 @@ KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原�
 
 def event_filters(asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
+                  disclosed_to: date | None = None, source: Literal["SEC", "PubMed", "ClinicalTrials.gov"] | None = None,
                   event_id: str | None = None, publication_status: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None):
     if discovered_from and discovered_to and discovered_from > discovered_to:
@@ -23,6 +24,12 @@ def event_filters(asset: str = "", region: str = "", since: date | None = None,
                        OR instr(lower(json_extract(payload, '$.subject')), lower(?))>0)
                     AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"""
     args = [asset.strip(), asset.strip(), region.strip(), since.isoformat() if since else ""]
+    if disclosed_to:
+        sql += " AND date<=?"
+        args.append(disclosed_to.isoformat())
+    if source:
+        sql += " AND json_extract(payload, '$.source')=?"
+        args.append(source)
     if publication_status:
         sql += " AND json_extract(payload, '$.category')='publication-status'"
     if event_id:
@@ -40,7 +47,7 @@ def event_filters(asset: str = "", region: str = "", since: date | None = None,
     order = (" ORDER BY julianday(json_extract(payload, '$.observed')) DESC, date DESC, id"
              if discovered_from or discovered_to else " ORDER BY date DESC, id")
     labels = [f"{label}：{value}" for label, value in (
-        ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
+        ("来源", source), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("记录类型", KINDS.get(kind))) if value]
     return sql, args, order, labels
 
