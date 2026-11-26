@@ -1,94 +1,130 @@
 {
-  "started_utc": "2026-11-26T22:33:09+00:00",
-  "finished_utc": "2026-11-26T22:33:13+00:00",
+  "started_utc": "2026-11-26T23:27:56+00:00",
+  "finished_utc": "2026-11-26T23:28:02+00:00",
   "watchlist_sha256": "5f9b4d8289e714dd72da398b31ec40b3fec3de76ec5956454248cb8e3da3447b",
   "checks": [
     {
       "source": "sec",
       "target": "0001599298",
+      "subject": "Summit Therapeutics",
+      "target_sha256": "eea405d53872b4b96d5e8d2f62be311b84629ed51ddf0a3993376b0ebc18f715",
       "status": "ok",
       "records": 5,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:56+00:00"
     },
     {
       "source": "fda",
       "target": "BLA761234",
+      "subject": "Opdualag (nivolumab + relatlimab-rmbw)",
+      "target_sha256": "85e0f1b2f7046c8264ad3036d551d44281ff0760f7999d8eb92c5799d9e67a19",
       "status": "ok",
       "records": 3,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:57+00:00"
     },
     {
       "source": "trials",
       "target": "NCT05899608",
+      "subject": "ivonescimab",
+      "target_sha256": "4e9d54f831906889e74eaa7053984448fb8f57996fed63e25638547be0ec28f3",
       "status": "ok",
       "records": 1,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:57+00:00"
     },
     {
       "source": "trials",
       "target": "NCT07264075",
+      "subject": "ivonescimab",
+      "target_sha256": "c4908c3619d5a09e879a600d0b4fad84c0d4f2dfbf9a3cf4a0c7cbcd17e83a14",
       "status": "ok",
       "records": 1,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:57+00:00"
     },
     {
       "source": "trials",
       "target": "NCT05499390",
+      "subject": "ivonescimab",
+      "target_sha256": "a413f04744e66416bcf2c265b2de9804e284a32b9cd5933fd1c52d40abd963b8",
       "status": "ok",
       "records": 1,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:57+00:00"
     },
     {
       "source": "trials",
       "target": "NCT07038915",
+      "subject": "tiragolumab + ivonescimab",
+      "target_sha256": "139e54106fb2b96403073c4f9781e97f2903e42da5d1620d235449048fab7a38",
       "status": "ok",
       "records": 1,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:57+00:00"
     },
     {
       "source": "trials",
       "target": "NCT03470922",
+      "subject": "Opdualag (nivolumab + relatlimab-rmbw)",
+      "target_sha256": "a3ae4c3764c6f7607fc960a7abf5150ddc85d99b7a2cb9655545c54af4ae856e",
       "status": "ok",
       "records": 1,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:57+00:00"
     },
     {
       "source": "publications",
       "target": "NCT05899608",
+      "subject": "ivonescimab",
+      "target_sha256": "4e9d54f831906889e74eaa7053984448fb8f57996fed63e25638547be0ec28f3",
       "status": "ok",
       "records": 0,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:58+00:00"
     },
     {
       "source": "publications",
       "target": "NCT07264075",
+      "subject": "ivonescimab",
+      "target_sha256": "c4908c3619d5a09e879a600d0b4fad84c0d4f2dfbf9a3cf4a0c7cbcd17e83a14",
       "status": "ok",
       "records": 0,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:27:59+00:00"
     },
     {
       "source": "publications",
       "target": "NCT05499390",
+      "subject": "ivonescimab",
+      "target_sha256": "a413f04744e66416bcf2c265b2de9804e284a32b9cd5933fd1c52d40abd963b8",
       "status": "ok",
       "records": 2,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:28:00+00:00"
     },
     {
       "source": "publications",
       "target": "NCT07038915",
+      "subject": "tiragolumab + ivonescimab",
+      "target_sha256": "139e54106fb2b96403073c4f9781e97f2903e42da5d1620d235449048fab7a38",
       "status": "ok",
       "records": 0,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:28:01+00:00"
     },
     {
       "source": "publications",
       "target": "NCT03470922",
+      "subject": "Opdualag (nivolumab + relatlimab-rmbw)",
+      "target_sha256": "a3ae4c3764c6f7607fc960a7abf5150ddc85d99b7a2cb9655545c54af4ae856e",
       "status": "ok",
       "records": 9,
-      "new_events": 0
+      "new_events": 0,
+      "last_success_utc": "2026-11-26T23:28:02+00:00"
     }
   ],
   "new_events": 0,
-  "run_id": "45905499456",
+  "run_id": "45911081323",
   "trigger": "workflow_dispatch"
 }
