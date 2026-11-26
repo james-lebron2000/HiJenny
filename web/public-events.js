@@ -22,8 +22,11 @@ function renderPublicEvents() {
   const form = $('#public-event-filters'), status = $('#public-event-status');
   const list = $('#public-event-list'), more = $('#public-event-more');
   const initial = hashParams();
-  form.elements.trial.value = initial.get('trial') || '';
-  form.elements.as_of.value = initial.get('as_of') || '';
+  for (const el of form.elements) {
+    if (!el.name || !initial.has(el.name)) continue;
+    if (el.type==='checkbox') el.checked = initial.get(el.name)==='true';
+    else el.value = initial.get(el.name);
+  }
   let query, offset, generation = 0;
   function trialTrail(id) {
     const params = new URLSearchParams({trial:id});
@@ -155,7 +158,14 @@ function renderPublicEvents() {
       if (generation===request) { status.textContent='读取失败：'+err.message; more.hidden=false; }
     }
   }
-  form.onsubmit = event=>{event.preventDefault();load(true);};
+  form.onsubmit = event=>{
+    event.preventDefault();
+    const params = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
+    const eventId = hashParams().get('event');
+    if (eventId) params.set('event',eventId);
+    history.replaceState(history.state,'','#/public-events'+(params.size?'?'+params:''));
+    load(true);
+  };
   $('#public-event-week').onclick = ()=>{
     const day = new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'});
     const now = Date.now();
