@@ -124,3 +124,31 @@ def test_quote_uses_intake_and_explicit_terms_without_recording_sale(tmp_path, m
     assert main(args) == 2 and path.read_text() == text
     with store.session_scope() as s:
         assert store.list_pilot_inquiries(s, receipt)[0]["progress"] == []
+
+
+def test_delivery_versions_preserve_acceptance_and_retry_safely(tmp_path, monkeypatch):
+    import pytest
+    from hijenny import pilot_sales
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "delivery.db")
+    monkeypatch.setattr(store, "_ENGINE", None)
+    monkeypatch.setattr(store, "_SESSION_FACTORY", None)
+    with store.session_scope() as s:
+        receipt = store.submit_pilot_inquiry(s, str(uuid4()), dict(email="example@example.invalid", stage="II 期",
+            pages="待确认", meeting="2099-01-01", deployment="待讨论"))["receipt"]
+    file = tmp_path / "brief.txt"
+    for version, decision in [("v1", "需返工"), ("v2", "已验收")]:
+        file.write_text(version)
+        for _ in range(2):
+            with store.session_scope() as s:
+                pilot_sales.delivery_record(s, receipt, version, file, "SYNTHETIC")
+            with store.session_scope() as s:
+                pilot_sales.delivery_feedback(s, receipt, version, decision, "反馈", "SYNTHETIC")
+    with pytest.raises(ValueError), store.session_scope() as s:
+        pilot_sales.delivery_record(s, receipt, "v1", file, "SYNTHETIC")
+    with pytest.raises(ValueError), store.session_scope() as s:
+        pilot_sales.delivery_feedback(s, receipt, "v1", "已验收", "改写", "SYNTHETIC")
+    with store.session_scope() as s:
+        rows = pilot_sales.deliveries(s, receipt)
+        assert [r["outcome"] for r in rows] == ["需返工", "已验收"]
+        assert rows[0]["digest"] != rows[1]["digest"]
+        assert not store.list_pilot_inquiries(s, receipt)[0]["progress"]

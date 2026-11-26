@@ -1,5 +1,8 @@
 """Server-local assignment and work queue for accepted pilot inquiries."""
-from sqlalchemy import ForeignKey, String, select
+from datetime import datetime, timezone
+from hashlib import sha256
+
+from sqlalchemy import ForeignKey, String, select, text
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +17,68 @@ class PilotAssignment(Base):
     owner: Mapped[str] = mapped_column(String(120))
     due: Mapped[str] = mapped_column(String(10))
     action: Mapped[str] = mapped_column(String(300))
+
+
+class PilotDelivery(Base):
+    __tablename__ = "pilot_deliveries"
+
+    receipt: Mapped[str] = mapped_column(ForeignKey("pilot_inquiries.receipt"), primary_key=True)
+    version: Mapped[str] = mapped_column(String(120), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(300))
+    digest: Mapped[str] = mapped_column(String(64))
+    reference: Mapped[str] = mapped_column(String(300))
+    recorded_at: Mapped[str] = mapped_column(String(40))
+    outcome: Mapped[str | None] = mapped_column(String(20))
+    feedback: Mapped[str | None] = mapped_column(String(2000))
+    response_ref: Mapped[str | None] = mapped_column(String(300))
+    responded_at: Mapped[str | None] = mapped_column(String(40))
+
+
+def delivery_record(session, receipt, version, path, reference):
+    version, reference = version.strip(), reference.strip()
+    if not 1 <= len(version) <= 120 or not 1 <= len(reference) <= 300:
+        raise ValueError("请提供交付版本和发送凭据编号")
+    if not path.is_file():
+        raise ValueError("请选择已交付的文件或打包文件")
+    digest = sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    session.execute(text("BEGIN IMMEDIATE"))
+    if session.get(PilotInquiry, receipt) is None:
+        raise ValueError("受理编号不存在")
+    values = dict(filename=path.name, digest=digest.hexdigest(), reference=reference)
+    saved = session.get(PilotDelivery, (receipt, version))
+    if saved:
+        if any(getattr(saved, key) != value for key, value in values.items()):
+            raise ValueError("此版本已有交付记录，请核对原件或使用新的版本号")
+        return
+    session.add(PilotDelivery(receipt=receipt, version=version, recorded_at=datetime.now(timezone.utc).isoformat(),
+                              **values))
+
+
+def delivery_feedback(session, receipt, version, outcome, feedback, reference):
+    feedback, reference = feedback.strip(), reference.strip()
+    if outcome not in ("需返工", "已验收") or not 1 <= len(feedback) <= 2000 or not 1 <= len(reference) <= 300:
+        raise ValueError("请提供验收结果、客户反馈和凭据编号")
+    session.execute(text("BEGIN IMMEDIATE"))
+    delivery = session.get(PilotDelivery, (receipt, version.strip()))
+    if delivery is None:
+        raise ValueError("该受理编号下没有此交付版本")
+    if delivery.outcome:
+        if (delivery.outcome, delivery.feedback, delivery.response_ref) != (outcome, feedback, reference):
+            raise ValueError("该版本已有客户结论，返工交付请登记新版本")
+        return
+    delivery.outcome, delivery.feedback, delivery.response_ref = outcome, feedback, reference
+    delivery.responded_at = datetime.now(timezone.utc).isoformat()
+
+
+def deliveries(session, receipt):
+    if session.get(PilotInquiry, receipt) is None:
+        raise ValueError("受理编号不存在")
+    records = session.scalars(select(PilotDelivery).where(PilotDelivery.receipt == receipt)
+                              .order_by(PilotDelivery.recorded_at))
+    return [{c.name: getattr(row, c.name) for c in PilotDelivery.__table__.columns} for row in records]
 
 
 def assign(session, receipt, owner, due, action):

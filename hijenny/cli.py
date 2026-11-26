@@ -320,6 +320,22 @@ def cmd_pilot_queue(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pilot_delivery(args: argparse.Namespace) -> int:
+    try:
+        with store.session_scope() as session:
+            if args.operation == "record":
+                pilot_sales.delivery_record(session, args.receipt, args.version, args.file, args.reference)
+            elif args.operation == "feedback":
+                pilot_sales.delivery_feedback(session, args.receipt, args.version, args.outcome, args.note, args.reference)
+            session.flush()
+            rows = pilot_sales.deliveries(session, args.receipt)
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+    except (ValueError, OSError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_pilot_progress(args: argparse.Namespace) -> int:
     try:
         with store.session_scope() as session:
@@ -422,6 +438,22 @@ def build_parser() -> argparse.ArgumentParser:
     queue.add_argument("--waiting-quote", action="store_true", help="only new or contacted inquiries")
     queue.add_argument("--include-finished", action="store_true", help="also show closed and paid receipts")
     queue.set_defaults(func=cmd_pilot_queue)
+
+    delivery = sub.add_parser("pilot-delivery", help="record package delivery and customer acceptance evidence")
+    ops = delivery.add_subparsers(dest="operation", required=True)
+    record = ops.add_parser("record", help="register an already delivered artifact")
+    record.add_argument("receipt")
+    record.add_argument("version")
+    record.add_argument("file", type=Path)
+    record.add_argument("reference", help="delivery evidence reference")
+    feedback = ops.add_parser("feedback", help="record the customer's response for this version")
+    feedback.add_argument("receipt")
+    feedback.add_argument("version")
+    feedback.add_argument("outcome", choices=["需返工", "已验收"])
+    feedback.add_argument("note")
+    feedback.add_argument("reference", help="customer reply or signed acceptance reference")
+    ops.add_parser("list", help="show all deliveries for one inquiry").add_argument("receipt")
+    delivery.set_defaults(func=cmd_pilot_delivery)
 
     progress = sub.add_parser("pilot-progress", help="record a sales milestone and its supporting reference")
     progress.add_argument("receipt")
