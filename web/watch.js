@@ -127,10 +127,35 @@ function watchRows() {
     .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>a.id.localeCompare(b.id));
 }
 
+function linkedWatchSnapshots(rows, lookup) {
+  const pending=rows.flatMap(row=>(row.origins || []).filter(o=>o.type!=='public-event').map(o=>o.snapshot));
+  const seen=new Set(), snapshots=[], missing=[];
+  while (pending.length) {
+    const id=pending.pop();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const snapshot=lookup(id);
+    if (!snapshot) {missing.push(id);continue;}
+    snapshots.push(snapshot);
+    pending.push(snapshot.parent,snapshot.recheckedFrom);
+  }
+  return {snapshots,missing};
+}
+
+function validWatchSnapshot(s) {
+  const allowed=['condition','intervention','phase','country','results','sponsor'];
+  return s && typeof s.id==='string' && typeof s.created==='string' && s.criteria &&
+    Object.entries(s.criteria).every(([key,value])=>allowed.includes(key) && typeof value==='string') &&
+    Array.isArray(s.items) && s.items.every(r=>r && /^NCT[0-9]{8}$/.test(r.id) && typeof r.title==='string' &&
+      Array.isArray(r.phases) && Array.isArray(r.interventions) && (!r.conditions || Array.isArray(r.conditions)) &&
+      (!r.countries || Array.isArray(r.countries)) && (!r.intervention_aliases || (Array.isArray(r.intervention_aliases) &&
+        r.intervention_aliases.every(g=>g && Array.isArray(g.aliases)))));
+}
+
 async function readWatchBackup(file) {
   const backup=JSON.parse(await file.text());
-  if (backup.format!=='HiJenny-trial-watch' || backup.version!==1 || !Array.isArray(backup.rows) ||
-      backup.sha256!==await browserBackupDigest(backup.rows)) throw Error('关注列表备份格式或校验失败');
+  if (backup.format!=='HiJenny-trial-watch' || ![1,2].includes(backup.version) || !Array.isArray(backup.rows) ||
+      backup.sha256!==await browserBackupDigest(backup.version===1?backup.rows:[backup.rows,backup.snapshots])) throw Error('关注列表备份格式或校验失败');
   const ids=new Set();
   for (const row of backup.rows) {
     watchKey(row.id);
@@ -141,7 +166,12 @@ async function readWatchBackup(file) {
       throw Error('关注记录格式无效');
     ids.add(row.id);
   }
-  return backup.rows;
+  const snapshots=backup.version===1?[]:backup.snapshots;
+  if (!Array.isArray(snapshots) || !snapshots.every(validWatchSnapshot)) throw Error('候选集快照格式无效');
+  const index=new Map(snapshots.map(s=>[s.id,s]));
+  const linked=linkedWatchSnapshots(backup.rows,id=>index.get(id));
+  if (linked.snapshots.length!==snapshots.length) throw Error('存在重复或未关联的筛选快照');
+  return {rows:backup.rows,snapshots};
 }
 
 function renderWatch() {
@@ -151,7 +181,7 @@ function renderWatch() {
     <button class="btn" data-nav="research">查找并关注试验</button>
     <button class="btn primary" id="update-watch">更新全部</button>
     <details class="card"><summary>备份与恢复关注列表</summary>
-      <p>文件包含试验登记字段、变更历史和关注来源。候选筛选快照保存在创建它的浏览器中。</p>
+      <p>文件包含试验登记字段、变更历史和关注来源。同时备份关注来源引用的候选集及其历史版本，文件包含当时的筛选条件和候选名单。</p>
       <button type="button" class="btn" id="watch-backup">下载关注备份</button>
       <label>恢复缺少的试验<input type="file" id="watch-restore" accept=".json,application/json"></label>
       <p id="watch-backup-status" role="status"></p></details>
@@ -213,10 +243,11 @@ function renderWatch() {
   $('#watch-backup',root).onclick=async ()=>{
     try {
       const rows=watchRows();
-      const data={format:'HiJenny-trial-watch',version:1,rows,sha256:await browserBackupDigest(rows)};
+      const {snapshots,missing}=linkedWatchSnapshots(rows,id=>JSON.parse(localStorage.getItem('hijenny.opportunity.'+id)));
+      const data={format:'HiJenny-trial-watch',version:2,rows,snapshots,sha256:await browserBackupDigest([rows,snapshots])};
       const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'}));
       const link=document.createElement('a');link.href=url;link.download='HiJenny-试验关注-'+new Date().toISOString().slice(0,10)+'.json';link.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);feedback.textContent='已导出 '+rows.length+' 项试验。';
+      setTimeout(()=>URL.revokeObjectURL(url),1000);feedback.textContent='已导出 '+rows.length+' 项试验和 '+snapshots.length+' 份候选快照。'+(missing.length?'本机缺少快照：'+missing.join('、'):'');
     } catch(error) {feedback.textContent='备份失败：'+error.message;}
   };
   const restore=$('#watch-restore',root);
@@ -226,7 +257,16 @@ function renderWatch() {
     let added=0, identical=0;
     const conflicts=[];
     try {
-      for (const row of await readWatchBackup(file)) {
+      const {rows,snapshots}=await readWatchBackup(file);
+      for (const snapshot of snapshots) {
+        const key='hijenny.opportunity.'+snapshot.id;
+        await navigator.locks.request(key,()=>{
+          const saved=localStorage.getItem(key), incoming=JSON.stringify(snapshot);
+          if (saved===null) localStorage.setItem(key,incoming);
+          else if (JSON.stringify(JSON.parse(saved))!==incoming) throw Error('本机同编号候选快照内容不同：'+snapshot.id);
+        });
+      }
+      for (const row of rows) {
         const key=watchKey(row.id);
         await navigator.locks.request(key,()=>{
           const saved=localStorage.getItem(key), incoming=JSON.stringify(row);
@@ -235,7 +275,7 @@ function renderWatch() {
           else conflicts.push(row.id);
         });
       }
-      feedback.textContent='已恢复 '+added+' 项，已有相同记录 '+identical+' 项。'+
+      feedback.textContent='已恢复 '+added+' 项，已有相同记录 '+identical+' 项，已核对 '+snapshots.length+' 份候选快照。'+
         (conflicts.length?'已保留本机不同版本：'+conflicts.join('、'):'');
     } catch(error) {feedback.textContent='导入中止，已恢复 '+added+' 项，可重试。'+error.message;}
     finally {restore.value='';restore.disabled=false;paint();}

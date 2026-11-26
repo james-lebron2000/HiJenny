@@ -99,10 +99,12 @@ function renderDiscovery() {
     form.elements.country.value='';
     form.elements.results.value='';
     for (const [key,value] of Object.entries(snapshot.criteria)) form.elements[key].value=value;
+    const parent = snapshot.parent && history().find(row=>row.id===snapshot.parent);
     const baseline = snapshot.recheckedFrom && history().find(row => row.id === snapshot.recheckedFrom);
     const changes = baseline ? opportunityChanges(baseline, snapshot) : [];
     results.innerHTML=`<h2>${esc(opportunityTopic(snapshot.criteria))} · 候选试验</h2>
       <p>筛选时数据库命中 ${esc(snapshot.total)} 条；本快照保存 ${snapshot.items.length} 条。检索时间 ${esc(fmtDate(snapshot.created))}。</p>
+      ${parent?`<p><a href="#/discovery?snapshot=${encodeURIComponent(parent.id)}">打开上一版候选快照</a></p>`:''}
       <button type="button" class="btn" id="screen-recheck">按原条件重新检索并比较</button>
       ${baseline ? `<section class="card"><h3>与上次候选集比较</h3><p>上次检索 ${esc(fmtDate(baseline.created))}，取回 ${baseline.items.length} 条；本次取回 ${snapshot.items.length} 条。按试验编号匹配。排序和检索范围会影响出现的记录，“本次未见”不能证明登记撤回。</p>
       ${changes.length ? changes.map(change=>`<details><summary>${esc(change.kind)} · ${esc(change.id)} · ${esc(change.title)}</summary>
