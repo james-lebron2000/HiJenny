@@ -41,9 +41,15 @@ function researchResults(data) {
 }
 
 function paperByline(paper) {
-  return (paper.authors || []).map((name,position)=>({
-    name,position,affiliation:(paper.author_affiliations?.[position] || []).join(' / ')
-  }));
+  const affiliations=(paper.authors || []).map((_,position)=>(paper.author_affiliations?.[position] || []).join(' / '));
+  const counts=new Map();
+  for (const text of affiliations) counts.set(text,(counts.get(text) || 0)+1);
+  return (paper.authors || []).map((name,position)=>{
+    const affiliation=affiliations[position];
+    const count=counts.get(affiliation);
+    const displayAffiliation=affiliation && count>1 ? '（'+count+' 位作者共用这段署名信息）'+affiliation : affiliation;
+    return {name,position,affiliation,displayAffiliation};
+  });
 }
 
 function libraryMatches(item, filter) {
@@ -118,7 +124,7 @@ function renderResearch() {
       const authors=matchedAuthors.length ? matchedAuthors : byline;
       const authorDetails=authors.length ? `<details data-library-authors ${matchedAuthors.length?'open':''}>
         <summary>${matchedAuthors.length?'匹配的署名作者':'论文署名作者'}（${authors.length}）</summary>
-        <ol>${authors.map(a=>`<li value="${a.position+1}">${esc(a.name)} · ${esc(a.affiliation || '该署名未列单位')}</li>`).join('')}</ol></details>`
+        <ol>${authors.map(a=>`<li value="${a.position+1}">${esc(a.name)} · ${esc(a.displayAffiliation || '该署名未列单位')}</li>`).join('')}</ol></details>`
         : (!item.id.startsWith('NCT') && !item.authors ? '<p>旧收藏未保存署名，重新检索并收藏可补入当前署名记录。</p>' : '');
       rows.push(`<li><label><input type="checkbox" data-library-id="${esc(item.id)}" ${chosenRecords.has(item.id)?"checked":""}> ${esc(item.id)}</label>
         <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>

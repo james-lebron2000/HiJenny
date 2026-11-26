@@ -183,7 +183,7 @@ async function renderMedical() {
           const authors = paperByline(paper).filter(author=>titleMatches || [author.name,author.affiliation].some(value=>value.toLowerCase().includes(query)));
           if (!authors.length) return '';
           return `<section><p><a href="${esc(sourceLink(paper))}" target="_blank" rel="noopener noreferrer">${esc(paper.title)} · PMID ${esc(paper.id)}</a></p>
-            <label>此文署名作者<select>${authors.map(author=>`<option value="${author.position}">${esc(author.name)} · ${esc(author.affiliation || '本底稿无署名单位')}</option>`).join('')}</select></label>
+            <label>此文署名作者<select>${authors.map(author=>`<option value="${author.position}">${esc(author.name)} · ${esc(author.displayAffiliation || '本底稿无署名单位')}</option>`).join('')}</select></label>
             <button class="btn" type="button" data-add-author="${index}">加入讨论对象</button></section>`;
         });
         results.innerHTML = papers.join('') || '<p>本次纳入论文中没有匹配的署名、单位或题名。</p>';
@@ -194,7 +194,7 @@ async function renderMedical() {
         if (!button) return;
         const paper = authorPapers[Number(button.dataset.addAuthor)];
         const position = Number(button.closest('section').querySelector('select').value);
-        const affiliation = (paper.author_affiliations?.[position] || []).join(' / ');
+        const affiliation = paperByline(paper)[position].displayAffiliation;
         const entry = paper.authors[position]+'（PMID '+paper.id+'）'+(affiliation?' · 论文署名单位：'+affiliation:'');
         const expert = form.querySelector('[data-meeting="expert"]');
         if (!expert.value.split('\n').includes(entry)) {
