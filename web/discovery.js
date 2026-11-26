@@ -9,6 +9,30 @@ function opportunityOrigin(record) {
     <small>筛选快照 ${esc(record.snapshot_id)}</small></section>`;
 }
 
+const opportunityFields = {title:'登记标题', sponsor:'申办方', conditions:'适应症', phases:'阶段',
+  interventions:'登记干预', status:'试验状态', updated:'登记更新日'};
+
+function opportunityChanges(before, after) {
+  const oldRows = new Map(before.items.map(row => [row.id,row]));
+  const newRows = new Map(after.items.map(row => [row.id,row]));
+  const format = value => Array.isArray(value) ? [...value].sort().join(' / ') : String(value || '');
+  const changes = [];
+  for (const [id, row] of newRows) {
+    const old = oldRows.get(id);
+    if (!old) { changes.push({id, kind:'本次新见', title:row.title}); continue; }
+    const fields = [];
+    for (const [key,label] of Object.entries(opportunityFields)) {
+      const previous = format(old[key]), current = format(row[key]);
+      if (previous !== current) fields.push({label, previous, current});
+    }
+    if (fields.length) changes.push({id, kind:'登记字段变化', title:row.title, fields});
+  }
+  for (const [id,row] of oldRows) {
+    if (!newRows.has(id)) changes.push({id, kind:'本次未见', title:row.title});
+  }
+  return changes;
+}
+
 function renderDiscovery() {
   const prefix = 'hijenny.opportunity.';
   const history = () => Object.keys(localStorage).filter(k=>k.startsWith(prefix))
@@ -34,8 +58,15 @@ function renderDiscovery() {
       s.criteria.condition+' · '+s.items.length+' 条 · '+fmtDate(s.created))).join('');
     if (!snapshot) { results.replaceChildren(); return; }
     for (const [key,value] of Object.entries(snapshot.criteria)) form.elements[key].value=value;
+    const baseline = snapshot.recheckedFrom && history().find(row => row.id === snapshot.recheckedFrom);
+    const changes = baseline ? opportunityChanges(baseline, snapshot) : [];
     results.innerHTML=`<h2>${esc(snapshot.criteria.condition)} · 候选试验</h2>
       <p>筛选时数据库命中 ${esc(snapshot.total)} 条；本快照保存 ${snapshot.items.length} 条。检索时间 ${esc(fmtDate(snapshot.created))}。</p>
+      <button type="button" class="btn" id="screen-recheck">按原条件重新检索并比较</button>
+      ${baseline ? `<section class="card"><h3>与上次候选集比较</h3><p>上次检索 ${esc(fmtDate(baseline.created))}，取回 ${baseline.items.length} 条；本次取回 ${snapshot.items.length} 条。按试验编号匹配。排序和检索范围会影响出现的记录，“本次未见”不能证明登记撤回。</p>
+      ${changes.length ? changes.map(change=>`<details><summary>${esc(change.kind)} · ${esc(change.id)} · ${esc(change.title)}</summary>
+        <a href="${esc(sourceLink({id:change.id}))}" target="_blank" rel="noopener noreferrer">查看试验登记</a>
+        ${(change.fields || []).map(f=>`<p>${esc(f.label)}：${esc(f.previous || '未披露')} → ${esc(f.current || '未披露')}</p>`).join('')}</details>`).join('') : '<p>两次取回的候选记录和登记字段一致。</p>'}</section>` : ''}
       ${snapshot.items.map((r,i)=>`<article class="card"><h3><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h3>
       <p>${esc([r.id,r.sponsor,r.phases.join(' / '),r.status].filter(Boolean).join(' · '))}</p>
       <p>登记干预 · ${esc(r.interventions.join(' / ') || '未披露')}</p>
@@ -46,19 +77,38 @@ function renderDiscovery() {
       <button type="submit" class="btn">建立或打开尽调项目</button></form></details></article>`).join('') ||
       '<p>没有匹配记录。可放宽阶段或申办方筛选。</p>'}
       ${snapshot.cursor?'<button type="button" class="btn" id="screen-next">继续取下一页并保存新版</button>':''}`;
+    $('#screen-recheck',root).onclick=()=>retrieve(snapshot, true);
     const more=$('#screen-next',root);
     if (more) more.onclick=()=>retrieve(snapshot);
   }
-  async function retrieve(previous) {
+  async function retrieve(previous, recheck=false) {
     if (busy) return;
     const criteria=previous?.criteria || Object.fromEntries(new FormData(form));
     lock(true); status.textContent='正在读取登记数据…';
     try {
-      const data=await api('/api/discovery/screen',jsonOptions('POST',{criteria,cursor:previous?.cursor || ''}));
-      const byId=new Map((previous?.items || []).map(item=>[item.id,item]));
-      for (const row of data.items) byId.set(row.id,{...row,retrieved:data.retrieved});
-      const next={id:crypto.randomUUID(),criteria,created:data.retrieved,total:data.total ?? previous?.total,cursor:data.cursor,
-        items:[...byId.values()],parent:previous?.id || null};
+      const snapshots = new Map(history().map(row => [row.id,row]));
+      let depth = previous?.pages || 1;
+      if (previous && !previous.pages) {
+        for (let ancestor=previous; snapshots.has(ancestor.parent); ancestor=snapshots.get(ancestor.parent)) depth++;
+      }
+      const byId = new Map((!recheck && previous ? previous.items : []).map(row => [row.id,row]));
+      let cursor = recheck ? '' : previous?.cursor || '';
+      let pages = recheck || !previous ? 0 : depth;
+      let total = recheck ? null : previous?.total;
+      let retrieved;
+      const seen = new Set();
+      do {
+        if (seen.has(cursor)) throw Error('登记库重复返回同一分页标记，请稍后重试。');
+        seen.add(cursor);
+        const data = await api('/api/discovery/screen',jsonOptions('POST',{criteria,cursor}));
+        for (const row of data.items) byId.set(row.id,{...row,retrieved:data.retrieved});
+        total = data.total ?? total;
+        retrieved = data.retrieved;
+        cursor = data.cursor;
+        pages++;
+      } while (recheck && cursor && pages < depth);
+      const next={id:crypto.randomUUID(),criteria,created:retrieved,total,cursor,pages,
+        items:[...byId.values()],parent:previous?.id || null,recheckedFrom:recheck ? previous.id : null};
       localStorage.setItem(prefix+next.id,JSON.stringify(next));
       snapshot=next;paint();status.textContent='候选集已保存在本浏览器。';
     } catch (err) {status.textContent='筛选未保存：'+err.message;}
