@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from hijenny.publication import publication_notices
-from tools import jrct
+from tools import jrct, orange_book
 
 ROOT = Path(__file__).resolve().parents[1] / "data/public"
 AGENT = "HiJenny research jakeljm12@163.com"
@@ -260,7 +260,8 @@ def collect(root=ROOT, receipt=None):
     prior_checks = {(row["source"], row["target"]): row for row in previous.get("checks", [])}
     events, failures, checks = [], [], []
     ema_dataset = cache(lambda: fetch(EMA_MEDICINES))
-    for group, read in (("jrct", lambda target: jrct.records(target, fetch)), ("ema", lambda target: ema_records(target, ema_dataset)), ("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
+    orange_dataset = cache(lambda: fetch(orange_book.DOWNLOAD, orange_book.read_archive))
+    for group, read in (("orange_book", lambda target: orange_book.records(target, orange_dataset)), ("jrct", lambda target: jrct.records(target, fetch)), ("ema", lambda target: ema_records(target, ema_dataset)), ("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
         for target in watch.get(group, []):
             check = {"source": group, "target": target.get("id") or target.get("cik")}
             check.update(subject=target.get("asset") or target.get("company"), target_sha256=fingerprint(target))

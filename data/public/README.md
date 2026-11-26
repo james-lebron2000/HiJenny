@@ -27,3 +27,5 @@ Drugs@FDA 按公开名单中的 NDA、ANDA 或 BLA 申请号核对原始与补�
 日本试验按 jRCT 编号核对公开英文登记页，收录招募状态、登记日期、申办方和登记所列 NCT 编号。关联号及发号机构须与来源相符。登记更新日与 HiJenny 首次观察时间分别保存。
 
 「公开资产动态」支持输入完整 jRCT 或 NCT 编号查看同一试验已归档的跨来源记录。以 jRCT 编号查看历史截面时，只采用当时已经披露并已收录的登记关联。
+
+美国专利来源采用 [FDA Orange Book 月度下载文件](https://www.fda.gov/drugs/drug-approvals-and-databases/orange-book-data-files)。按申请及产品编号对照产品、专利与独占期三张表；同一专利的不同用途代码各自保留。来源日期取下载文件的最后修改日。

@@ -79,5 +79,11 @@
       "trial": "NCT05899608",
       "asset": "ivonescimab"
     }
+  ],
+  "orange_book": [
+    {
+      "id": "NDA208065",
+      "asset": "Tagrisso (osimertinib)"
+    }
   ]
 }

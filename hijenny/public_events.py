@@ -40,6 +40,7 @@ def import_month(db, name, sha, content):
     for line in content.splitlines():
         row = json.loads(line)
         if not row["url"].startswith(("https://www.sec.gov/Archives/", "https://clinicaltrials.gov/study/", "https://pubmed.ncbi.nlm.nih.gov/",
+                                      "https://www.accessdata.fda.gov/scripts/cder/ob/patent_info.cfm?",
                                       "https://www.ema.europa.eu/en/medicines/human/EPAR/", "https://jrct.mhlw.go.jp/en-latest-detail/",
                                       "https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=")):
             raise ValueError("Unexpected public source")
