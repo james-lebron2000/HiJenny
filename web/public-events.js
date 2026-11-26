@@ -48,6 +48,16 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.category==='publication-status') {
+          const notices = new Set(String(r.value).match(/https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\//g) || []);
+          for (const url of notices) {
+            const link = document.createElement('a');
+            link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+            link.textContent = '核对关联记录 · PMID '+url.split('/').at(-2);
+            const paragraph = document.createElement('p');
+            paragraph.append(link); card.append(paragraph);
+          }
+        }
         const trialId = r.source==='ClinicalTrials.gov' ? r.record : r.trial;
         if (/^NCT[0-9]{8}$/.test(trialId)) {
           const button = document.createElement('button');
