@@ -18,6 +18,10 @@
     {
       "id": "NCT05499390",
       "asset": "ivonescimab"
+    },
+    {
+      "id": "NCT07038915",
+      "asset": "tiragolumab + ivonescimab"
     }
   ],
   "publications": [
@@ -32,6 +36,10 @@
     {
       "id": "NCT05499390",
       "asset": "ivonescimab"
+    },
+    {
+      "id": "NCT07038915",
+      "asset": "tiragolumab + ivonescimab"
     }
   ]
 }

@@ -12,6 +12,7 @@ function renderPublicEvents() {
     <label>记录类型<select name="kind"><option value="">全部</option><option value="change">字段变化</option>
     <option value="reviewed">原文核实</option><option value="baseline">首次收录</option></select></label>
     <label><input type="checkbox" name="publication_status" value="true"> 仅看论文出版状态</label>
+    <label><input type="checkbox" name="study_interruption" value="true"> 仅看试验暂停、终止或撤回说明</label>
     <button class="btn primary">筛选</button><button class="btn" type="button" id="public-event-week">最近七天发现</button></form>
     <a id="public-event-report" hidden>下载当前筛选的完整简报</a>
     <p id="public-event-status" role="status"></p><div id="public-event-list"></div>

@@ -17,6 +17,8 @@ from hijenny.publication import publication_notices
 
 ROOT = Path(__file__).resolve().parents[1] / "data/public"
 AGENT = "HiJenny research jakeljm12@163.com"
+STOP_FIELD = "暂停、终止或撤回的登记说明"
+STOP_STATUS = {"SUSPENDED": "暂停", "TERMINATED": "提前终止", "WITHDRAWN": "入组前撤回"}
 FORMS = {"8-K", "6-K", "10-Q", "10-K", "20-F", "40-F"}
 
 
@@ -72,8 +74,12 @@ def trial_records(trial):
     status = protocol["statusModule"]
     fields = {"登记状态": status["overallStatus"], "主要完成日期": status.get("primaryCompletionDateStruct"),
               "研究完成日期": status.get("completionDateStruct"), "结果首次公布": status.get("resultsFirstPostDateStruct")}
+    stop = STOP_STATUS.get(status["overallStatus"])
+    reason = (status.get("whyStopped") or "").strip()
+    fields[STOP_FIELD] = f"{stop} · {reason or '登记记录未提供原因'}" if stop else None
     for field, value in fields.items():
         yield dict(source="ClinicalTrials.gov", record=nct, subject=trial["asset"], asset=trial["asset"], region=None,
+                   **({"category": "study-interruption"} if field == STOP_FIELD else {}),
                    field=field, value=value, source_date=status["lastUpdatePostDateStruct"]["date"],
                    effective=None, url=f"https://clinicaltrials.gov/study/{nct}")
 
@@ -135,6 +141,8 @@ def changes(records, history, now):
     for record in records:
         key = record["source"], record["record"], record["field"]
         previous = latest.get(key)
+        if previous is None and record.get("category") == "study-interruption" and record["value"] is None:
+            continue
         if previous and (previous["value"] == record["value"] or record["source_date"] < previous["source_date"]):
             continue
         entry = dict(record, previous=previous["value"] if previous else None, kind="change" if previous else "baseline",

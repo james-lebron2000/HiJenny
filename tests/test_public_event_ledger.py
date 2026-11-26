@@ -92,3 +92,19 @@ def test_pubmed_link_requires_exact_registry_and_preserves_index_date():
         "123", trial["id"], "2025-03-07", "Design of study")
     assert not list(collector.publication_links(dict(trial, id="NCT00000001"), root))
     assert not list(collector.publication_links(trial, collector.ElementTree.fromstring(xml.replace("ClinicalTrials.gov", "Other"))))
+
+
+def test_study_stop_reason_revisions_and_resumption(monkeypatch):
+    trial = {"id": "NCT07038915", "asset": "demo"}
+    status = {"lastUpdatePostDateStruct": {"date": "2026-01-01"}}
+    monkeypatch.setattr(collector, "fetch", lambda _: {"protocolSection": {
+        "identificationModule": {"nctId": trial["id"]}, "statusModule": status}})
+    history = []
+    for overall, reason in [("RECRUITING", ""), ("SUSPENDED", ""), ("SUSPENDED", "review"),
+                            ("RECRUITING", ""), ("WITHDRAWN", "0 participants")]:
+        status.update(overallStatus=overall, whyStopped=reason)
+        history.extend(collector.changes(collector.trial_records(trial), history, "2026-01-01"))
+    notes = [e for e in history if e.get("category") == "study-interruption"]
+    assert [e["value"] for e in notes] == [
+        "暂停 · 登记记录未提供原因", "暂停 · review", None, "入组前撤回 · 0 participants"]
+    assert notes[2]["previous"] == notes[1]["value"]
