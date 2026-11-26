@@ -28,6 +28,8 @@ class Reference(BaseModel):
 
 class Meeting(BaseModel):
     id: UUID
+    revisionOf: UUID | None = None
+    revisionReason: Text = ""
     briefId: UUID
     confirmed: Literal[True]
     created: Required
@@ -45,6 +47,8 @@ class Meeting(BaseModel):
 
     @model_validator(mode="after")
     def validate_conflict_links(self):
+        if self.revisionOf and not self.revisionReason.strip():
+            raise ValueError("修订版须填写修订依据")
         cited = {r.id for r in self.refs}
         for c in self.conflicts:
             if c.left == c.right or not cited.intersection((c.left, c.right)):
@@ -106,6 +110,8 @@ def export_meeting(meeting: Meeting):
                            "底稿版本：" + str(meeting.briefId), "用户填写的复核人：" + meeting.reviewer,
                            "确认时间：" + meeting.created])
     section("已确认的答复", [meeting.answer])
+    if meeting.revisionOf:
+        section("出版状态复核与答复修订", ["原确认版：" + str(meeting.revisionOf), meeting.revisionReason])
     section("请专家讨论", [meeting.discussion or "待补充"])
     for index, ref in enumerate(meeting.refs, 1):
         section(f"支持引文 {index} · {ref.id}", [ref.title, "来源日期：" + (ref.date or "未提供"),

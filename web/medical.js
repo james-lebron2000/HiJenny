@@ -12,6 +12,7 @@ function medicalSources(run) {
 
 function meetingText(v) {
   const lines = ['医学交流简报', '版本 '+v.id, '底稿版本 '+v.briefId, '医学复核确认时间 '+v.created];
+  if (v.revisionOf) lines.push('修订自已确认简报 '+v.revisionOf,'出版状态变化对答复的影响',v.revisionReason || '待填写');
   for (const [key,label] of Object.entries(meetingFields)) lines.push('',label,v[key] || '待补充');
   lines.push('', '支持本次答复的证据');
   for (const ref of v.refs) {
@@ -70,6 +71,7 @@ async function renderMedical() {
   medicalBriefId = null;
   let version = fromBrief ? null : saved[0];
   let run = fromBrief || runs.find(r=>r.id===version?.briefId) || runs[0];
+  let revisionBase=null;
   let dirty = false;
   function draw() {
     dirty = false;
@@ -87,12 +89,14 @@ async function renderMedical() {
       ${affected.map(row=>`<p><button type="button" class="btn" data-affected="${esc(row.version.id)}">${esc(row.version.question)} · ${esc(fmtDate(row.version.created))}</button> · 涉及 ${row.alerts.map(a=>esc(a.id)).join('、')}</p>`).join('')}</section>` : ''}
       ${alerts.length ? `<section class="card"><h3>本版引文的后续复查</h3>
       ${alerts.map(a=>`<p>PMID ${esc(a.id)} · ${a.missing?'最近一次未能核实':'出版标记与本版不一致'} · ${esc(fmtDate(a.created))}</p>
-      ${a.missing?'':publicationNotices(a)}<a href="#/brief?version=${encodeURIComponent(a.version)}">打开对应复查底稿</a>`).join('')}</section>` : ''}
+      ${a.missing?'':publicationNotices(a)}<a href="#/brief?version=${encodeURIComponent(a.version)}">打开对应复查底稿</a>
+      ${runs.some(r=>r.id===a.version) ? `<button type="button" class="btn" data-revise="${esc(a.version)}">用此底稿修订答复</button>` : '<p>先在复查底稿中核对并纳入可支持答复的来源，再回此页修订。</p>'}`).join('')}</section>` : ''}
       <label>历史简报 <select id="meeting-history"><option value="">新草稿</option>
         ${saved.map(v=>option(v.id,version?.id,fmtDate(v.created)+' · '+v.question)).join('')}</select></label>
       <label>选用底稿并新建简报 <select id="meeting-source"><option value="">选择有纳入记录的研究底稿</option>
         ${runs.map(r=>option(r.id,version ? '' : run?.id,r.question+' · '+fmtDate(r.created))).join('')}</select></label>
       ${sourceRecords.length ? `<form id="meeting-form">
+      ${revisionBase || version?.revisionOf ? `<label>出版状态变化对答复的影响及修订依据<textarea id="meeting-revision-reason" maxlength="8000">${esc(version?.revisionReason || '')}</textarea></label>` : ''}
       <fieldset class="card"><legend>支持本次答复的原文</legend>
       ${sourceRecords.map((r,i)=>`<section><label><input type="checkbox" data-cite="${i}" ${selected.has(r.id)?'checked':''}> ${esc(r.title)}</label>
         <a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.id)} · 核对原始记录</a>
@@ -103,7 +107,7 @@ async function renderMedical() {
           <blockquote data-excerpt="${i}">${esc(r.passages[selectedIndex(r)].text)}</blockquote>` : '<p>此条记录缺少摘要，暂不能用作答复引文。</p>'}</section>`).join('')}</fieldset>
       <section class="card" id="meeting-conflicts" hidden></section>
       ${Object.entries(meetingFields).map(([key,label])=>`<label>${label}
-        <textarea rows="${['answer','discussion','action'].includes(key)?3:1}" maxlength="8000" data-meeting="${key}">${esc(version?.[key] || (key==='question'?run?.question:'') || '')}</textarea></label>`).join('')}
+        <textarea rows="${['answer','discussion','action'].includes(key)?3:1}" maxlength="8000" data-meeting="${key}">${esc(version?.[key] || (key!=='reviewer' && revisionBase?.[key]) || (key==='question'?run?.question:'') || '')}</textarea></label>`).join('')}
       <label><input id="meeting-confirm" type="checkbox"> 我已核对本版答复和所选来源</label>
       <div><button class="btn" type="submit">保存草稿版本</button>
       <button class="btn primary" type="button" id="meeting-release">确认并导出简报</button>
@@ -111,19 +115,26 @@ async function renderMedical() {
       <p role="status" id="meeting-status">${version ? esc((version.confirmed?'已确认':'草稿')+' · '+fmtDate(version.created)) : ''}</p></form>`
       : '<p>请先在研究底稿标记并保存至少一项纳入记录。</p>'}`;
     function switchAllowed() { return !dirty || confirm('放弃本页未保存的修改？'); }
+    for (const button of $$('[data-revise]',body)) button.onclick=()=>{
+      if (!switchAllowed()) return;
+      revisionBase=version;
+      run=runs.find(r=>r.id===button.dataset.revise);
+      version=null;draw();
+      $('#meeting-revision-reason',body)?.focus();
+    };
     for (const button of $$('[data-affected]',body)) button.onclick=()=>{
       if (!switchAllowed()) return;
-      version=saved.find(v=>v.id===button.dataset.affected);
+      revisionBase=null;version=saved.find(v=>v.id===button.dataset.affected);
       run=runs.find(r=>r.id===version.briefId);draw();
     };
     $('#meeting-history',body).onchange = event => {
       if (!switchAllowed()) { event.target.value=version?.id || ''; return; }
-      version = saved.find(v=>v.id===event.target.value);
+      revisionBase=null;version = saved.find(v=>v.id===event.target.value);
       run = runs.find(r=>r.id===version?.briefId) || runs[0]; draw();
     };
     $('#meeting-source',body).onchange = event => {
       if (!switchAllowed()) { event.target.value=version?'':run?.id || ''; return; }
-      version = null; run = runs.find(r=>r.id===event.target.value); draw();
+      revisionBase=null;version = null; run = runs.find(r=>r.id===event.target.value); draw();
     };
     const form = $('#meeting-form',body);
     if (!form) return;
@@ -163,11 +174,16 @@ async function renderMedical() {
       if (confirmed && (!fields.answer || !fields.reviewer || !$('#meeting-confirm',form).checked)) {
         status.textContent='导出前请填写答复、医学复核人，并确认已核对本版来源。'; return;
       }
-      const v={...fields,id:crypto.randomUUID(),parent:version?.id || null,briefId:version?.briefId || run.id,
+      const revisionOf=revisionBase?.id || version?.revisionOf || null;
+      const revisionReason=$('#meeting-revision-reason',form)?.value.trim() || '';
+      if (confirmed && revisionOf && !revisionReason) {
+        status.textContent='请记录出版状态变化对答复的影响及修订依据。';return;
+      }
+      const v={...fields,revisionOf,revisionReason,id:crypto.randomUUID(),parent:version?.id || revisionBase?.id || null,briefId:version?.briefId || run.id,
         created:new Date().toISOString(),sourceRecords,refs,confirmed,conflictPool,conflicts:relevantConflicts(new Set(refs.map(r=>r.id)))};
       try { localStorage.setItem(meetingPrefix+v.id,JSON.stringify(v)); }
       catch { status.textContent='无法保存本机版本，请检查浏览器存储空间。'; return; }
-      saved.unshift(v); version=v; if (confirmed) download(v); draw();
+      saved.unshift(v); revisionBase=null;version=v; if (confirmed) download(v); draw();
     }
     form.onsubmit=event=>{event.preventDefault();save(false);};
     $('#meeting-release',body).onclick=()=>save(true);
