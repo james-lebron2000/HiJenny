@@ -19,7 +19,7 @@ jobs:
       - name: Read public sources
         id: fetch
         continue-on-error: true
-        run: python3 tools/collect_public_events.py
+        run: python3 tools/collect_public_events.py --receipt "$RUNNER_TEMP/collection.json"
       - name: Publish changed monthly files
         run: |
           git add -- data/public/events
@@ -28,6 +28,29 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Update public asset event index"
           git push origin HEAD:main
+      - name: Attach collection receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-collection-receipt
+          path: ${{ runner.temp }}/collection.json
+          if-no-files-found: error
+      - name: Summarize source checks
+        if: always()
+        shell: python
+        run: |
+          import json, os
+          from pathlib import Path
+          receipt = json.loads((Path(os.environ["RUNNER_TEMP"]) / "collection.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
+              print("## 公开来源核对记录", file=out)
+              print(f"核对结束（UTC） {receipt['finished_utc']} · 新增事件 {receipt['new_events']}", file=out)
+              print("\n| 来源 | 目标编号 | 核对结果 | 来源记录数 | 新增事件 |", file=out)
+              print("|---|---|---|---:|---:|", file=out)
+              for row in receipt["checks"]:
+                  status = "成功" if row["status"] == "ok" else "失败 " + row["error"]
+                  counts = [row[k] if row[k] is not None else "待核" for k in ("records", "new_events")]
+                  print(f"| {row['source']} | {row['target']} | {status} | {counts[0]} | {counts[1]} |", file=out)
       - name: Report incomplete source checks
         if: steps.fetch.outcome == 'failure'
         run: exit 1

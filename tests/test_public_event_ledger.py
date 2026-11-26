@@ -232,3 +232,24 @@ def test_text_report_keeps_nested_scopes_missing_values_and_precision():
     measure["analyses"] = [{"groupIds": ["A"], "pValue": "<0.001"}]
     assert "1 | P 值 | <0.001" in outcome_text(measure)
     assert "严重不良事件 | A | 0 | 未提供" in safety_text({"eventGroups": [{"id": "A", "seriousNumAffected": 0}]})
+
+
+def test_collection_receipt_partial_failure_and_empty_match(tmp_path, monkeypatch):
+    root = tmp_path / "public"
+    root.mkdir()
+    (root / "watchlist.json").write_text(json.dumps({"publications": [{"id": "found"}, {"id": "none"}, {"id": "failed"}]}))
+    def records(target):
+        if target["id"] == "failed":
+            raise OSError("unavailable")
+        if target["id"] == "found":
+            for field in ("link", "status"):
+                yield dict(source="PubMed", record="123", field=field, source_date="2026-11-26", value=field)
+    monkeypatch.setattr(collector, "publication_records", records)
+    receipt = tmp_path / "receipt.json"
+    assert collector.collect(root, receipt) == 1
+    first = json.loads(receipt.read_text())
+    assert [(r["status"], r["records"], r["new_events"]) for r in first["checks"]] == [
+        ("ok", 1, 2), ("ok", 0, 0), ("failed", None, None)]
+    assert first["new_events"] == 2
+    assert collector.collect(root, receipt) == 1
+    assert json.loads(receipt.read_text())["new_events"] == 0

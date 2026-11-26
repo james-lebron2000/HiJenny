@@ -211,18 +211,24 @@ def changes(records, history, now):
         yield entry
 
 
-def collect(root=ROOT):
+def collect(root=ROOT, receipt=None):
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     files = sorted((root / "events").glob("*.jsonl"))
     history = [json.loads(line) for path in files for line in path.read_text().splitlines()]
     watch = json.loads((root / "watchlist.json").read_text())
-    events, failures = [], []
+    events, failures, checks = [], [], []
     for group, read in (("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
         for target in watch.get(group, []):
+            check = {"source": group, "target": target.get("id") or target.get("cik")}
             try:
-                events.extend(list(changes(read(target), history, now)))
+                records = list(read(target))
+                additions = list(changes(records, history, now))
+                events.extend(additions)
+                check.update(status="ok", records=len({row["record"] for row in records}), new_events=len(additions))
             except Exception as err:
+                check.update(status="failed", records=None, new_events=None, error=type(err).__name__)
                 failures.append(f"{group} {target.get('id') or target.get('cik')}: {err}")
+            checks.append(check)
     if events:
         folder = root / "events"
         folder.mkdir(exist_ok=True)
@@ -231,6 +237,10 @@ def collect(root=ROOT):
         tmp = month.with_suffix(".tmp")
         tmp.write_bytes(content + "".join(json.dumps(row, ensure_ascii=False, sort_keys=True)+"\n" for row in events).encode())
         tmp.replace(month)
+    if receipt is not None:
+        report = {"started_utc": now, "finished_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                  "watchlist_sha256": fingerprint(watch), "checks": checks, "new_events": len(events)}
+        receipt.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"New public events: {len(events)}", flush=True)
     for error in failures:
         print(error, file=sys.stderr)
@@ -240,7 +250,11 @@ def collect(root=ROOT):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--private-dir", type=Path, help="Server-only directory containing its own watchlist.json")
-    directory = parser.parse_args().private_dir
+    parser.add_argument("--receipt", type=Path, help="Write a machine-readable public collection receipt")
+    args = parser.parse_args()
+    directory = args.private_dir
+    if directory is not None and args.receipt:
+        parser.error("--receipt is for the public watchlist")
     if directory is not None and directory.resolve().is_relative_to(ROOT.parents[1]):
         parser.error("Keep private watchlists outside the repository")
-    sys.exit(collect(directory or ROOT))
+    sys.exit(collect(directory or ROOT, args.receipt))
