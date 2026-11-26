@@ -77,6 +77,7 @@ async function renderMedical() {
   function draw() {
     dirty = false;
     const sourceRecords = version?.sourceRecords || (run ? medicalSources(run) : []);
+    const authorPapers = sourceRecords.filter(record=>record.authors?.length);
     const conflictPool = version ? version.conflictPool || [] : run?.conflicts || [];
     const relevantConflicts = ids => conflictPool.filter(c=>ids.has(c.left) || ids.has(c.right));
     const selected = new Map((version?.refs || []).map(ref=>[ref.id,ref]));
@@ -123,6 +124,9 @@ async function renderMedical() {
           ${r.passages.map((p,j)=>option(String(j),String(selectedIndex(r)),p.label+' · '+p.text.slice(0,95))).join('')}</select></label>
           <blockquote data-excerpt="${i}">${esc(r.passages[selectedIndex(r)].text)}</blockquote>` : '<p>此条记录缺少摘要，暂不能用作答复引文。</p>'}</section>`).join('')}</fieldset>
       <section class="card" id="meeting-conflicts" hidden></section>
+      ${authorPapers.length ? `<details class="card" id="meeting-authors"><summary>从纳入论文查找讨论对象</summary>
+        <label>按作者姓名或论文题名筛选<input type="search" id="meeting-author-query"></label>
+        <div id="meeting-author-papers"></div></details>` : ''}
       ${Object.entries(meetingFields).map(([key,label])=>`<label>${label}
         <textarea rows="${['answer','discussion','action'].includes(key)?3:1}" maxlength="8000" data-meeting="${key}">${esc(version?.[key] || (key!=='reviewer' && revisionBase?.[key]) || (key==='question'?run?.question:'') || '')}</textarea></label>`).join('')}
       <label><input id="meeting-confirm" type="checkbox"> 我已核对本版答复和所选来源</label>
@@ -168,6 +172,40 @@ async function renderMedical() {
     };
     const form = $('#meeting-form',body);
     if (!form) return;
+    const authorPanel = $('#meeting-authors',form);
+    if (authorPanel) {
+      const search = $('#meeting-author-query',authorPanel);
+      const results = $('#meeting-author-papers',authorPanel);
+      function showAuthors() {
+        const query = search.value.trim().toLowerCase();
+        const papers = authorPapers.map((paper,index)=>{
+          const titleMatches = paper.title.toLowerCase().includes(query);
+          const authors = paper.authors.filter(name=>titleMatches || name.toLowerCase().includes(query));
+          if (!authors.length) return '';
+          return `<section><p><a href="${esc(sourceLink(paper))}" target="_blank" rel="noopener noreferrer">${esc(paper.title)} · PMID ${esc(paper.id)}</a></p>
+            <label>此文署名作者<select>${authors.map(name=>`<option>${esc(name)}</option>`).join('')}</select></label>
+            <button class="btn" type="button" data-add-author="${index}">加入讨论对象</button></section>`;
+        });
+        results.innerHTML = papers.join('') || '<p>本次纳入论文中没有匹配的署名或题名。</p>';
+      }
+      search.oninput = showAuthors;
+      results.onclick = event=>{
+        const button = event.target.closest('[data-add-author]');
+        if (!button) return;
+        const paper = authorPapers[Number(button.dataset.addAuthor)];
+        const name = button.closest('section').querySelector('select').value;
+        const entry = name+'（PMID '+paper.id+'）';
+        const expert = form.querySelector('[data-meeting="expert"]');
+        if (!expert.value.split('\n').includes(entry)) {
+          const next = [expert.value.trimEnd(),entry].filter(Boolean).join('\n');
+          if (next.length > expert.maxLength) { toast('讨论对象已达字数上限。'); return; }
+          expert.value = next;
+          expert.dispatchEvent(new Event('input',{bubbles:true}));
+        }
+        expert.focus();
+      };
+      showAuthors();
+    }
     const conflictPanel=$('#meeting-conflicts',form);
     function showConflicts() {
       const checked=new Set($$('[data-cite]:checked',form).map(box=>sourceRecords[box.dataset.cite].id));
@@ -177,7 +215,9 @@ async function renderMedical() {
         <p>${[c.left,c.right].map(id=>`<a href="${esc(sourceLink({id}))}" target="_blank" rel="noopener noreferrer">${esc(id)}</a>`).join(' · ')}</p>`).join('') : '';
     }
     showConflicts();
-    form.oninput = event => { if (event.target.matches('[data-cite]')) showConflicts();
+    form.oninput = event => {
+      if (authorPanel?.contains(event.target)) return;
+      if (event.target.matches('[data-cite]')) showConflicts();
       if (event.target.id !== 'meeting-confirm') $('#meeting-confirm',form).checked=false;
       dirty=true; $('#meeting-status',body).textContent='有未保存的修改'; };
     for (const select of $$('[data-passage]',form)) select.onchange = () => {
