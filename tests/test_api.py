@@ -662,6 +662,11 @@ def test_bd_review_history_and_brief(client, env):
     assert record("experiment_result", 4, note="result file reviewed", **source).is_success
     assert record("review", 5, decision="documents", note="no further experiments").is_success
     assert record("publish", 6, note="updated interpretation").is_success
+    comparison = dict.fromkeys(("asset", "population", "line", "method", "followup",
+                                "endpoint", "value", "limits"), "comparator datum")
+    assert record("comparison", 7, **comparison, **source).is_success
+    assert record("review", 8, decision="documents", note="comparator reviewed").is_success
+    assert record("publish", 9, note="updated interpretation with comparator").is_success
     from docx import Document
     out = env["data_dir"] / "projects" / project / "exports"
     assert "updated interpretation" in (out / "HiJenny_Report.md").read_text()

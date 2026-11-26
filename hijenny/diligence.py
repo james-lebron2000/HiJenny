@@ -66,10 +66,12 @@ def histories(session, project_id):
     return result
 
 
-def allowed(events):
+def allowed(events, question=None):
     last = next((e for e in reversed(events) if e["action"] != "comparison"), None)
     choices = ["comparison", "request"]
     if not last:
+        if question and question["status"] in ("sent", "answered"):
+            choices.append("reply")
         return choices
     kind = last["action"]
     if kind in ("request", "reply", "experiment_result"):
@@ -84,6 +86,8 @@ def allowed(events):
             choices.append("reply")
         choices.append("publish")
     if kind == "publish":
+        if events[-1]["action"] == "comparison":
+            choices.append("review")
         review = next(e for e in reversed(events) if e["action"] == "review")
         choices.extend({"documents": [], "experiment": ["experiment_result"], "clarify": ["reply"]}[review["after"]["decision"]])
     return choices
@@ -96,7 +100,7 @@ def append(session, project_id, question_id, action):
     events = histories(session, project_id).get(question_id, [])
     if action.revision != len(events):
         raise HTTPException(409, "记录已更新，请刷新后重试")
-    if action.kind not in allowed(events):
+    if action.kind not in allowed(events, question):
         raise HTTPException(409, "请先完成前一项复核步骤")
     payload = action.model_dump(exclude={"actor", "kind"})
     if "document_id" in payload:

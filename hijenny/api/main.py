@@ -1088,7 +1088,7 @@ def create_app() -> FastAPI:
             history = diligence.histories(session, project_id)
             questions = store.list_questions(session, project_id)
             return {"questions": questions, "history": history,
-                    "allowed": {q["question_id"]: diligence.allowed(history.get(q["question_id"], []))
+                    "allowed": {q["question_id"]: diligence.allowed(history.get(q["question_id"], []), q)
                                 for q in questions},
                     "documents": [_doc_json(d) for d in store.list_documents(session, project_id)],
                     "evidence": store.get_evidence(session, project_id, limit=10000)}
