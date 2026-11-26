@@ -4,6 +4,7 @@ function renderPublicEvents() {
     ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
+    <label>试验登记号<input name="trial" placeholder="NCT03470922" pattern="[Nn][Cc][Tt][0-9]{8}" title="NCT 加八位数字"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
     <label>数据来源<select name="source"><option value="">全部来源</option><option>Drugs@FDA</option><option>ClinicalTrials.gov</option><option>PubMed</option><option>SEC</option></select></label>
     <label>地区<input name="region" placeholder="例如：中东"></label>
@@ -20,7 +21,18 @@ function renderPublicEvents() {
     <button type="button" class="btn" id="public-event-more" hidden>加载更多</button></section>`);
   const form = $('#public-event-filters'), status = $('#public-event-status');
   const list = $('#public-event-list'), more = $('#public-event-more');
+  const initial = hashParams();
+  form.elements.trial.value = initial.get('trial') || '';
+  form.elements.as_of.value = initial.get('as_of') || '';
   let query, offset, generation = 0;
+  function trialTrail(id) {
+    const params = new URLSearchParams({trial:id});
+    if (query.get('as_of')) params.set('as_of', query.get('as_of'));
+    const link = document.createElement('a');
+    link.href = '#/public-events?' + params;
+    link.textContent = '查看此试验的跨来源记录';
+    return link;
+  }
   function display(value) {
     if (value == null) return '未披露';
     if (typeof value === 'object') return [value.date, {ACTUAL:'实际', ESTIMATED:'预计'}[value.type] || value.type].filter(Boolean).join(' · ');
@@ -70,6 +82,7 @@ function renderPublicEvents() {
           if (!label || !/^NCT[0-9]{8}$/.test(trial.id)) continue;
           p.innerHTML = `标签所列试验 · ${esc(trial.name)} · <a href="https://clinicaltrials.gov/study/${esc(trial.id)}" target="_blank" rel="noopener noreferrer">${esc(trial.id)}</a>
             · <a href="${esc(label.url)}#page=${Number(trial.page)}" target="_blank" rel="noopener noreferrer">${esc(trial.section)} · 第 ${Number(trial.page)} 页</a>`;
+          if (!query.has('trial') || query.has('source')) p.append(' · ', trialTrail(trial.id));
           card.append(p);
         }
         const noticeIds = [];
@@ -87,6 +100,7 @@ function renderPublicEvents() {
         }
         const trialId = r.source==='ClinicalTrials.gov' ? r.record : r.trial;
         if (/^NCT[0-9]{8}$/.test(trialId)) {
+          if (!query.has('trial') || query.has('source')) card.append(trialTrail(trialId));
           const button = document.createElement('button');
           button.className = 'btn'; button.type = 'button'; button.textContent = '核对登记并加入本机关注';
           const feedback = document.createElement('p');

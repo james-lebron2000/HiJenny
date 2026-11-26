@@ -141,3 +141,29 @@ def test_fda_approval_actions_keep_submission_identity(monkeypatch):
     target["label_trials"] = {"SUPPL/1": [trial]}
     with pytest.raises(ValueError, match="Invalid trial citation"):
         list(collector.fda_records(target))
+
+
+def test_trial_filter_only_accepts_source_specific_links(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from hijenny.api.public_events import router
+
+    trial = "NCT03470922"
+    monkeypatch.setattr(public_events, "DATA_DIR", tmp_path)
+    with closing(public_events.connect()) as db, db:
+        for i, fields in enumerate([
+            dict(source="ClinicalTrials.gov", record=trial),
+            dict(source="PubMed", record="123", trial=trial),
+            dict(source="Drugs@FDA", record="BLA/ORIG/1", label_trials=[{"id": trial}]),
+            dict(source="SEC", record=trial, trial=trial),
+            dict(source="ClinicalTrials.gov", record="NCT00000001"),
+        ]):
+            payload = dict(id=str(i), field="status", observed="2026-11-27T01:00:00Z", **fields)
+            db.execute("insert into events values (?,?,?,?,?)", (str(i), trial, "", "2025-01-01", json.dumps(payload)))
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    url = "/api/public-events"
+    assert {r["id"] for r in client.get(url, params={"trial": trial.lower()}).json()["items"]} == {"0", "1", "2"}
+    assert client.get(url, params={"trial": trial, "as_of": "2026-11-26"}).json()["total"] == 0
+    assert client.get(url, params={"trial": "NCT0347"}).status_code == 422
