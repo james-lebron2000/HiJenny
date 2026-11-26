@@ -180,9 +180,7 @@ async function renderMedical() {
         const query = search.value.trim().toLowerCase();
         const papers = authorPapers.map((paper,index)=>{
           const titleMatches = paper.title.toLowerCase().includes(query);
-          const authors = paper.authors.map((name,position)=>({
-            name, position, affiliation:(paper.author_affiliations?.[position] || []).join(' / ')
-          })).filter(author=>titleMatches || [author.name,author.affiliation].some(value=>value.toLowerCase().includes(query)));
+          const authors = paperByline(paper).filter(author=>titleMatches || [author.name,author.affiliation].some(value=>value.toLowerCase().includes(query)));
           if (!authors.length) return '';
           return `<section><p><a href="${esc(sourceLink(paper))}" target="_blank" rel="noopener noreferrer">${esc(paper.title)} · PMID ${esc(paper.id)}</a></p>
             <label>此文署名作者<select>${authors.map(author=>`<option value="${author.position}">${esc(author.name)} · ${esc(author.affiliation || '本底稿无署名单位')}</option>`).join('')}</select></label>

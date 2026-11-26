@@ -40,11 +40,19 @@ function researchResults(data) {
     ${data.source === 'trials' ? '<button id="follow-trials" class="btn" type="button">关注选中的试验</button><button id="compare-trials" type="button" class="btn">并排比较选中的试验</button><div id="trial-comparison"></div>' : ''}`;
 }
 
+function paperByline(paper) {
+  return (paper.authors || []).map((name,position)=>({
+    name,position,affiliation:(paper.author_affiliations?.[position] || []).join(' / ')
+  }));
+}
+
 function libraryMatches(item, filter) {
   const contains = value => String(value ?? '').toLowerCase().includes(filter);
   const passages = item.passages || [];
   const matching = filter ? passages.filter(p => contains(p.text) || contains(p.label)) : [];
-  return {visible:matching.length > 0 || [item.title,item.detail,item.query,item.id,item.date,...(item.notices || [])].some(contains), matching};
+  const byline=paperByline(item);
+  const matchedAuthors=filter?byline.filter(author=>contains(author.name) || contains(author.affiliation)):[];
+  return {byline,matchedAuthors,visible:matchedAuthors.length > 0 || matching.length > 0 || [item.title,item.detail,item.query,item.id,item.date,...(item.notices || [])].some(contains), matching};
 }
 
 function libraryEvidence(item, matching) {
@@ -86,7 +94,7 @@ function renderResearch() {
     <button class="btn" type="button" id="make-brief">用这个主题整理多来源底稿 →</button>
     <div id="research-output" aria-live="polite"></div>
     <details id="public-library"><summary>我的公开资料收藏（本浏览器）</summary>
-    <label>按题名、编号、检索式或来源片段筛选 <input id="library-filter" type="search"></label><ul id="library-list"></ul><button class="btn" type="button" id="library-compare">对照已选试验的公布终点</button><form id="library-brief"><label>围绕这些收藏要回答什么问题？<input name="question" required maxlength="400"></label><button class="btn" type="submit">用所选收藏创建研究底稿</button></form><div id="library-outcomes" aria-live="polite"></div></details>
+    <label>按题名、编号、作者、署名单位、检索式或来源片段筛选 <input id="library-filter" type="search"></label><ul id="library-list"></ul><button class="btn" type="button" id="library-compare">对照已选试验的公布终点</button><form id="library-brief"><label>围绕这些收藏要回答什么问题？<input name="question" required maxlength="400"></label><button class="btn" type="submit">用所选收藏创建研究底稿</button></form><div id="library-outcomes" aria-live="polite"></div></details>
     <button data-nav="projects" class="btn" type="button">进入资料包尽调工作区 →</button></section>`);
   $('#make-brief').onclick = () => { briefSeed = $('#research-query').value.trim(); nav('brief'); };
   const source = $('#research-source');
@@ -105,11 +113,16 @@ function renderResearch() {
     const list = $('#library-list');
     const rows = [];
     for (const item of readPublicLibrary()) {
-      const {visible,matching} = libraryMatches(item, filter);
+      const {visible,matching,byline,matchedAuthors} = libraryMatches(item, filter);
       if (!visible) continue;
+      const authors=matchedAuthors.length ? matchedAuthors : byline;
+      const authorDetails=authors.length ? `<details data-library-authors ${matchedAuthors.length?'open':''}>
+        <summary>${matchedAuthors.length?'匹配的署名作者':'论文署名作者'}（${authors.length}）</summary>
+        <ol>${authors.map(a=>`<li value="${a.position+1}">${esc(a.name)} · ${esc(a.affiliation || '该署名未列单位')}</li>`).join('')}</ol></details>`
+        : (!item.id.startsWith('NCT') && !item.authors ? '<p>旧收藏未保存署名，重新检索并收藏可补入当前署名记录。</p>' : '');
       rows.push(`<li><label><input type="checkbox" data-library-id="${esc(item.id)}" ${chosenRecords.has(item.id)?"checked":""}> ${esc(item.id)}</label>
         <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
-        ${publicationNotices(item)}${libraryEvidence(item,matching)}<button class="btn sm" type="button" data-remove="${esc(item.id)}">移除</button></li>`);
+        ${publicationNotices(item)}${authorDetails}${libraryEvidence(item,matching)}<button class="btn sm" type="button" data-remove="${esc(item.id)}">移除</button></li>`);
     }
     list.innerHTML = rows.join('') || '<li>暂无匹配记录</li>';
   }
@@ -205,6 +218,7 @@ function renderResearch() {
       const entries = new Map(readPublicLibrary().map(item => [item.id, item]));
       for (const item of data.items.filter(item => picked.has(item.id))) {
         entries.set(item.id, {id:item.id, title:item.title, detail:item.detail, date:item.date, retrieved:data.retrieved,
+          authors:item.authors || [], author_affiliations:item.author_affiliations || [],
           passages:item.passages || [], notices:item.notices || [], query:data.effective_query || data.query});
       }
       if (persist([...entries.values()])) toast('记录已加入本浏览器收藏。');
