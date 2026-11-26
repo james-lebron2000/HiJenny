@@ -9,10 +9,11 @@ from hijenny.api.discovery import Criteria, Opportunity, RegistryScreen, fetch_s
 
 
 def test_filtered_page_preserves_registry_scope_and_continuation():
-    criteria = Criteria(condition="melanoma", phase="PHASE2", sponsor="Example", country="Japan")
+    criteria = Criteria(condition="melanoma", phase="PHASE2", intervention="Drug A", sponsor="Example", country="Japan")
 
     def respond(request):
         assert request.url.params["query.cond"] == "melanoma"
+        assert request.url.params["query.intr"] == "Drug A"
         assert request.url.params["query.lead"] == "Example"
         assert request.url.params["filter.advanced"] == 'AREA[Phase]PHASE2 AND AREA[LocationCountry]"Japan"'
         assert request.url.params["pageToken"] == "cursor-1"
@@ -35,7 +36,7 @@ def test_concurrent_handoff_reuses_project_and_retains_original_reason(tmp_path)
     store.configure(tmp_path / "discovery.db")
     store.init_db()
     seed = Opportunity(snapshot_id=uuid4(), retrieved="2026-11-26T00:00:00Z",
-                       criteria=Criteria(condition="example", country="Japan"), countries=["Japan", "China"], nct="NCT00000001",
+                       criteria=Criteria(intervention="Drug A", country="Japan"), countries=["Japan", "China"], nct="NCT00000001",
                        trial_title="Source record", asset="Drug A", rationale="First reason")
     with ThreadPoolExecutor(max_workers=3) as pool:
         replies = list(pool.map(start_project, [seed] * 3))
@@ -43,6 +44,7 @@ def test_concurrent_handoff_reuses_project_and_retains_original_reason(tmp_path)
     assert len({item["project"]["project_id"] for item in replies}) == 1
     restored = start_project(seed.model_copy(update={"rationale": "Later revision"}))["project"]
     assert restored["meta"]["opportunity"]["countries"] == ["Japan", "China"]
+    assert restored["meta"]["opportunity"]["criteria"]["intervention"] == "Drug A"
     assert restored["meta"]["opportunity"]["criteria"]["country"] == "Japan"
     assert restored["meta"]["opportunity"]["rationale"] == "First reason"
     assert restored["meta"]["opportunity"]["url"].endswith("/study/NCT00000001")

@@ -5,7 +5,7 @@ function opportunityOrigin(record) {
   return `<section class="card"><h2>机会来源与入选理由</h2>
     <p>${esc(record.rationale)}</p><a href="${esc(sourceLink({id:record.nct}))}" target="_blank" rel="noopener noreferrer">${esc(record.nct)} · ${esc(record.trial_title)}</a>
     <p>登记申办方 ${esc(record.sponsor || '未披露')} · 登记更新 ${esc(record.updated || '未提供')} · 检索于 ${esc(fmtDate(record.retrieved))}</p>
-    <p>筛选条件 · ${esc([record.criteria?.condition,record.criteria?.phase,record.criteria?.sponsor,record.criteria?.country].filter(Boolean).join(' / '))}</p>
+    <p>筛选条件 · ${esc([record.criteria?.condition,record.criteria?.intervention,record.criteria?.phase,record.criteria?.sponsor,record.criteria?.country].filter(Boolean).join(' / '))}</p>
     ${record.countries?.length ? `<p>登记研究中心所在国家或地区 · ${esc(record.countries.join(' / '))}</p>` : ''}
     <small>筛选快照 ${esc(record.snapshot_id)}</small></section>`;
 }
@@ -35,6 +35,10 @@ function opportunityChanges(before, after) {
   return changes;
 }
 
+function opportunityTopic(criteria) {
+  return [criteria.condition, criteria.intervention].filter(Boolean).join(' · ');
+}
+
 function renderDiscovery() {
   const prefix = 'hijenny.opportunity.';
   const history = () => Object.keys(localStorage).filter(k=>k.startsWith(prefix))
@@ -43,7 +47,9 @@ function renderDiscovery() {
   const snapshots = history();
   let snapshot = requested ? snapshots.find(row => row.id === requested) : snapshots[0];
   setView(`<section class="research-home" id="opportunities"><h1>筛选候选资产与潜在伙伴</h1>
-    <form id="screen-form" class="card"><label>适应症（英文）<input name="condition" required maxlength="200" placeholder="例如 melanoma"></label>
+    <form id="screen-form" class="card"><label>适应症（英文）<input name="condition" maxlength="200" placeholder="例如 melanoma"></label>
+    <label>药物或干预名称（英文）<input name="intervention" maxlength="200" placeholder="例如 pembrolizumab"></label>
+    <small>适应症和干预名称至少填写一项。</small>
     <label>登记的临床阶段<select name="phase">${['','EARLY_PHASE1','PHASE1','PHASE2','PHASE3','PHASE4'].map(v=>option(v,'',v || '全部阶段')).join('')}</select></label>
     <label>研究中心所在国家或地区（可选）<input name="country" maxlength="120" list="site-countries" placeholder="例如 Japan"></label>
     <datalist id="site-countries">${['China','United States','Japan','Germany','France','United Kingdom','Canada','Australia'].map(c=>`<option value="${c}"></option>`).join('')}</datalist>
@@ -61,13 +67,14 @@ function renderDiscovery() {
   }
   function paint() {
     select.innerHTML='<option value="">选择快照</option>'+history().map(s=>option(s.id,snapshot?.id,
-      s.criteria.condition+' · '+s.items.length+' 条 · '+fmtDate(s.created))).join('');
+      opportunityTopic(s.criteria)+' · '+s.items.length+' 条 · '+fmtDate(s.created))).join('');
     if (!snapshot) { results.replaceChildren(); return; }
+    form.elements.intervention.value='';
     form.elements.country.value='';
     for (const [key,value] of Object.entries(snapshot.criteria)) form.elements[key].value=value;
     const baseline = snapshot.recheckedFrom && history().find(row => row.id === snapshot.recheckedFrom);
     const changes = baseline ? opportunityChanges(baseline, snapshot) : [];
-    results.innerHTML=`<h2>${esc(snapshot.criteria.condition)} · 候选试验</h2>
+    results.innerHTML=`<h2>${esc(opportunityTopic(snapshot.criteria))} · 候选试验</h2>
       <p>筛选时数据库命中 ${esc(snapshot.total)} 条；本快照保存 ${snapshot.items.length} 条。检索时间 ${esc(fmtDate(snapshot.created))}。</p>
       <button type="button" class="btn" id="screen-recheck">按原条件重新检索并比较</button>
       ${baseline ? `<section class="card"><h3>与上次候选集比较</h3><p>上次检索 ${esc(fmtDate(baseline.created))}，取回 ${baseline.items.length} 条；本次取回 ${snapshot.items.length} 条。按试验编号匹配。排序和检索范围会影响出现的记录，“本次未见”不能证明登记撤回。</p>
@@ -77,6 +84,7 @@ function renderDiscovery() {
       ${snapshot.items.map((r,i)=>`<article class="card"><h3><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h3>
       <p>${esc([r.id,r.sponsor,r.phases.join(' / '),r.status].filter(Boolean).join(' · '))}</p>
       <p>研究中心所在国家或地区 · ${esc(r.countries?.join(' / ') || (r.countries?'登记未提供':'旧版快照未采集'))}</p>
+      <p>登记适应症 · ${esc(r.conditions?.join(' / ') || '未披露')}</p>
       <p>登记干预 · ${esc(r.interventions.join(' / ') || '未披露')}</p>
       <button type="button" class="btn" data-watch-trial="${esc(r.id)}">关注试验里程碑</button>
       <details><summary>将候选资产转入尽调</summary><form data-candidate="${i}">
@@ -123,7 +131,13 @@ function renderDiscovery() {
     } catch (err) {status.textContent='筛选未保存：'+err.message;}
     finally {lock(false);}
   }
-  form.onsubmit=e=>{e.preventDefault();retrieve(null);};
+  form.onsubmit=e=>{
+    e.preventDefault();
+    if (!form.elements.condition.value.trim() && !form.elements.intervention.value.trim()) {
+      status.textContent='请填写适应症或药物／干预名称。';form.elements.intervention.focus();return;
+    }
+    retrieve(null);
+  };
   select.onchange=()=>{
     snapshot=history().find(s=>s.id===select.value);
     window.history.replaceState(null,'','#/discovery'+(snapshot?'?snapshot='+encodeURIComponent(snapshot.id):''));
@@ -133,7 +147,7 @@ function renderDiscovery() {
     const button=event.target.closest('[data-watch-trial]');
     if (!button || busy) return;
     const id=button.dataset.watchTrial;
-    const origin={snapshot:snapshot.id,condition:snapshot.criteria.condition,created:snapshot.created};
+    const origin={snapshot:snapshot.id,condition:opportunityTopic(snapshot.criteria),created:snapshot.created};
     lock(true);
     status.textContent='正在核对登记编号和里程碑日期…';
     try {

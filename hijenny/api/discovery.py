@@ -5,7 +5,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 
 from hijenny import store
@@ -15,7 +15,8 @@ REGISTRY = "https://clinicaltrials.gov/api/v2/studies"
 
 
 class Criteria(BaseModel):
-    condition: str = Field(min_length=1, max_length=200)
+    condition: str = Field(default="", max_length=200)
+    intervention: str = Field(default="", max_length=200)
     sponsor: str = Field(default="", max_length=200)
     country: str = Field(default="", max_length=120)
 
@@ -29,12 +30,16 @@ class Criteria(BaseModel):
 
     phase: Literal["", "EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4"] = ""
 
-    @field_validator("condition")
+    @field_validator("condition", "intervention")
     @classmethod
-    def require_condition(cls, value):
-        if not value.strip():
-            raise ValueError("请填写适应症")
+    def trim_term(cls, value):
         return value.strip()
+
+    @model_validator(mode="after")
+    def require_search_term(self):
+        if not self.condition and not self.intervention:
+            raise ValueError("请填写适应症或药物／干预名称")
+        return self
 
 
 class RegistryScreen(BaseModel):
@@ -44,8 +49,12 @@ class RegistryScreen(BaseModel):
 
 async def fetch_screen(client, request):
     criteria = request.criteria
-    params = {"query.cond": criteria.condition, "countTotal": "true", "pageSize": 20,
+    params = {"countTotal": "true", "pageSize": 20,
               "fields": "NCTId,BriefTitle,LeadSponsorName,Condition,Phase,OverallStatus,InterventionName,LastUpdatePostDate,LocationCountry"}
+    if criteria.condition:
+        params["query.cond"] = criteria.condition
+    if criteria.intervention:
+        params["query.intr"] = criteria.intervention
     if criteria.sponsor.strip():
         params["query.lead"] = criteria.sponsor.strip()
     filters = []
