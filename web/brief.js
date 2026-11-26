@@ -36,7 +36,7 @@ async function patchBrief(id, update) {
     request.onsuccess = () => {
       latest = request.result;
       if (!latest) { tx.abort(); return; }
-      update(latest);
+      try { update(latest); } catch (err) { tx.abort(); reject(err); return; }
       store.put(latest);
     };
     tx.oncomplete = () => resolve(latest);
@@ -65,6 +65,13 @@ function briefText(run) {
     }
   }
   lines.push('', '审核意见与证据冲突', run.note || '尚未填写');
+  for (const c of run.conflicts || []) {
+    lines.push('', '来源分歧 · '+c.status+' · '+c.reviewer, c.note);
+    for (const id of [c.left,c.right]) {
+      const item=run.steps.flatMap(step=>step.result?.items || []).find(row=>row.id===id);
+      if (item) lines.push('['+id+'] '+item.title,sourceLink(item));
+    }
+  }
   return lines.join('\n');
 }
 
@@ -103,6 +110,9 @@ async function renderBrief() {
     if (!run) { report.replaceChildren(); return; }
     history.disabled = busy;
     form.querySelector('button').disabled = busy;
+    const items=new Map(run.steps.flatMap(step=>(step.result?.items || []).map(row=>[row.id,row])));
+    const choices=[...items.values()].map(row=>option(row.id,'',row.id+' · '+row.title)).join('');
+    const conflictLink=id=>`<a href="${esc(sourceLink(items.get(id)))}" target="_blank" rel="noopener noreferrer">${esc(id)} · ${esc(items.get(id).title)}</a>`;
     report.innerHTML = `<h2>${esc(run.question)}</h2><p>来源快照 · ${esc(new Date(run.created).toLocaleString())}</p>
       ${run.steps.map(step => `<section class="card"><h3>${briefSources[step.source]}</h3>
       <span>${esc(step.query)} · 已尝试 ${step.attempts} 次</span>
@@ -114,6 +124,15 @@ async function renderBrief() {
         <label>筛选判断 <select data-review="${esc(item.id)}" ${busy?'disabled':''}>
         ${['待复核','纳入','排除'].map(v=>option(v,run.review[item.id] || '待复核',v)).join('')}</select></label><label>筛选理由（可选）<textarea data-reason="${esc(item.id)}" maxlength="2000" ${busy?'disabled':''}>${esc(run.reasons?.[item.id] || '')}</textarea></label></details>`).join('')}`
         : `<p>${esc(step.error || (busy ? '正在执行检索计划…' : '等待检索'))}</p>`}</section>`).join('')}
+      ${items.size>=2 ? `<section class="card"><h3>来源分歧复核记录</h3>
+        ${(run.conflicts || []).map(c=>`<article><p>${conflictLink(c.left)} · ${conflictLink(c.right)}</p><p>${esc(c.status)} · ${esc(c.reviewer)}</p><p>${esc(c.note)}</p></article>`).join('')}
+        <details><summary>登记两条来源的分歧</summary><form id="brief-conflict">
+        <label>第一条来源<select name="left" required><option value="">选择记录</option>${choices}</select></label>
+        <label>第二条来源<select name="right" required><option value="">选择记录</option>${choices}</select></label>
+        <label>复核判断<select name="status">${['待核对','口径差异可解释','仍有分歧'].map(v=>option(v,'',v)).join('')}</select></label>
+        <label>分歧内容、判断依据或待查事项<textarea name="note" required maxlength="2000"></textarea></label>
+        <label>复核人<input name="reviewer" required maxlength="120"></label>
+        <button class="btn" ${busy?'disabled':''}>保存分歧记录</button></form></details></section>` : ''}
       <button id="brief-copy" type="button" class="btn" ${busy?'disabled':''}>复制计划并调整检索式</button>
       <label for="brief-note">审核意见、相互矛盾的证据与未解决问题</label>
       <textarea id="brief-note" rows="4" maxlength="16000" ${busy?'disabled':''}>${esc(run.note)}</textarea>
@@ -124,6 +143,27 @@ async function renderBrief() {
       <small>生成 Word 时，本版检索记录、纳入的来源片段及审核意见会发送至本项目服务器。</small>
       ${run.steps.some(s=>!s.result) ? '<button class="btn primary" id="brief-resume">继续未完成的检索</button>' : ''}
       </div>`;
+    const conflictForm=$('#brief-conflict',home);
+    if (conflictForm) conflictForm.onsubmit=async event=>{
+      event.preventDefault();
+      const entry=Object.fromEntries(new FormData(conflictForm));
+      entry.note=entry.note.trim();entry.reviewer=entry.reviewer.trim();
+      if (entry.left===entry.right || !entry.note || !entry.reviewer) {
+        toast('请选择两条不同的来源，并填写判断依据和复核人。');return;
+      }
+      const id=run.id;
+      const button=conflictForm.querySelector('button');
+      button.disabled=true;
+      try {
+        await saveReview();
+        const saved=await patchBrief(id,record=>{
+          record.conflicts ||= [];
+          if (record.conflicts.length < 200) record.conflicts.push(entry);
+          else throw new Error('本版底稿已达到 200 条分歧记录。');
+        });
+        if (run?.id===id) {run=saved;paint();}
+      } catch(err) {fail(err);} finally {button.disabled=false;}
+    };
     $('#brief-medical', home).onclick = async () => {
       try {
         await saveReview();
@@ -155,7 +195,7 @@ async function renderBrief() {
         const id=run.id;
         await saveReview();
         const saved=await briefStore('readonly',store=>store.get(id));
-        const payload={id,question:saved.question,created:saved.created,note:saved.note,steps:saved.steps.map(step=>({
+        const payload={id,question:saved.question,created:saved.created,note:saved.note,conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
           source:step.source,query:step.query,retrieved:step.retrieved || '',total:step.result?.total ?? null,error:step.error || '',
           records:(step.result?.items || []).map(item=>({
             id:item.id,title:item.title,date:item.date || '',decision:saved.review[item.id] || '待复核',

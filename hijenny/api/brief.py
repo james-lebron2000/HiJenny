@@ -9,7 +9,7 @@ from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from fastapi import APIRouter, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 router = APIRouter()
 Text = Annotated[str, Field(max_length=16000)]
@@ -40,12 +40,30 @@ class Step(BaseModel):
     records: list[Record] = Field(max_length=100)
 
 
+class Conflict(BaseModel):
+    left: str
+    right: str
+    status: Literal["待核对", "口径差异可解释", "仍有分歧"]
+    note: str = Field(min_length=1, max_length=2000)
+    reviewer: str = Field(min_length=1, max_length=120)
+
+
 class Brief(BaseModel):
     id: UUID
     question: Text
     created: Text
     note: Text
     steps: list[Step] = Field(min_length=1, max_length=2)
+
+    conflicts: list[Conflict] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def check_conflict_sources(self):
+        ids = {r.id for step in self.steps for r in step.records}
+        for c in self.conflicts:
+            if c.left == c.right or not {c.left, c.right} <= ids:
+                raise ValueError("每项分歧须关联本版底稿中两条不同记录")
+        return self
 
 
 def clean(value):
@@ -85,6 +103,15 @@ def export_brief(brief: Brief):
         records.extend(step.records)
     counts = [f"{status} {sum(r.decision == status for r in records)}" for status in ("纳入", "排除", "待复核")]
     doc.add_paragraph("取回记录筛选结果：" + "，".join(counts))
+    if brief.conflicts:
+        indexed = {r.id: r for r in records}
+        doc.add_heading("来源分歧复核记录", 1)
+        for c in brief.conflicts:
+            doc.add_paragraph(f"{c.status} · {clean(c.reviewer)}\n{clean(c.note)}")
+            for key in (c.left, c.right):
+                r = indexed[key]
+                p = doc.add_paragraph(f"[{key}] {clean(r.title)} · {r.decision}\n")
+                source_link(p, r)
     doc.add_heading("纳入证据及来源片段", 1)
     if not any(r.decision == "纳入" for r in records):
         doc.add_paragraph("当前底稿尚无纳入记录。")

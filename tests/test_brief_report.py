@@ -23,3 +23,18 @@ def test_word_report_records_screening_scope_and_preserves_version_identity():
     assert links == {"https://pubmed.ncbi.nlm.nih.gov/123/", "https://pubmed.ncbi.nlm.nih.gov/345/"}
     brief.note = "更新后的复核意见"
     assert export_brief(brief).headers["content-disposition"] != original.headers["content-disposition"]
+
+
+def test_conflict_cites_distinct_records_from_current_snapshot():
+    import pytest
+    from pydantic import ValidationError
+
+    records = [dict(id=k, title=k, decision="待复核", passages=[]) for k in ("123", "456")]
+    conflict = dict(left="123", right="456", status="仍有分歧", note="分析人群不同", reviewer="审阅甲")
+    data = dict(id=uuid4(), question="比较结果", created="2026", note="",
+                steps=[dict(source="pubmed", query="example", total=2, records=records)])
+    report = Document(BytesIO(export_brief(Brief(**data, conflicts=[conflict])).body))
+    assert "仍有分歧 · 审阅甲\n分析人群不同" in [p.text for p in report.paragraphs]
+    for invalid in ("123", "999"):
+        with pytest.raises(ValidationError):
+            Brief(**data, conflicts=[dict(conflict, right=invalid)])
