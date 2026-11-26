@@ -20,8 +20,12 @@ jobs:
         id: fetch
         continue-on-error: true
         run: python3 tools/collect_public_events.py --receipt "$RUNNER_TEMP/collection.json"
-      - name: Publish changed monthly files
+      - name: Publish monthly files and latest receipt
         run: |
+          if test -f "$RUNNER_TEMP/collection.json"; then
+            mkdir -p data/public/events
+            cp "$RUNNER_TEMP/collection.json" data/public/events/collection.json
+          fi
           git add -- data/public/events
           if git diff --cached --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"

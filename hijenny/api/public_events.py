@@ -77,6 +77,13 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     return table, sql, args, order, labels
 
 
+@router.get("/api/public-events/collection")
+def latest_collection():
+    with closing(connect()) as db:
+        row = db.execute("SELECT payload FROM collection_receipt WHERE id=1").fetchone()
+    return {"receipt": json.loads(row[0]) if row else None}
+
+
 @router.get("/api/public-events")
 def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
                   limit: int = Query(50, ge=1, le=100)):

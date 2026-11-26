@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -240,6 +241,8 @@ def collect(root=ROOT, receipt=None):
     if receipt is not None:
         report = {"started_utc": now, "finished_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                   "watchlist_sha256": fingerprint(watch), "checks": checks, "new_events": len(events)}
+        if os.environ.get("GITHUB_RUN_ID", "").isdigit():
+            report.update(run_id=os.environ["GITHUB_RUN_ID"], trigger=os.environ.get("GITHUB_EVENT_NAME"))
         receipt.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"New public events: {len(events)}", flush=True)
     for error in failures:

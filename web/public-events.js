@@ -2,6 +2,7 @@ function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报、美国 FDA 批准记录、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
     ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
+    <details class="card" id="public-collection"><summary>最近一次公开采集</summary><div aria-live="polite">正在读取核对记录…</div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
     <label>试验登记号<input name="trial" placeholder="NCT03470922" pattern="[Nn][Cc][Tt][0-9]{8}" title="NCT 加八位数字"></label>
@@ -21,6 +22,24 @@ function renderPublicEvents() {
     <button type="button" class="btn" id="public-event-more" hidden>加载更多</button></section>`);
   const form = $('#public-event-filters'), status = $('#public-event-status');
   const list = $('#public-event-list'), more = $('#public-event-more');
+  const collection=$('#public-collection');
+  api('/api/public-events/collection').then(({receipt})=>{
+    if (!collection.isConnected) return;
+    const body=collection.querySelector('div');
+    if (!receipt) {body.textContent='服务器尚未同步采集回执。';return;}
+    const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
+    collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
+    const names={sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
+    body.innerHTML='<p>公开关注名单全量核对 · 新增 '+esc(receipt.new_events)+' 条归档事件</p>'+
+      registryTable(['来源','目标编号','核对结果','来源记录数','新增事件'],checks.map(r=>[
+        names[r.source] || r.source,r.target,r.status==='ok'?'成功':'失败 · '+r.error,r.records,r.new_events]));
+    if (/^[0-9]+$/.test(receipt.run_id)) {
+      const link=document.createElement('a');
+      link.href='https://github.com/james-lebron2000/HiJenny/actions/runs/'+receipt.run_id;
+      link.textContent=({schedule:'查看定时采集运行',workflow_dispatch:'查看手动采集运行'})[receipt.trigger] || '查看采集运行';
+      body.append(link);
+    }
+  }).catch(()=>{collection.querySelector('div').textContent='暂时无法读取采集回执。';});
   const initial = hashParams();
   for (const el of form.elements) {
     if (!el.name || !initial.has(el.name)) continue;
