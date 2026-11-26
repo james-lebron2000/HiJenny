@@ -217,3 +217,18 @@ def test_archived_safety_keeps_event_group_denominators_and_zero(monkeypatch):
     data["resultsSection"] = {}
     removed, = safety([first])
     assert removed["value"] is None and removed["previous"] == first["value"]
+
+
+def test_text_report_keeps_nested_scopes_missing_values_and_precision():
+    from hijenny.registry_report import outcome_text, safety_text
+    block = {"title": "subgroup", "denoms": [{"units": "eyes", "counts": [{"groupId": "A", "value": 0}]}],
+             "measurements": [{"groupId": "A", "value": "0.00", "lowerLimit": "0.0"}]}
+    measure = {"title": "test", "groups": [{"id": "A", "title": "arm"}],
+               "classes": [{"title": "visit", "categories": [block]}]}
+    text = outcome_text(measure)
+    assert "visit / subgroup | A · arm | 0 | eyes" in text
+    assert "visit / subgroup | A · arm | 0.00 | 未提供 | 未提供 | 0.0 | 未提供" in text
+    assert "此版归档尚未采集统计分析" in text
+    measure["analyses"] = [{"groupIds": ["A"], "pValue": "<0.001"}]
+    assert "1 | P 值 | <0.001" in outcome_text(measure)
+    assert "严重不良事件 | A | 0 | 未提供" in safety_text({"eventGroups": [{"id": "A", "seriousNumAffected": 0}]})

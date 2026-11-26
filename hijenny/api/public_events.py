@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
 from hijenny.public_events import connect
+from hijenny.registry_report import outcome_text, safety_text
 
 router = APIRouter()
 OBSERVED_DAY = "date(json_extract(payload, '$.observed'), '+8 hours')"
@@ -89,9 +90,9 @@ def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
 
 def display(value):
     if isinstance(value, dict) and "safety_summary" in value:
-        return json.dumps(value["safety_summary"], ensure_ascii=False, indent=2)
+        return safety_text(value["safety_summary"])
     if isinstance(value, dict) and "primary_outcomes" in value:
-        return json.dumps(value["primary_outcomes"], ensure_ascii=False, indent=2)
+        return "\n\n".join(outcome_text(m) for m in value["primary_outcomes"])
     if isinstance(value, dict):
         return " · ".join(str(v) for v in (value.get("date"), value.get("type")) if v)
     return "未披露" if value is None else str(value)
@@ -111,6 +112,8 @@ def report(filters=Depends(event_filters)):
             if (row["kind"] == "change" and row["source"] == "Drugs@FDA" and
                     row["previous"] == row["value"] and row.get("previous_date") == row["source_date"]):
                 kind = "标签试验关联更新" if row.get("label_trials_changed") else "配套文件更新"
+            elif row["kind"] == "change" and row.get("category") in ("primary-outcomes", "safety-summary"):
+                value = "本次归档\n" + value + "\n\n上次归档\n" + display(row["previous"])
             elif row["kind"] == "change":
                 value = display(row["previous"]) + " → " + value
             lines.extend(["", f'{count}. {row["asset"] or row["subject"]} · {row["field"]}',
