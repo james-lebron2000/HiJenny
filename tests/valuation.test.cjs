@@ -39,3 +39,14 @@ test('opposing scenario deltas reconcile even when the total change is zero', ()
   assert.equal(rows[0].assumptions[0],'金额 -10 → -20');
   assert.equal(rows[2].assumptions.length,0);
 });
+
+test('as-of review checks manual and indexed disclosures against the same inclusive cutoff', () => {
+  const later=runInNewContext(source+'\nlaterDisclosures');
+  assert.deepEqual(Array.from(later({asOf:'2024-06-03'})),[]);
+  const issues=later({asOf:'2024-06-03',
+    deals:[{name:'On date',disclosed:'2024-06-03'},{name:'Later deal',disclosed:'2024-06-04'}],
+    disclosures:[{field:'Earlier terms',source_date:'2024-05-02'},{field:'Payment confirmed',source_date:'2026-04-30'}]});
+  assert.equal(issues.length,2);
+  assert.match(issues[0],/Later deal.*2024-06-04/);
+  assert.match(issues[1],/Payment confirmed.*2026-04-30/);
+});

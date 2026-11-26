@@ -13,6 +13,13 @@ function priceScenario(flows, rate) {
   return {presentValues,total};
 }
 
+function laterDisclosures(plan) {
+  return [
+    ...(plan.deals || []).filter(d=>d.disclosed>plan.asOf).map(d=>'手工可比交易「'+d.name+'」 · '+d.disclosed),
+    ...(plan.disclosures || []).filter(r=>r.source_date>plan.asOf).map(r=>'公开依据「'+r.field+'」 · '+r.source_date)
+  ];
+}
+
 function scenarioDifferences(plan) {
   return plan.flows.map((flow,index)=>{
     const [base,alternate]=flow.cases;
@@ -119,7 +126,9 @@ async function renderValuation(seq) {
     function show(v) {
       const totals=v.outputs.map(o=>o.total);
       const differences=scenarioDifferences(v);
+      const late=laterDisclosures(v);
       result.innerHTML=`<h2>买方风险调整净现值</h2><p>${esc(v.asOf)} · 百万 ${esc(v.currency)} · 年折现率 ${esc(v.rate)}%</p>
+        ${late.length?`<section class="card"><h3>本版含估值日后披露的依据</h3><ul>${late.map(line=>`<li>${esc(line)}</li>`).join('')}</ul></section>`:''}
         <table><caption>按现值差额的绝对值排序，差额为替代减基准</caption><thead><tr><th>现金流</th><th>基准现值</th><th>替代现值</th><th>差额</th></tr></thead><tbody>
         ${differences.map(({index:i,delta,assumptions})=>`<tr><th>${esc(v.flows[i].label)}<br><small>${esc(assumptions.join(' · ') || '金额、年份和概率相同')}</small></th>${v.outputs.map((o,j)=>`<td>${number(o.presentValues[i])}${scenarioSources(v,v.flows[i].cases[j]).map(r=>
           `<br><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.field)} · ${esc(r.source_date)}</a>`).join('')}</td>`).join('')}<td>${number(delta)}</td></tr>`).join('')}
@@ -136,6 +145,7 @@ async function renderValuation(seq) {
           '年折现率 '+v.rate+'% · '+v.basis,'参照交易及限制 '+(v.comparable || '未提供'),
           '关联问题 '+(v.question ? v.question.question_id+' '+v.question.question+' · '+v.question.status : '未关联'),
           '单笔现值 = 有符号金额 × 无条件发生概率 ÷ (1 + 年折现率)^年份'];
+        if (late.length) lines.push('', '本版含估值日后披露的依据', ...late);
         if (v.origin) lines.push('', '机会筛选快照 '+v.origin.snapshot_id, v.origin.asset, v.origin.rationale,
           v.origin.trial_title, sourceLink({id:v.origin.nct}), '检索时间 '+v.origin.retrieved);
         for (const r of v.disclosures || []) lines.push('', '公开交易依据 · '+disclosureText(r), r.url, '公开动态编号 '+r.id);
@@ -218,8 +228,10 @@ async function renderValuation(seq) {
     };
     form.onsubmit=e=>{
       e.preventDefault();collect();
-      if ((draft.disclosures || []).some(r=>r.source_date>draft.asOf)) {
-        result.textContent='有公开依据晚于估值日，请移除该记录或调整估值日。';return;
+      const late=laterDisclosures(draft);
+      if (late.length) {
+        result.textContent='以下披露晚于估值日 '+draft.asOf+'，请核对披露日、移除记录或调整估值日：'+late.join('；');
+        return;
       }
       if (!draft.name || !draft.basis || draft.flows.some(f=>!f.basis || !f.label)) {result.textContent='请填写现金流名称和假设依据。';return;}
       if (draft.deals.some(deal=>dealFields.some(([key,,type])=>type!=='number' && !deal[key]))) {
