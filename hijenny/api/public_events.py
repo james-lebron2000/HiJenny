@@ -88,6 +88,8 @@ def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
 
 
 def display(value):
+    if isinstance(value, dict) and "safety_summary" in value:
+        return json.dumps(value["safety_summary"], ensure_ascii=False, indent=2)
     if isinstance(value, dict) and "primary_outcomes" in value:
         return json.dumps(value["primary_outcomes"], ensure_ascii=False, indent=2)
     if isinstance(value, dict):

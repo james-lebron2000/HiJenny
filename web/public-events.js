@@ -38,6 +38,7 @@ function renderPublicEvents() {
   }
   function display(value) {
     if (value == null) return '未披露';
+    if (value.safety_summary) return (value.safety_summary.eventGroups || []).length+' 个安全性报告组';
     if (value.primary_outcomes) return value.primary_outcomes.map(m=>m.title).join('、');
     if (typeof value === 'object') return [value.date, {ACTUAL:'实际', ESTIMATED:'预计'}[value.type] || value.type].filter(Boolean).join(' · ');
     return String(value);
@@ -68,6 +69,19 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.category==='safety-summary') {
+          for (const [label,version] of [['本次归档',r.value],['上次归档',r.previous]]) {
+            const safety=version?.safety_summary;
+            if (!safety) continue;
+            const detail=document.createElement('details');
+            detail.innerHTML=`<summary>${label} · 安全性报告</summary>
+              <p>报告期 · ${esc(registryValue(safety.timeFrame))}</p>
+              <p>其他不良事件报告阈值（%） · ${esc(registryValue(safety.frequencyThreshold))}</p>
+              ${safety.description?'<p>'+esc(safety.description)+'</p>':''}
+              ${registryTable(safetyHeaders,safetySummary(safety))}`;
+            card.append(detail);
+          }
+        }
         if (r.category==='primary-outcomes') {
           for (const [label, version] of [['本次归档',r.value],['上次归档',r.previous]]) {
             for (const measure of version?.primary_outcomes || []) {

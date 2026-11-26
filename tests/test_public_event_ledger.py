@@ -197,3 +197,23 @@ def test_primary_result_revisions_keep_denominators_and_prior_snapshot(monkeypat
     measures[0]["type"] = "SECONDARY"
     removed, = check()
     assert removed["value"] is None and removed["previous"] == updated["value"]
+
+
+def test_archived_safety_keeps_event_group_denominators_and_zero(monkeypatch):
+    trial = {"id": "NCT03470922", "asset": "demo"}
+    group = {"id": "EG000", "seriousNumAffected": 0, "seriousNumAtRisk": 3}
+    module = {"frequencyThreshold": 0, "timeFrame": "30 days", "eventGroups": [group],
+              "seriousEvents": [{"term": "separate detail"}]}
+    data = {"protocolSection": {"identificationModule": {"nctId": trial["id"]},
+                                "statusModule": {"overallStatus": "COMPLETED", "lastUpdatePostDateStruct": {"date": "2026-02-01"}}},
+            "resultsSection": {"adverseEventsModule": module}}
+    monkeypatch.setattr(collector, "fetch", lambda _: data)
+    def safety(history):
+        return [r for r in collector.changes(collector.trial_records(trial), history, "2026-02-01")
+                if r.get("category") == "safety-summary"]
+    first, = safety([])
+    assert first["value"]["safety_summary"] == {k: module[k] for k in ("eventGroups","frequencyThreshold","timeFrame")}
+    assert not safety([first])
+    data["resultsSection"] = {}
+    removed, = safety([first])
+    assert removed["value"] is None and removed["previous"] == first["value"]

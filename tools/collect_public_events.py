@@ -110,7 +110,8 @@ def trial_records(trial):
     stop = STOP_STATUS.get(status["overallStatus"])
     reason = (status.get("whyStopped") or "").strip()
     fields[STOP_FIELD] = f"{stop} · {reason or '登记记录未提供原因'}" if stop else None
-    measures = (data.get("resultsSection") or {}).get("outcomeMeasuresModule", {}).get("outcomeMeasures", [])
+    results = data.get("resultsSection") or {}
+    measures = results.get("outcomeMeasuresModule", {}).get("outcomeMeasures", [])
     primary = []
     for m in measures:
         if m.get("type") == "PRIMARY":
@@ -120,10 +121,13 @@ def trial_records(trial):
             result["analyses"] = m.get("analyses", [])
             primary.append(result)
     fields["登记主要终点分组结果"] = {"primary_outcomes": primary} if primary else None
+    safety = results.get("adverseEventsModule") or {}
+    summary = {k: safety[k] for k in ("timeFrame", "frequencyThreshold", "description", "eventGroups") if k in safety}
+    fields["登记安全性分组汇总"] = {"safety_summary": summary} if summary else None
+    categories = {STOP_FIELD: "study-interruption", "登记主要终点分组结果": "primary-outcomes", "登记安全性分组汇总": "safety-summary"}
     for field, value in fields.items():
         yield dict(source="ClinicalTrials.gov", record=nct, subject=trial["asset"], asset=trial["asset"], region=None,
-                   **({"category": "study-interruption"} if field == STOP_FIELD else
-                      {"category": "primary-outcomes"} if field == "登记主要终点分组结果" else {}),
+                   **({"category": categories[field]} if field in categories else {}),
                    field=field, value=value, source_date=status["lastUpdatePostDateStruct"]["date"],
                    effective=None, url=f"https://clinicaltrials.gov/study/{nct}")
 
@@ -185,7 +189,7 @@ def changes(records, history, now):
     for record in records:
         key = record["source"], record["record"], record["field"]
         previous = latest.get(key)
-        if previous is None and record.get("category") in ("study-interruption", "primary-outcomes") and record["value"] is None:
+        if previous is None and record.get("category") in ("study-interruption", "primary-outcomes", "safety-summary") and record["value"] is None:
             continue
         if previous:
             if record["source"] == "Drugs@FDA":
