@@ -1,6 +1,7 @@
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报与临床登记。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
+    ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
     <label>地区<input name="region" placeholder="例如：中东"></label>
@@ -24,6 +25,8 @@ function renderPublicEvents() {
   async function load(reset) {
     if (reset) {
       query = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
+      const eventId = hashParams().get('event');
+      if (eventId) query.set('event_id', eventId);
       offset = 0; generation++; list.replaceChildren();
     }
     const request = generation;
@@ -44,6 +47,27 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.source==='ClinicalTrials.gov' && /^NCT[0-9]{8}$/.test(r.record)) {
+          const button = document.createElement('button');
+          button.className = 'btn'; button.type = 'button'; button.textContent = '核对登记并加入本机关注';
+          const feedback = document.createElement('p');
+          feedback.setAttribute('role','status');
+          button.onclick = async ()=>{
+            button.disabled = true;
+            feedback.textContent = '正在核对 '+r.record+'…';
+            try {
+              const item = await lookupWatchedTrial(r.record);
+              const value = (r.kind==='change'?display(r.previous)+' → ':'')+display(r.value);
+              await followTrial(item,new Date().toISOString(),{type:'public-event',snapshot:r.id,
+                field:r.field,value,created:r.observed,disclosed:r.source_date});
+              feedback.innerHTML = '已保存这条动态与试验的关联。<a href="#/watch">查看关注列表</a>';
+            } catch (err) {
+              feedback.textContent = '保存失败：'+err.message;
+              button.disabled = false;
+            }
+          };
+          card.append(button,feedback);
+        }
         list.append(card);
       }
       const reportQuery = new URLSearchParams(query);
