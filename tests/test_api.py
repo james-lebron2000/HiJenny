@@ -657,6 +657,11 @@ def test_bd_review_history_and_brief(client, env):
     assert record("reply", 1, note="wrong", locator="p1", document_id=foreign_doc).status_code == 422
     source = dict(locator="Table 1", document_id=doc)
     assert record("reply", 1, note="table received", **source).is_success
+    checkpoint = client.get(path + "/valuation-context").json()
+    assert checkpoint["status"] == "answered" and checkpoint["revision"] == 2
+    reply, = checkpoint["replies"]
+    assert reply["document_id"] == doc and reply["locator"] == "Table 1" and reply["note"] == "table received"
+    assert client.get(path.replace(project, other) + "/valuation-context").status_code == 404
     assert record("review", 2, decision="experiment", note="independent test required").is_success
     assert record("publish", 3, note="validation pending").is_success
     assert record("experiment_result", 4, note="result file reviewed", **source).is_success
