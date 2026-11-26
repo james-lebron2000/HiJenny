@@ -56,9 +56,10 @@ function meetingPublicationAlerts(version, checks, briefDate) {
 async function renderMedical() {
   setView('<section id="medical-meeting" class="research-home"><h1>准备专家会简报</h1><div id="meeting-body">正在读取本机底稿…</div></section>');
   const body = $('#meeting-body');
-  let runs, saved, checks, briefDates;
+  let runs, saved, checks, briefDates, meetingRuns;
   try {
     const allRuns=await briefStore('readonly', store=>store.getAll());
+    meetingRuns = allRuns.filter(r=>r.purpose==='medical-meeting').sort((a,b)=>b.created.localeCompare(a.created));
     checks=latestPublicationChecks(allRuns);
     briefDates=new Map(allRuns.map(r=>[r.id,r.created]));
     runs = allRuns.filter(r=>medicalSources(r).length)
@@ -81,6 +82,8 @@ async function renderMedical() {
     const selected = new Map((version?.refs || []).map(ref=>[ref.id,ref]));
     const affected=saved.filter(v=>v.confirmed).map(v=>({version:v,
       alerts:meetingPublicationAlerts(v,checks,briefDates.get(v.briefId))})).filter(row=>row.alerts.length);
+    const savedBriefIds = new Set(saved.map(v=>v.briefId));
+    const pending = meetingRuns.filter(r=>!savedBriefIds.has(r.id));
     const alerts=affected.find(row=>row.version.id===version?.id)?.alerts || [];
     const selectedIndex = r => Math.max(0,r.passages.findIndex(p=>p.text===selected.get(r.id)?.quote && p.label===selected.get(r.id)?.label));
     body.innerHTML = `<p>从已纳入的来源中挑选支持答复的原文，记录专家会要讨论的问题、医学复核意见和后续行动。</p>
@@ -91,6 +94,13 @@ async function renderMedical() {
         <input name="query" required maxlength="400" placeholder="例如 imatinib"></label>
       <p>会议问题保存在本浏览器。仅将公开检索词提交给 PubMed 和 ClinicalTrials.gov。核对来源并标记「纳入」后，即可带回原问题和引文。</p>
       <button class="btn primary" type="submit">检索证据并建立底稿</button></form></details>
+      ${pending.length ? `<section class="card"><h2>继续准备中的会议（${pending.length}）</h2>
+      ${pending.map(r=>{
+        const completed = r.steps.filter(step=>step.result);
+        const count = completed.reduce((n,step)=>n+step.result.items.length,0);
+        return `<p><a data-resume-meeting href="#/brief?version=${encodeURIComponent(r.id)}">${esc(r.question)}</a><br>
+          ${esc(fmtDate(r.created))} · 已完成 ${completed.length}/${r.steps.length} 个来源 · 取回 ${count} 条 · 已纳入 ${medicalSources(r).length} 条</p>`;
+      }).join('')}</section>` : ''}
       <button class="btn" data-nav="brief">打开研究底稿</button>
       ${affected.length ? `<section class="card"><h2>引文需要复查的已确认简报（${affected.length}）</h2>
       ${affected.map(row=>`<p><button type="button" class="btn" data-affected="${esc(row.version.id)}">${esc(row.version.question)} · ${esc(fmtDate(row.version.created))}</button> · 涉及 ${row.alerts.map(a=>esc(a.id)).join('、')}</p>`).join('')}</section>` : ''}
@@ -122,6 +132,9 @@ async function renderMedical() {
       <p role="status" id="meeting-status">${version ? esc((version.confirmed?'已确认':'草稿')+' · '+fmtDate(version.created)) : ''}</p></form>`
       : '<p>请先在研究底稿标记并保存至少一项纳入记录。</p>'}`;
     function switchAllowed() { return !dirty || confirm('放弃本页未保存的修改？'); }
+    for (const link of $$('[data-resume-meeting]',body)) link.onclick=event=>{
+      if (!switchAllowed()) event.preventDefault();
+    };
     $('#meeting-search',body).onsubmit = event => {
       event.preventDefault();
       const fields = event.currentTarget.elements;

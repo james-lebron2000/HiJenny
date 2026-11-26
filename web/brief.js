@@ -129,6 +129,7 @@ async function renderBrief() {
   const report = $('#brief-report', home);
   const form = $('#brief-plan', home);
   const startSearch = briefSeed?.startSearch === true;
+  let meetingPlan = startSearch;
   if (briefSeed) {
     for (const input of form.querySelectorAll('input')) input.value = typeof briefSeed==='string' ? briefSeed : briefSeed[input.id.slice(6)];
     briefSeed = '';
@@ -144,6 +145,14 @@ async function renderBrief() {
       `<option value="${esc(r.id)}">${esc(new Date(r.created).toLocaleString())} · ${esc(r.question)}</option>`).join('');
     if (run) history.value = run.id;
     return runs;
+  }
+  function rememberVersion() {
+    if (!home.isConnected) return;
+    const params = hashParams();
+    if (run) params.set('version', run.id);
+    else params.delete('version');
+    const query = params.toString();
+    window.history.replaceState(null, '', '#/brief' + (query ? '?' + query : ''));
   }
   function paint() {
     if (!run) { report.replaceChildren(); return; }
@@ -224,11 +233,13 @@ async function renderBrief() {
         const checked=await recheckBriefPublications(source);
         await put(checked);
         run=checked;
+        rememberVersion();
         await refreshHistory();
       } catch(err) {fail(err);}
       finally {busy=false;if (home.isConnected) paint();}
     };
     $('#brief-copy', home).onclick = () => {
+      meetingPlan = run.purpose === 'medical-meeting';
       $('#brief-question', form).value = run.question;
       for (const step of run.steps) $('#brief-' + step.source, form).value = step.query;
       $('#brief-question', form).focus();
@@ -320,6 +331,7 @@ async function renderBrief() {
     try {
       await saveReview();
       run = history.value ? await briefStore('readonly',store=>store.get(history.value)) : null;
+      rememberVersion();
       paint();
     } catch (err) { fail(err); }
   };
@@ -333,7 +345,10 @@ async function renderBrief() {
     try {
       await saveReview();
       run = {id:crypto.randomUUID(), created:new Date().toISOString(), question, steps, review:{}, note:''};
+      if (meetingPlan) run.purpose = 'medical-meeting';
       await put(run);
+      meetingPlan = false;
+      rememberVersion();
       await refreshHistory();
       paint();
       await execute();
