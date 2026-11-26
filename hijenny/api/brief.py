@@ -29,6 +29,7 @@ class Record(BaseModel):
     decision: Decision
     reason: Text = ""
     notices: list[Text] = Field(default_factory=list, max_length=200)
+    libraryOrigin: Text | None = None
     postedResult: bool = False
     passages: list[Passage] = Field(max_length=100)
 
@@ -91,7 +92,10 @@ def source_link(paragraph, record):
 @router.post("/api/research/brief.docx")
 def export_brief(brief: Brief):
     doc = Document()
-    serialized = brief.model_dump_json(exclude={"publicEvent"} if brief.publicEvent is None else set())
+    exclude = {"publicEvent": True} if brief.publicEvent is None else {}
+    if not any(r.libraryOrigin for step in brief.steps for r in step.records):
+        exclude["steps"] = {"__all__": {"records": {"__all__": {"libraryOrigin"}}}}
+    serialized = brief.model_dump_json(exclude=exclude)
     snapshot = hashlib.sha256(serialized.encode()).hexdigest()[:16]
     doc.add_heading("研究证据报告 · 供复核", 0)
     doc.add_paragraph(clean(brief.question))
@@ -150,6 +154,8 @@ def export_brief(brief: Brief):
     for r in records:
         entry = doc.add_paragraph(f"[{r.id}] {clean(r.title)}\n{r.decision} · {clean(r.reason) or '未填写理由'}\n")
         source_link(entry, r)
+        if r.libraryOrigin:
+            doc.add_paragraph(clean(r.libraryOrigin))
         for notice in r.notices:
             doc.add_paragraph("出版状态 · " + clean(notice))
     stream = BytesIO()

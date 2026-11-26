@@ -56,6 +56,19 @@ function libraryEvidence(item, matching) {
     ${passages.map(p=>`<p><strong>${esc(p.label)}</strong><br>${esc(p.text)}</p>`).join('') || `<p>${empty}</p>`}</details>`;
 }
 
+function libraryBrief(question, entries) {
+  const steps=[];
+  for (const source of ['pubmed','trials']) {
+    const items=entries.filter(item=>item.id.startsWith('NCT')===(source==='trials'))
+      .map(item=>({...item,passages:item.passages || []}));
+    if (!items.length) continue;
+    if (items.length>100) throw Error('每份研究报告每个来源最多收录 100 条，请缩小选区。');
+    const query=items.map(item=>source==='pubmed'?item.id+'[pmid]':item.id).join(' OR ');
+    steps.push({source,query,attempts:0,fromLibrary:true,result:{total:null,items}});
+  }
+  return {id:crypto.randomUUID(),created:new Date().toISOString(),question,steps,review:{},note:''};
+}
+
 function renderResearch() {
   setView(`<section class="research-home" lang="zh-CN"><h1>查文献与临床试验</h1>
     <p>输入公开药物名、适应症或检索式，查看数据库记录与原始来源。</p>
@@ -73,7 +86,7 @@ function renderResearch() {
     <button class="btn" type="button" id="make-brief">用这个主题整理多来源底稿 →</button>
     <div id="research-output" aria-live="polite"></div>
     <details id="public-library"><summary>我的公开资料收藏（本浏览器）</summary>
-    <label>按题名、编号、检索式或来源片段筛选 <input id="library-filter" type="search"></label><ul id="library-list"></ul><button class="btn" type="button" id="library-compare">对照已选试验的公布终点</button><div id="library-outcomes" aria-live="polite"></div></details>
+    <label>按题名、编号、检索式或来源片段筛选 <input id="library-filter" type="search"></label><ul id="library-list"></ul><button class="btn" type="button" id="library-compare">对照已选试验的公布终点</button><form id="library-brief"><label>围绕这些收藏要回答什么问题？<input name="question" required maxlength="400"></label><button class="btn" type="submit">用所选收藏创建研究底稿</button></form><div id="library-outcomes" aria-live="polite"></div></details>
     <button data-nav="projects" class="btn" type="button">进入资料包尽调工作区 →</button></section>`);
   $('#make-brief').onclick = () => { briefSeed = $('#research-query').value.trim(); nav('brief'); };
   const source = $('#research-source');
@@ -86,7 +99,7 @@ function renderResearch() {
   }
   source.onchange=updateFilters;updateFilters();
   const output = $('#research-output');
-  const chosenTrials = new Set();
+  const chosenRecords = new Set();
   function renderLibrary() {
     const filter = $('#library-filter').value.trim().toLowerCase();
     const list = $('#library-list');
@@ -94,7 +107,7 @@ function renderResearch() {
     for (const item of readPublicLibrary()) {
       const {visible,matching} = libraryMatches(item, filter);
       if (!visible) continue;
-      rows.push(`<li>${/^NCT[0-9]{8}$/.test(item.id)?`<label><input type="checkbox" data-compare-id="${esc(item.id)}" ${chosenTrials.has(item.id)?"checked":""}> ${esc(item.id)}</label>`:""}
+      rows.push(`<li><label><input type="checkbox" data-library-id="${esc(item.id)}" ${chosenRecords.has(item.id)?"checked":""}> ${esc(item.id)}</label>
         <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
         ${publicationNotices(item)}${libraryEvidence(item,matching)}<button class="btn sm" type="button" data-remove="${esc(item.id)}">移除</button></li>`);
     }
@@ -111,18 +124,33 @@ function renderResearch() {
   $('#library-list').onclick = event => {
     const id = event.target.closest('[data-remove]')?.dataset.remove;
     if (id && persist(readPublicLibrary().filter(item => item.id !== id))) {
-      chosenTrials.delete(id);$('#library-compare').textContent='对照已选试验的公布终点（'+chosenTrials.size+'）';$('#library-outcomes').replaceChildren();
+      chosenRecords.delete(id);$('#library-compare').textContent='对照已选试验的公布终点（'+[...chosenRecords].filter(id=>id.startsWith('NCT')).length+'）';$('#library-outcomes').replaceChildren();
     }
   };
   $('#library-list').onchange = event=>{
-    const input=event.target.closest('[data-compare-id]');
+    const input=event.target.closest('[data-library-id]');
     if (!input) return;
-    if (input.checked) chosenTrials.add(input.dataset.compareId); else chosenTrials.delete(input.dataset.compareId);
+    if (input.checked) chosenRecords.add(input.dataset.libraryId); else chosenRecords.delete(input.dataset.libraryId);
     $('#library-outcomes').replaceChildren();
-    $('#library-compare').textContent='对照已选试验的公布终点（'+chosenTrials.size+'）';
+    $('#library-compare').textContent='对照已选试验的公布终点（'+[...chosenRecords].filter(id=>id.startsWith('NCT')).length+'）';
   };
   $('#library-compare').onclick=()=>comparePostedResults($('#library-outcomes'),
-    readPublicLibrary().filter(item=>chosenTrials.has(item.id)));
+    readPublicLibrary().filter(item=>item.id.startsWith('NCT') && chosenRecords.has(item.id)));
+  $('#library-brief').onsubmit=async event=>{
+    event.preventDefault();
+    const form=event.currentTarget, button=form.querySelector('button');
+    const question=form.elements.question.value.trim();
+    const entries=readPublicLibrary().filter(item=>chosenRecords.has(item.id));
+    if (!question || !entries.length) {toast('请填写研究问题并勾选收藏记录。');return;}
+    if (button.disabled) return;
+    button.disabled=true;
+    try {
+      const run=libraryBrief(question,entries);
+      await briefStore('readwrite',store=>store.add(run));
+      if (form.isConnected) location.hash='#/brief?version='+encodeURIComponent(run.id);
+    } catch (err) {toast('创建底稿失败：'+err.message,'err');}
+    finally {button.disabled=false;}
+  };
   renderLibrary();
   function show(data) {
     output.innerHTML = researchResults(data);

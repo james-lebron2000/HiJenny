@@ -30,7 +30,7 @@ function validBackupRun(run) {
       typeof run.created!=='string' || !Number.isFinite(Date.parse(run.created)) ||
       !run.review || typeof run.review!=='object' || Array.isArray(run.review) || !Array.isArray(run.steps)) return false;
   return run.steps.every(s=>s && Object.hasOwn(briefSources,s.source) && typeof s.query==='string' &&
-    Number.isInteger(s.attempts) && (!s.result || (Number.isInteger(s.result.total) &&
+    Number.isInteger(s.attempts) && (!s.result || ((Number.isInteger(s.result.total) || (s.fromLibrary===true && s.result.total===null)) &&
     Array.isArray(s.result.items) && s.result.items.every(item=>item && typeof item.id==='string' &&
       /^(NCT[0-9]{8}|[0-9]+)$/.test(item.id) && typeof item.title==='string' && Array.isArray(item.passages) &&
       item.passages.every(p=>p && typeof p.text==='string' && typeof p.label==='string')))));
@@ -124,6 +124,10 @@ function retrievalHistory(step) {
     .filter(Boolean).join('；');
 }
 
+function libraryOrigin(item) {
+  return item.id+' · 原检索时间 '+(item.retrieved || '未记录')+' · 原检索式 '+(item.query || '未记录');
+}
+
 function briefText(run) {
   const lines = [run.question, '研究底稿 · 待专业复核', '版本 ' + run.id, '创建时间 ' + run.created];
   if (run.publicEvent) lines.push('发起底稿的公开动态编号 '+run.publicEvent);
@@ -136,10 +140,12 @@ function briefText(run) {
     }
     for (const id of missingExactPublications(step)) lines.push('本次未取回指定 PMID '+id);
     const items = step.result.items;
-    lines.push('检索时间 ' + retrievalHistory(step), '原检索命中 ' + step.result.total + '，已取回 ' + items.length);
+    if (step.fromLibrary) lines.push('从本机收藏选入 '+items.length+' 条，本次未执行数据库检索。');
+    else lines.push('检索时间 ' + retrievalHistory(step), '原检索命中 ' + step.result.total + '，已取回 ' + items.length);
     for (const item of items) {
       const decision = run.review[item.id] || '待复核';
       lines.push('', '[' + item.id + '] ' + item.title, decision, sourceLink(item));
+      if (step.fromLibrary) lines.push(libraryOrigin(item));
       lines.push(...(item.notices || []));
       if (run.reasons?.[item.id]) lines.push('筛选理由 '+run.reasons[item.id]);
       if (decision === '排除') continue;
@@ -244,12 +250,12 @@ async function renderBrief() {
       ${run.publicEvent?`<a href="#/public-events?event=${encodeURIComponent(run.publicEvent)}">查看发起底稿的公开动态</a>`:''}
       ${run.steps.map(step => `<section class="card"><h3>${briefSources[step.source]}</h3>
       <span>${esc(step.query)} · 已尝试 ${step.attempts} 次</span>
-      ${step.result ? `<p>原检索命中 ${step.result.total} 条，本版收录 ${step.result.items.length} 条；其中 ${step.result.items.filter(i=>!i.passages.length).length} 条缺少来源片段。</p>
+      ${step.result ? `<p>${step.fromLibrary?'从本机收藏选入，本次未执行数据库检索':'原检索命中 '+step.result.total+' 条'}，本版收录 ${step.result.items.length} 条；其中 ${step.result.items.filter(i=>!i.passages.length).length} 条缺少来源片段。</p>
         ${(step.recoveries || []).map(r=>`<p>单独补查 PMID ${esc(r.pmid)} · ${esc(fmtDate(r.time))} · <a href="#/brief?version=${encodeURIComponent(r.parent)}">查看补查前的底稿</a></p>`).join('')}
         ${missingExactPublications(step).map(id=>`<p>本次未取回指定 PMID ${esc(id)} · <a href="${esc(sourceLink({id}))}" target="_blank" rel="noopener noreferrer">核对 PubMed</a> <button class="btn" data-recover-pmid="${esc(id)}" ${busy?'disabled':''}>单独补查并保存新版</button></p>`).join('')}
         ${step.result.items.map(item => `<details><summary>${esc(item.title)}</summary>
         <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.id)} · 核对原始记录</a>
-        ${publicationNotices(item)}<p>${esc(item.date)} · ${esc(item.detail)}</p>
+        ${step.fromLibrary?'<p>'+esc(libraryOrigin(item))+'</p>':''}${publicationNotices(item)}<p>${esc(item.date)} · ${esc(item.detail)}</p>
         ${item.passages.map(p=>`<p><b>${esc(p.label)}</b><br>${esc(p.text)}</p>`).join('')}
         <label>筛选判断 <select data-review="${esc(item.id)}" ${busy?'disabled':''}>
         ${['待复核','纳入','排除'].map(v=>option(v,run.review[item.id] || '待复核',v)).join('')}</select></label><label>筛选理由（可选）<textarea data-reason="${esc(item.id)}" maxlength="2000" ${busy?'disabled':''}>${esc(run.reasons?.[item.id] || '')}</textarea></label></details>`).join('')}`
@@ -327,7 +333,7 @@ async function renderBrief() {
       publicEvent = run.publicEvent;
       meetingPlan = run.purpose === 'medical-meeting';
       $('#brief-question', form).value = run.question;
-      for (const step of run.steps) $('#brief-' + step.source, form).value = step.query;
+      for (const source of Object.keys(briefSources)) $('#brief-'+source,form).value=run.steps.find(step=>step.source===source)?.query || '';
       $('#brief-question', form).focus();
     };
     const resume = $('#brief-resume', home);
@@ -349,9 +355,10 @@ async function renderBrief() {
         await saveReview();
         const saved=await briefStore('readonly',store=>store.get(id));
         const payload={id,publicEvent:saved.publicEvent,question:saved.question,created:saved.created,note:saved.note,publicationCheck:saved.publicationCheck || [],conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
-          source:step.source,query:step.query,retrieved:retrievalHistory(step),total:step.result?.total ?? null,error:step.error || '',
+          source:step.source,query:step.query,retrieved:step.fromLibrary?'见逐条收藏记录':retrievalHistory(step),total:step.result?.total ?? null,
+          error:step.fromLibrary?'从本机收藏选入 '+step.result.items.length+' 条，本次未执行数据库检索。':step.error || '',
           records:(step.result?.items || []).map(item=>({
-            id:item.id,title:item.title,date:item.date || '',notices:item.notices || [],decision:saved.review[item.id] || '待复核',
+            id:item.id,title:item.title,date:item.date || '',libraryOrigin:step.fromLibrary?libraryOrigin(item):undefined,notices:item.notices || [],decision:saved.review[item.id] || '待复核',
             reason:saved.reasons?.[item.id] || '',postedResult:!!item.postedResult,
             passages:saved.review[item.id]==='纳入'?item.passages:[]
           }))
