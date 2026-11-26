@@ -56,7 +56,9 @@ def records(target, fetch):
         raise ValueError("Unverified jRCT cross-registration")
 
     def date(label):
-        return datetime.strptime(field(label).replace(".", ""), "%b %d, %Y").date().isoformat()
+        text = field(label).replace(".", "")
+        month, remainder = text.split(" ", 1)
+        return datetime.strptime(month[:3] + " " + remainder, "%b %d, %Y").date().isoformat()
 
     updated = date("Last modified on")
     registered = date("Date of registration")
