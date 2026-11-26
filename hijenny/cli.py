@@ -349,7 +349,9 @@ def cmd_pilot_progress(args: argparse.Namespace) -> int:
 
 def cmd_pilot_metrics(args: argparse.Namespace) -> int:
     with store.session_scope() as session:
-        print(json.dumps(store.pilot_metrics(session, args.since), ensure_ascii=False, indent=2))
+        metrics = store.pilot_metrics(session, args.since)
+        metrics["交付与客户验收"] = pilot_sales.delivery_metrics(session, args.since)
+        print(json.dumps(metrics, ensure_ascii=False, indent=2))
     return 0
 
 

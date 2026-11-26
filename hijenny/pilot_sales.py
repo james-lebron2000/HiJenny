@@ -2,12 +2,12 @@
 from datetime import datetime, timezone
 from hashlib import sha256
 
-from sqlalchemy import ForeignKey, String, select, text
+from sqlalchemy import ForeignKey, String, func, select, text
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hijenny import store
-from hijenny.db import Base, PilotInquiry
+from hijenny.db import Base, PilotInquiry, PilotProgress
 
 
 class PilotAssignment(Base):
@@ -79,6 +79,37 @@ def deliveries(session, receipt):
     records = session.scalars(select(PilotDelivery).where(PilotDelivery.receipt == receipt)
                               .order_by(PilotDelivery.recorded_at))
     return [{c.name: getattr(row, c.name) for c in PilotDelivery.__table__.columns} for row in records]
+
+
+def delivery_metrics(session, since=None):
+    """Use the intake cohort for both sales and delivery outcomes."""
+    deliveries = select(
+        PilotDelivery.receipt.label("receipt"), PilotDelivery.outcome.label("outcome"),
+        func.row_number().over(partition_by=PilotDelivery.receipt,
+                               order_by=(PilotDelivery.recorded_at.desc(), PilotDelivery.version.desc())).label("rank"),
+    ).join(PilotInquiry, PilotInquiry.receipt == PilotDelivery.receipt)
+    if since:
+        deliveries = deliveries.where(PilotInquiry.created_at >= since.isoformat())
+    versions = deliveries.subquery()
+    latest = {"待客户反馈": 0, "需返工": 0, "已验收": 0}
+    for status, count in session.execute(select(versions.c.outcome, func.count()).where(versions.c.rank == 1)
+                                         .group_by(versions.c.outcome)):
+        latest[status or "待客户反馈"] = count
+
+    accepted = select(versions.c.receipt).where(versions.c.outcome == "已验收").distinct().subquery()
+
+    def accepted_with_stage(stage):
+        return session.scalar(select(func.count(func.distinct(PilotProgress.receipt))).where(
+            PilotProgress.receipt.in_(select(accepted.c.receipt)), PilotProgress.stage == stage))
+
+    return {
+        "有交付记录的受理编号数": sum(latest.values()),
+        "交付版本数": session.scalar(select(func.count()).select_from(versions)),
+        "按最近交付版本统计的受理编号数": latest,
+        "至少一版已验收的受理编号数": session.scalar(select(func.count()).select_from(accepted)),
+        "既登记下单又有验收的受理编号数": accepted_with_stage("已下单"),
+        "既登记回款又有验收的受理编号数": accepted_with_stage("已回款"),
+    }
 
 
 def assign(session, receipt, owner, due, action):

@@ -152,3 +152,33 @@ def test_delivery_versions_preserve_acceptance_and_retry_safely(tmp_path, monkey
         assert [r["outcome"] for r in rows] == ["需返工", "已验收"]
         assert rows[0]["digest"] != rows[1]["digest"]
         assert not store.list_pilot_inquiries(s, receipt)[0]["progress"]
+
+
+def test_delivery_metrics_keep_revisions_orders_and_cohort_distinct(tmp_path, monkeypatch):
+    from datetime import date
+    from hijenny import pilot_sales
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "metrics.db")
+    monkeypatch.setattr(store, "_ENGINE", None)
+    monkeypatch.setattr(store, "_SESSION_FACTORY", None)
+    file = tmp_path / "synthetic.txt"
+    file.write_text("synthetic")
+    with store.session_scope() as s:
+        fields = dict(email="pilot@example.invalid", stage="II 期", pages="待确认", meeting="2099-01-01", deployment="待讨论")
+        a, b = [store.submit_pilot_inquiry(s, str(uuid4()), fields)["receipt"] for _ in range(2)]
+    for receipt, version, outcome in [(a, "v1", "需返工"), (a, "v2", "已验收"), (a, "v3", None), (b, "v1", "需返工")]:
+        with store.session_scope() as s:
+            pilot_sales.delivery_record(s, receipt, version, file, "synthetic")
+        if outcome:
+            with store.session_scope() as s:
+                pilot_sales.delivery_feedback(s, receipt, version, outcome, "测试", "synthetic")
+    with store.session_scope() as s:
+        for stage in ("已下单", "已下单"):
+            store.record_pilot_progress(s, a, stage, "synthetic")
+        store.record_pilot_progress(s, b, "已回款", "synthetic")
+        metrics = pilot_sales.delivery_metrics(s)
+        assert metrics["有交付记录的受理编号数"] == 2 and metrics["交付版本数"] == 4
+        assert metrics["按最近交付版本统计的受理编号数"] == {"待客户反馈": 1, "需返工": 1, "已验收": 0}
+        assert metrics["至少一版已验收的受理编号数"] == metrics["既登记下单又有验收的受理编号数"] == 1
+        assert metrics["既登记回款又有验收的受理编号数"] == 0
+        assert pilot_sales.delivery_metrics(s, date(9999, 1, 1))["交付版本数"] == 0
