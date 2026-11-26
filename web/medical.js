@@ -7,7 +7,7 @@ const meetingFields = {expert:'讨论对象或专业方向', question:'外部医
 
 function medicalSources(run) {
   return run.steps.flatMap(step => (step.result?.items || []).filter(item => run.review[item.id] === '纳入')
-    .map(item => ({id:item.id, title:item.title, date:item.date, authors:item.authors || [], passages:item.passages || [], retrieved:step.retrieved})));
+    .map(item => ({id:item.id, title:item.title, notices:item.notices || [], date:item.date, authors:item.authors || [], passages:item.passages || [], retrieved:step.retrieved})));
 }
 
 function meetingText(v) {
@@ -15,7 +15,7 @@ function meetingText(v) {
   for (const [key,label] of Object.entries(meetingFields)) lines.push('',label,v[key] || '待补充');
   lines.push('', '支持本次答复的证据');
   for (const ref of v.refs) {
-    lines.push('',ref.title,sourceLink(ref), '来源日期 '+(ref.date || '未提供'), '检索时间 '+ref.retrieved,ref.label,ref.quote);
+    lines.push('',ref.title,sourceLink(ref), '来源日期 '+(ref.date || '未提供'), '检索时间 '+ref.retrieved,ref.label,ref.quote,...(ref.notices || []));
   }
   for (const c of v.conflicts || []) {
     lines.push('', '相关证据分歧 · '+c.status, '底稿复核人 '+c.reviewer,c.note,
@@ -57,6 +57,7 @@ async function renderMedical() {
       <fieldset class="card"><legend>支持本次答复的原文</legend>
       ${sourceRecords.map((r,i)=>`<section><label><input type="checkbox" data-cite="${i}" ${selected.has(r.id)?'checked':''}> ${esc(r.title)}</label>
         <a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.id)} · 核对原始记录</a>
+        ${publicationNotices(r)}
         ${r.authors?.length ? `<details><summary>论文署名作者（${r.authors.length}）</summary><p>${esc(r.authors.join('，'))}</p></details>` : ''}
         ${r.passages.length ? `<label>引文片段<select data-passage="${i}">
           ${r.passages.map((p,j)=>option(String(j),String(selectedIndex(r)),p.label+' · '+p.text.slice(0,95))).join('')}</select></label>
@@ -111,7 +112,7 @@ async function renderMedical() {
         const selected=form.querySelector('[data-passage="'+index+'"]');
         if (!selected) continue;
         const passage=r.passages[Number(selected.value)];
-        refs.push({id:r.id,title:r.title,date:r.date,retrieved:r.retrieved,label:passage.label,quote:passage.text});
+        refs.push({id:r.id,title:r.title,notices:r.notices || [],date:r.date,retrieved:r.retrieved,label:passage.label,quote:passage.text});
       }
       const status=$('#meeting-status',body);
       if (!fields.question || !refs.length) { status.textContent='请填写医学问题，并选择至少一个有原文的来源。'; return; }

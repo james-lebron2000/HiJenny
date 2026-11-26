@@ -95,5 +95,7 @@ def export_study(plan: Study):
         url = f"https://clinicaltrials.gov/study/{ref.id}" if ref.id.startswith("NCT") else f"https://pubmed.ncbi.nlm.nih.gov/{ref.id}/"
         doc.add_paragraph(f"{url}\n来源日期：{clean(ref.date or '') or '未提供'} · 检索时间：{clean(ref.retrieved or '') or '未提供'}")
         doc.add_paragraph(clean(ref.label))
+        for notice in ref.notices:
+            doc.add_paragraph("出版状态 · " + clean(notice))
         doc.add_paragraph(clean(ref.quote))
     return word_download(doc, f"HiJenny-{plan.kind}-{plan.id}.docx")

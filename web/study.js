@@ -28,7 +28,7 @@ function studySummary(v) {
     ...(v.conflicts || []).flatMap((c,i)=>['','会议证据分歧 '+(i+1)+' · '+c.status,'底稿复核人 '+c.reviewer,c.note,
       sourceLink({id:c.left}),sourceLink({id:c.right}),'本研究的处理安排 · '+(c.plan || '待填写')]),
     '', '来源会议版本 '+(v.meetingId || '独立起草'),
-    ...v.refs.flatMap(r=>[r.title,sourceLink(r),r.label,r.quote,''])].join('\n');
+    ...v.refs.flatMap(r=>[r.title,sourceLink(r),r.label,r.quote,...(r.notices || []),''])].join('\n');
 }
 function renderStudy() {
   const versions = () => Object.keys(localStorage).filter(k=>k.startsWith(studyPrefix))
@@ -52,7 +52,7 @@ function renderStudy() {
         ${versions().map(v=>option(v.id,base?.id,v.kind+' · '+v.values.question+' · '+fmtDate(v.created))).join('')}</select></label>
       <button type="button" id="study-new" class="btn">新建研究</button>
       <form id="study-form"><label>交付形式<select id="study-kind">${option('RWE',draft.kind,'真实世界研究方案')}${option('IIT',draft.kind,'研究者发起研究概念书')}</select></label>
-      ${draft.refs.length?`<details><summary>继承自会议的引文（${draft.refs.length}）</summary>${draft.refs.map(r=>`<p><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></p><blockquote>${esc(r.quote)}</blockquote>`).join('')}</details>`:''}
+      ${draft.refs.length?`<details><summary>继承自会议的引文（${draft.refs.length}）</summary>${draft.refs.map(r=>`<p><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></p>${publicationNotices(r)}<blockquote>${esc(r.quote)}</blockquote>`).join('')}</details>`:''}
       ${(draft.conflicts || []).map((c,i)=>`<fieldset class="card"><legend>会议证据分歧 ${i+1} · ${esc(c.status)}</legend>
         <p>${esc(c.note)} · 底稿复核人 ${esc(c.reviewer)}</p>
         <p>${[c.left,c.right].map(id=>`<a href="${esc(sourceLink({id}))}" target="_blank" rel="noopener noreferrer">${esc(id)}</a>`).join(' · ')}</p>

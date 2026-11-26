@@ -123,3 +123,17 @@ def test_filtered_pubmed_queries_preserve_boolean_scope_and_date_range():
         build("pubmed", year_from=2024, year_to=2023)
     with pytest.raises(HTTPException):
         build("trials", year_from=2018)
+
+
+def test_publication_notice_preserves_direction_and_missing_link():
+    from xml.etree import ElementTree
+    from hijenny.api.research import publication_notices
+
+    citation = ElementTree.fromstring("""<MedlineCitation><CommentsCorrectionsList>
+      <CommentsCorrections RefType="RetractionIn"><PMID>123</PMID></CommentsCorrections>
+      <CommentsCorrections RefType="ErratumFor"><RefSource>Original citation</RefSource></CommentsCorrections>
+      <CommentsCorrections RefType="CommentOn"><PMID>345</PMID></CommentsCorrections>
+      </CommentsCorrectionsList></MedlineCitation>""")
+    assert publication_notices(citation, ["Retracted Publication"]) == [
+        "PubMed 文献类型 · 已撤稿文献", "本文已有撤稿通知 · https://pubmed.ncbi.nlm.nih.gov/123/",
+        "本记录是更正通知，所涉原文 · Original citation"]

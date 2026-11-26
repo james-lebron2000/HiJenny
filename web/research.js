@@ -16,6 +16,13 @@ function sourceLink(item) {
   return '';
 }
 
+function publicationNotices(item) {
+  return (item.notices || []).map(notice=>{
+    const url=notice.match(/https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/[0-9]+\/$/)?.[0];
+    return `<p><strong>出版状态</strong> · ${esc(url ? notice.slice(0,-url.length) : notice)}${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">核对关联记录</a>` : ''}</p>`;
+  }).join('');
+}
+
 function researchResults(data) {
 
   return `<h2>${esc(data.query)}</h2><p>${data.source === 'guidelines' ? 'PubMed 指南文献' : (data.source === 'pubmed' ? 'PubMed' : 'ClinicalTrials.gov')} · 共 ${esc(data.total)} 条，展示 ${data.items.length} 条</p>
@@ -25,6 +32,7 @@ function researchResults(data) {
     ${!data.items.length?'<p>没有找到记录。可调整年份、文献类型或检索词。</p>':''}
     <ol class="research-results">${data.items.map(item => `<li><label><input type="checkbox" class="pick-record" value="${esc(item.id)}"> 选择</label> <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
     <p>${esc([item.id, item.detail, item.date].filter(Boolean).join(' · '))}</p>
+    ${publicationNotices(item)}
     ${data.source !== 'trials' ? '<p>文献类型 · '+esc((item.publication_types || []).join(' / ') || '未提供')+'</p>' : ''}
     <details><summary>查看来源片段</summary>${item.passages.length ? item.passages.map(p =>
       `<p><strong>${esc(p.label)}</strong><br>${esc(p.text)}</p>`).join('') : '<p>该记录未提供摘要。</p>'}</details>
@@ -69,7 +77,7 @@ function renderResearch() {
     const entries = readPublicLibrary().filter(item =>
       [item.title, item.detail, item.query, item.id].join(' ').toLowerCase().includes(filter));
     list.innerHTML = entries.map(item => `<li>${/^NCT[0-9]{8}$/.test(item.id)?`<label><input type="checkbox" data-compare-id="${esc(item.id)}" ${chosenTrials.has(item.id)?"checked":""}> ${esc(item.id)}</label>`:""}<a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
-      <button class="btn sm" type="button" data-remove="${esc(item.id)}">移除</button></li>`).join('') || '<li>暂无匹配记录</li>';
+      ${publicationNotices(item)}<button class="btn sm" type="button" data-remove="${esc(item.id)}">移除</button></li>`).join('') || '<li>暂无匹配记录</li>';
   }
   function persist(entries) {
     try {
@@ -147,14 +155,14 @@ function renderResearch() {
       if (!picked.size) { toast('请先勾选需要收藏的记录。'); return; }
       const entries = new Map(readPublicLibrary().map(item => [item.id, item]));
       for (const item of data.items.filter(item => picked.has(item.id))) {
-        entries.set(item.id, {id:item.id, title:item.title, detail:item.detail, query:data.effective_query || data.query});
+        entries.set(item.id, {id:item.id, title:item.title, detail:item.detail, notices:item.notices || [], query:data.effective_query || data.query});
       }
       if (persist([...entries.values()])) toast('记录已加入本浏览器收藏。');
     };
     const save = $('#save-search', output);
     if (save) save.onclick = () => {
       const lines = [data.query, data.source, data.retrieved, '实际检索式 '+(data.effective_query || data.query), '数据库命中 '+data.total+' · 取回 '+data.items.length, '', ...data.items.map(i =>
-        [i.title, [i.id, i.date, i.detail].filter(Boolean).join(' · '), i.url, ''].join('\n'))];
+        [i.title, [i.id, i.date, i.detail].filter(Boolean).join(' · '), i.url, ...(i.notices || []), ''].join('\n'))];
       const url = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/plain;charset=utf-8'}));
       const link = document.createElement('a');
       link.href = url; link.download = 'HiJenny-search.txt'; link.click();

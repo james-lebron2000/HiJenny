@@ -27,6 +27,7 @@ class Record(BaseModel):
     date: Text = ""
     decision: Decision
     reason: Text = ""
+    notices: list[Text] = Field(default_factory=list, max_length=200)
     postedResult: bool = False
     passages: list[Passage] = Field(max_length=100)
 
@@ -121,6 +122,8 @@ def export_brief(brief: Brief):
         doc.add_heading(clean(r.title), 2)
         doc.add_paragraph(f"{r.id} · 来源日期 {clean(r.date) or '未提供'}")
         source_link(doc.add_paragraph(), r)
+        for notice in r.notices:
+            doc.add_paragraph("出版状态 · " + clean(notice))
         doc.add_paragraph(f"纳入理由：{clean(r.reason) or '未填写'}")
         if not r.passages:
             doc.add_paragraph("该记录缺少来源片段。")
@@ -131,6 +134,8 @@ def export_brief(brief: Brief):
     for r in records:
         entry = doc.add_paragraph(f"[{r.id}] {clean(r.title)}\n{r.decision} · {clean(r.reason) or '未填写理由'}\n")
         source_link(entry, r)
+        for notice in r.notices:
+            doc.add_paragraph("出版状态 · " + clean(notice))
     stream = BytesIO()
     doc.save(stream)
     return Response(stream.getvalue(), media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

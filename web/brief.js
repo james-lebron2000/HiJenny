@@ -57,6 +57,7 @@ function briefText(run) {
     for (const item of items) {
       const decision = run.review[item.id] || '待复核';
       lines.push('', '[' + item.id + '] ' + item.title, decision, sourceLink(item));
+      lines.push(...(item.notices || []));
       if (run.reasons?.[item.id]) lines.push('筛选理由 '+run.reasons[item.id]);
       if (decision === '排除') continue;
       lines.push([item.date, item.detail].filter(Boolean).join(' · '));
@@ -119,7 +120,7 @@ async function renderBrief() {
       ${step.result ? `<p>共命中 ${step.result.total} 条，已取回 ${step.result.items.length} 条；其中 ${step.result.items.filter(i=>!i.passages.length).length} 条缺少来源片段。</p>
         ${step.result.items.map(item => `<details><summary>${esc(item.title)}</summary>
         <a href="${esc(sourceLink(item))}" target="_blank" rel="noopener noreferrer">${esc(item.id)} · 核对原始记录</a>
-        <p>${esc(item.date)} · ${esc(item.detail)}</p>
+        ${publicationNotices(item)}<p>${esc(item.date)} · ${esc(item.detail)}</p>
         ${item.passages.map(p=>`<p><b>${esc(p.label)}</b><br>${esc(p.text)}</p>`).join('')}
         <label>筛选判断 <select data-review="${esc(item.id)}" ${busy?'disabled':''}>
         ${['待复核','纳入','排除'].map(v=>option(v,run.review[item.id] || '待复核',v)).join('')}</select></label><label>筛选理由（可选）<textarea data-reason="${esc(item.id)}" maxlength="2000" ${busy?'disabled':''}>${esc(run.reasons?.[item.id] || '')}</textarea></label></details>`).join('')}`
@@ -198,7 +199,7 @@ async function renderBrief() {
         const payload={id,question:saved.question,created:saved.created,note:saved.note,conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
           source:step.source,query:step.query,retrieved:step.retrieved || '',total:step.result?.total ?? null,error:step.error || '',
           records:(step.result?.items || []).map(item=>({
-            id:item.id,title:item.title,date:item.date || '',decision:saved.review[item.id] || '待复核',
+            id:item.id,title:item.title,date:item.date || '',notices:item.notices || [],decision:saved.review[item.id] || '待复核',
             reason:saved.reasons?.[item.id] || '',postedResult:!!item.postedResult,
             passages:saved.review[item.id]==='纳入'?item.passages:[]
           }))

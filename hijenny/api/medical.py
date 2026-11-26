@@ -22,6 +22,7 @@ class Reference(BaseModel):
     date: Text | None = None
     retrieved: Text | None = None
     label: Text
+    notices: list[Text] = Field(default_factory=list, max_length=200)
     quote: str = Field(min_length=1, max_length=64000)
 
 
@@ -108,7 +109,7 @@ def export_meeting(meeting: Meeting):
     section("请专家讨论", [meeting.discussion or "待补充"])
     for index, ref in enumerate(meeting.refs, 1):
         section(f"支持引文 {index} · {ref.id}", [ref.title, "来源日期：" + (ref.date or "未提供"),
-                "检索时间：" + (ref.retrieved or "未提供"), ref.label, ref.quote], [("查看原始记录", reference_url(ref.id))])
+                "检索时间：" + (ref.retrieved or "未提供"), *ref.notices, ref.label, ref.quote], [("查看原始记录", reference_url(ref.id))])
     for index, c in enumerate(meeting.conflicts, 1):
         section(f"引文涉及的证据分歧 {index}", [c.status, "底稿复核人：" + c.reviewer, c.note,
                 "比较来源：" + c.left + " / " + c.right],
