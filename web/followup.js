@@ -71,13 +71,19 @@ async function renderFollowup(seq) {
   const cols = Object.keys(bdColumns);
   const reference = quote && {asset:state.project?.asset_name || quote.trial_key || '当前项目', population:quote.population,
     method:quote.assessment_method, endpoint:quote.field_name, value:evidenceValue(quote), limits:'原文口径；跨试验差异须复核'};
+  const valuationChoices=(selected)=>valuations.map(v=>option(v.id,selected,
+    v.name+' · '+fmtDate(v.created)+' · '+v.id.slice(0,8))).join('');
   function cells(row) { return cols.map(k => `<td>${esc(row[k] || '待核')}</td>`).join(''); }
   setView(`${queue}<section class="card bd"><div class="card-head"><h2>问题与来源</h2></div>
     <p>${esc(q.question)}</p><a class="btn sm" href="#/valuation?project=${encodeURIComponent(project)}&question=${encodeURIComponent(id)}">评估此问题对交易估值的影响</a>${quote ? `<blockquote>${esc(quote.quote)} · ${evidenceLink(quote)}</blockquote>` : ''}<details><summary>查看关联证据（${sources.length}）</summary>${sources.map(e => '<p>'+evidenceLink(e)+'</p>').join('')}</details></section>
     ${valuations.length?`<section class="card bd"><h2>此问题关联的本机估值版本（${valuations.length}）</h2>
     <ol>${valuations.map(v=>`<li><a href="#/valuation?${esc(new URLSearchParams({project,question:id,version:v.id}).toString())}">${esc(v.name)} · ${esc(fmtDate(v.created))}</a>
       <p>估值日 ${esc(v.asOf)} · 百万 ${esc(v.currency)} · 基准现值 ${esc(v.outputs[0].total.toLocaleString('zh-CN',{maximumFractionDigits:4}))}
-      · 替代现值 ${esc(v.outputs[1].total.toLocaleString('zh-CN',{maximumFractionDigits:4}))} · 保存时问题状态 ${esc(v.question.status)}</p></li>`).join('')}</ol></section>`:''}
+      · 替代现值 ${esc(v.outputs[1].total.toLocaleString('zh-CN',{maximumFractionDigits:4}))} · 保存时问题状态 ${esc(v.question.status)}</p></li>`).join('')}</ol>
+    ${valuations.length>1?`<details id="bd-valuation-compare"><summary>比较两次估值</summary>
+    <label>参照版本<select id="bd-val-before">${valuationChoices(valuations.find(v=>v.id===valuations[0].parent)?.id || valuations[1].id)}</select></label>
+    <label>比较版本<select id="bd-val-after">${valuationChoices(valuations[0].id)}</select></label>
+    <div id="bd-val-difference" aria-live="polite"></div></details>`:''}</section>`:''}
     <section class="card bd"><h2>可比资产表</h2><div class="bd-scroll"><table><thead><tr>${Object.values(bdColumns).map(x=>'<th>'+x+'</th>').join('')}<th>来源</th></tr></thead><tbody>
     ${reference ? '<tr>'+cells(reference)+'<td>'+evidenceLink(quote)+'</td></tr>' : ''}
     ${rows.map(r=>'<tr>'+cells(r)+'<td>'+sourceLink(r)+'</td></tr>').join('')}</tbody></table></div></section>
@@ -89,6 +95,29 @@ async function renderFollowup(seq) {
     <div id="bd-fields"></div><label>经办人<input name="actor" required maxlength="120"></label>
     <button class="btn primary" type="submit">保存记录</button> <a href="#/report?project=${esc(project)}">查看 Decision Brief →</a><p role="status"></p></form></section>`);
   bindQueue();
+  const comparison=$('#bd-valuation-compare');
+  if (comparison) {
+    const before=$('#bd-val-before'), after=$('#bd-val-after'), output=$('#bd-val-difference');
+    const amount=n=>n.toLocaleString('zh-CN',{maximumFractionDigits:4});
+    function compare() {
+      const a=valuations.find(v=>v.id===before.value), b=valuations.find(v=>v.id===after.value);
+      if (a.id===b.id) {output.textContent='请选择两个不同的估值版本。';return;}
+      const comparable=a.currency===b.currency && a.asOf===b.asOf;
+      const heading=v=>esc(v.asOf)+' · 百万 '+esc(v.currency)+' · 折现率 '+esc(v.rate)+'%';
+      const evidence=(x,y)=> (x.disclosures || []).filter(r=>!(y.disclosures || []).some(s=>s.id===r.id))
+        .map(r=>`<li>${esc(r.asset || r.subject)} · ${esc(r.field)} · ${esc(r.value)} · <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source_date)} 披露</a></li>`).join('');
+      const added=evidence(b,a), removed=evidence(a,b);
+      output.innerHTML=`<p>参照版本：${heading(a)}<br>比较版本：${heading(b)}</p>
+        ${comparable?'':'<p>两版的估值日或币种不同，以下按各自口径列示。</p>'}
+        <div class="bd-scroll"><table><thead><tr><th>净现值</th><th>参照版本</th><th>比较版本</th>${comparable?'<th>比较减参照</th>':''}</tr></thead>
+        <tbody>${scenarioNames.map((name,i)=>`<tr><th>${name}情景</th><td>${amount(a.outputs[i].total)}</td><td>${amount(b.outputs[i].total)}</td>
+        ${comparable?`<td>${amount(b.outputs[i].total-a.outputs[i].total)}</td>`:''}</tr>`).join('')}</tbody></table></div>
+        ${added?`<h3>比较版本新增的公开依据</h3><ul>${added}</ul>`:''}
+        ${removed?`<h3>比较版本移出的公开依据</h3><ul>${removed}</ul>`:''}`;
+    }
+    before.onchange=after.onchange=compare;
+    compare();
+  }
   const form = $('#bd-form');
   const select = form.elements.kind;
   const preferred = {request:'request', reply:'reply', record:'reply', review:'review', experiment:'experiment_result', publish:'publish'}[stages.get(id)];
