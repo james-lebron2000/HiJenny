@@ -122,12 +122,39 @@ function watchCalendar(events, now=new Date(), reminderDays=0) {
   }).join('\r\n')+'\r\n';
 }
 
+function watchRows() {
+  return Object.keys(localStorage).filter(k=>k.startsWith(watchPrefix))
+    .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>a.id.localeCompare(b.id));
+}
+
+async function readWatchBackup(file) {
+  const backup=JSON.parse(await file.text());
+  if (backup.format!=='HiJenny-trial-watch' || backup.version!==1 || !Array.isArray(backup.rows) ||
+      backup.sha256!==await browserBackupDigest(backup.rows)) throw Error('关注列表备份格式或校验失败');
+  const ids=new Set();
+  for (const row of backup.rows) {
+    watchKey(row.id);
+    if (ids.has(row.id) || typeof row.title!=='string' || !row.fields || typeof row.fields!=='object' ||
+        !Array.isArray(row.changes) || !row.changes.every(c=>c && Array.isArray(c.fields) &&
+          c.fields.every(f=>f && typeof f.name==='string')) ||
+        (row.origins && (!Array.isArray(row.origins) || !row.origins.every(o=>o && typeof o.snapshot==='string'))))
+      throw Error('关注记录格式无效');
+    ids.add(row.id);
+  }
+  return backup.rows;
+}
+
 function renderWatch() {
   setView(`<section id="trial-watch" class="research-home"><h1>试验关注列表</h1>
     <p>查看已关注试验的预计与实际完成日期。点击更新后，从 ClinicalTrials.gov 核对登记变化。</p>
     <button class="btn" data-nav="public-events">查看公开资产动态</button>
     <button class="btn" data-nav="research">查找并关注试验</button>
     <button class="btn primary" id="update-watch">更新全部</button>
+    <details class="card"><summary>备份与恢复关注列表</summary>
+      <p>文件包含试验登记字段、变更历史和关注来源。候选筛选快照保存在创建它的浏览器中。</p>
+      <button type="button" class="btn" id="watch-backup">下载关注备份</button>
+      <label>恢复缺少的试验<input type="file" id="watch-restore" accept=".json,application/json"></label>
+      <p id="watch-backup-status" role="status"></p></details>
     <p id="watch-status" role="status"></p><section id="watch-calendar"></section><div id="watch-entries"></div></section>`);
   const root = $('#trial-watch');
   const entries = $('#watch-entries',root);
@@ -137,8 +164,7 @@ function renderWatch() {
   let running = false;
   let reminderDays = 0;
   function paint() {
-    const rows = Object.keys(localStorage).filter(k => k.startsWith(watchPrefix))
-      .map(k => JSON.parse(localStorage.getItem(k))).sort((a,b)=>a.id.localeCompare(b.id));
+    const rows = watchRows();
     refresh.disabled = running || !rows.length;
     const events=watchedMilestones(rows);
     const calendar=$('#watch-calendar',root);
@@ -174,6 +200,8 @@ function renderWatch() {
       ${(row.origins || []).map(origin => origin.type==='public-event'
         ? `<p>关注来源 · <a href="#/public-events?event=${encodeURIComponent(origin.snapshot)}">${esc(origin.field)} · ${esc(origin.value)}</a>
           · ${esc(origin.dateLabel || '来源披露')} ${esc(origin.disclosed)} · 首次发现 ${esc(fmtDate(origin.created))}</p>`
+        : !localStorage.getItem('hijenny.opportunity.'+origin.snapshot)
+          ? `<p>候选来源 · ${esc(origin.condition)} · ${esc(fmtDate(origin.created))} · 本机缺少筛选快照 ${esc(origin.snapshot)}</p>`
         : `<p>候选来源 · <a href="#/discovery?snapshot=${encodeURIComponent(origin.snapshot)}">${esc(origin.condition)} · ${esc(fmtDate(origin.created))} 筛选快照</a></p>`).join('')}
       <dl>${['主要完成日期','研究完成日期'].map(k=>`<dt>${k}</dt><dd>${esc(display(row.fields[k]))}</dd>`).join('')}</dl>
       <details><summary>登记变更（${row.changes.length}）</summary>${row.changes.map(c=>`<p>${esc(fmtDate(c.checked))} · 登记版本 ${esc(c.updated)}</p>
@@ -181,6 +209,37 @@ function renderWatch() {
       <button class="btn" data-unfollow="${esc(row.id)}" ${running?'disabled':''}>移除关注</button></article>`).join('') || '<p>关注列表为空。可在临床试验检索结果中勾选记录，加入关注。</p>';
     return rows;
   }
+  const feedback=$('#watch-backup-status',root);
+  $('#watch-backup',root).onclick=async ()=>{
+    try {
+      const rows=watchRows();
+      const data={format:'HiJenny-trial-watch',version:1,rows,sha256:await browserBackupDigest(rows)};
+      const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'}));
+      const link=document.createElement('a');link.href=url;link.download='HiJenny-试验关注-'+new Date().toISOString().slice(0,10)+'.json';link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);feedback.textContent='已导出 '+rows.length+' 项试验。';
+    } catch(error) {feedback.textContent='备份失败：'+error.message;}
+  };
+  const restore=$('#watch-restore',root);
+  restore.onchange=async ()=>{
+    const file=restore.files[0];if (!file) return;
+    restore.disabled=true;
+    let added=0, identical=0;
+    const conflicts=[];
+    try {
+      for (const row of await readWatchBackup(file)) {
+        const key=watchKey(row.id);
+        await navigator.locks.request(key,()=>{
+          const saved=localStorage.getItem(key), incoming=JSON.stringify(row);
+          if (saved===null) {localStorage.setItem(key,incoming);added++;}
+          else if (JSON.stringify(JSON.parse(saved))===incoming) identical++;
+          else conflicts.push(row.id);
+        });
+      }
+      feedback.textContent='已恢复 '+added+' 项，已有相同记录 '+identical+' 项。'+
+        (conflicts.length?'已保留本机不同版本：'+conflicts.join('、'):'');
+    } catch(error) {feedback.textContent='导入中止，已恢复 '+added+' 项，可重试。'+error.message;}
+    finally {restore.value='';restore.disabled=false;paint();}
+  };
   refresh.onclick = async () => {
     if (running) return;
     running = true;

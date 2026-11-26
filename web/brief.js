@@ -25,12 +25,6 @@ async function briefStore(mode, work) {
   });
 }
 
-async function briefBackupDigest(runs) {
-  const bytes = new TextEncoder().encode(JSON.stringify(runs));
-  const digest = await crypto.subtle.digest('SHA-256',bytes);
-  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
-}
-
 function validBackupRun(run) {
   if (!run || typeof run.id!=='string' || !run.id || typeof run.question!=='string' ||
       typeof run.created!=='string' || !Number.isFinite(Date.parse(run.created)) ||
@@ -44,7 +38,7 @@ function validBackupRun(run) {
 
 async function restoreBriefBackup(backup) {
   if (backup?.format!=='HiJenny-research-briefs' || backup.version!==1 || !Array.isArray(backup.runs) ||
-      backup.sha256!==await briefBackupDigest(backup.runs)) throw new Error('底稿备份格式或文件校验失败');
+      backup.sha256!==await browserBackupDigest(backup.runs)) throw new Error('底稿备份格式或文件校验失败');
   const runs=backup.runs;
   if (!runs.every(validBackupRun) || new Set(runs.map(r=>r.id)).size!==runs.length) throw new Error('底稿记录格式无效');
   const db=await openBriefDatabase();
@@ -210,7 +204,7 @@ async function renderBrief() {
       await saveReview();
       const runs=await briefStore('readonly',store=>store.getAll());
       const backup={format:'HiJenny-research-briefs',version:1,created:new Date().toISOString(),
-        sha256:await briefBackupDigest(runs),runs};
+        sha256:await browserBackupDigest(runs),runs};
       const url=URL.createObjectURL(new Blob([JSON.stringify(backup)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='HiJenny-研究底稿-'+backup.created.slice(0,10)+'.json';a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);

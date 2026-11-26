@@ -1914,3 +1914,9 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+async function browserBackupDigest(records) {
+  const bytes = new TextEncoder().encode(JSON.stringify(records));
+  const digest = await crypto.subtle.digest('SHA-256',bytes);
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+}
