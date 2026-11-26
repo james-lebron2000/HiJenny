@@ -1,8 +1,18 @@
 {
-  "started_utc": "2026-11-26T23:47:27+00:00",
-  "finished_utc": "2026-11-26T23:47:37+00:00",
-  "watchlist_sha256": "c2108631a78ea4e2370cd425bf4ef5bdf14146c703dbc7adb22062d5c3d20a8f",
+  "started_utc": "2026-11-26T23:54:19+00:00",
+  "finished_utc": "2026-11-26T23:54:24+00:00",
+  "watchlist_sha256": "7870c04422804522d04c504654f977d6b418ab091644be599073ad89ee6e6ef7",
   "checks": [
+    {
+      "source": "orange_book",
+      "target": "NDA208065",
+      "subject": "Tagrisso (osimertinib)",
+      "target_sha256": "68da80ce0d4e665d719cf5c6cb330f9d007119b8f2ca247f69a267b2136d1d3d",
+      "status": "ok",
+      "records": 2,
+      "new_events": 4,
+      "last_success_utc": "2026-11-26T23:54:19+00:00"
+    },
     {
       "source": "jrct",
       "target": "jRCT2031230688",
@@ -11,7 +21,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:29+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "ema",
@@ -21,7 +31,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:31+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "sec",
@@ -31,7 +41,7 @@
       "status": "ok",
       "records": 5,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:31+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "fda",
@@ -41,7 +51,7 @@
       "status": "ok",
       "records": 3,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:31+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "trials",
@@ -51,7 +61,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:31+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "trials",
@@ -61,7 +71,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:32+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "trials",
@@ -71,7 +81,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:32+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "trials",
@@ -81,7 +91,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:32+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "trials",
@@ -91,7 +101,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:32+00:00"
+      "last_success_utc": "2026-11-26T23:54:20+00:00"
     },
     {
       "source": "publications",
@@ -101,7 +111,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:32+00:00"
+      "last_success_utc": "2026-11-26T23:54:21+00:00"
     },
     {
       "source": "publications",
@@ -111,7 +121,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:33+00:00"
+      "last_success_utc": "2026-11-26T23:54:21+00:00"
     },
     {
       "source": "publications",
@@ -121,7 +131,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:35+00:00"
+      "last_success_utc": "2026-11-26T23:54:23+00:00"
     },
     {
       "source": "publications",
@@ -131,7 +141,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:35+00:00"
+      "last_success_utc": "2026-11-26T23:54:23+00:00"
     },
     {
       "source": "publications",
@@ -141,10 +151,10 @@
       "status": "ok",
       "records": 9,
       "new_events": 0,
-      "last_success_utc": "2026-11-26T23:47:37+00:00"
+      "last_success_utc": "2026-11-26T23:54:24+00:00"
     }
   ],
-  "new_events": 0,
-  "run_id": "45912969758",
+  "new_events": 4,
+  "run_id": "45913619236",
   "trigger": "workflow_dispatch"
 }
