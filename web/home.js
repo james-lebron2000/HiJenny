@@ -38,14 +38,15 @@ const homeReport={
 };
 
 const homeUpdates={
-  zh:{title:'公开动态（按来源日期）',source:'查看原文',filed:'申报日',open:'查看动态、下载简报或订阅更新',empty:'该名称暂无匹配动态。',error:'暂时无法读取公开动态。'},
-  en:{title:'Public updates by source date',source:'Open original source',filed:'Filed',open:'View updates, download a digest or subscribe',empty:'No archived updates match this name.',error:'Archived updates are temporarily unavailable.'},
-  ja:{title:'公開情報（情報源の日付順）',source:'原資料を開く',filed:'提出日',open:'更新一覧・レポートのダウンロード・購読',empty:'この名称に該当する更新はありません。',error:'現在、更新情報を読み込めません。'}
+  zh:{title:'公开动态（按来源日期）',source:'查看原文',filed:'申报日',open:'查看完整动态与订阅',download:'下载全部动态简报（中文 TXT）',empty:'该名称暂无匹配动态。',error:'暂时无法读取公开动态。'},
+  en:{title:'Public updates by source date',source:'Open original source',filed:'Filed',open:'View all updates and subscriptions',download:'Download all matching updates (Chinese TXT)',empty:'No archived updates match this name.',error:'Archived updates are temporarily unavailable.'},
+  ja:{title:'公開情報（情報源の日付順）',source:'原資料を開く',filed:'提出日',open:'更新一覧と購読',download:'全件のレポートをダウンロード（中国語 TXT）',empty:'この名称に該当する更新はありません。',error:'現在、更新情報を読み込めません。'}
 };
 
 async function showHomeUpdates(panel,filters,lang) {
   const copy=homeUpdates[lang];
   const query=new URLSearchParams(filters);
+  const reportUrl='/api/public-events/report.txt?'+query;
   const archiveLink=`<a href="#/public-events?${esc(query.toString())}">${copy.open}</a>`;
   try {
     query.set('limit','3');
@@ -62,7 +63,8 @@ async function showHomeUpdates(panel,filters,lang) {
       return `<li><a href="${esc(href)}">${esc(title)}</a> · ${esc(r.source)} · ${esc(when)}${sourceLink}</li>`;
     });
     panel.innerHTML=`<h3>${copy.title} (${result.total})</h3>`+
-      (items.length?'<ul>'+items.join('')+'</ul>':'<p>'+copy.empty+'</p>')+archiveLink;
+      (items.length?'<ul>'+items.join('')+'</ul>':'<p>'+copy.empty+'</p>')+archiveLink+
+      (result.total ? ` <a class="btn" data-home-update-report href="${esc(reportUrl)}" download>${copy.download}</a>` : '');
     return result.total;
   } catch {
     if (panel.isConnected) panel.innerHTML='<p>'+copy.error+'</p>'+archiveLink;
@@ -168,12 +170,22 @@ async function renderHome() {
   const asset=hashParams().get('asset')?.trim().slice(0,400) || evidence.example;
   const cutoff=hashParams().get('as_of');
   const filters=cutoff ? {asset,as_of:cutoff} : {asset};
+  const examples={
+    zh:[['奥希替尼','查临床读出：奥希替尼'],['依达方','查监管动态：依达方'],['Summit Therapeutics','查公司披露：Summit Therapeutics']],
+    en:[['osimertinib','Trial results · osimertinib'],['ivonescimab','Regulatory updates · ivonescimab'],['Summit Therapeutics','Company disclosures · Summit Therapeutics']],
+    ja:[['osimertinib','試験結果 · osimertinib'],['ivonescimab','規制動向 · ivonescimab'],['Summit Therapeutics','企業開示 · Summit Therapeutics']]
+  }[lang];
+  const exampleLinks=examples.map(([name,label])=>{
+    const params=new URLSearchParams({...filters,asset:name,lang});
+    return `<a href="#/home?${esc(params.toString())}">${esc(label)}</a>`;
+  }).join(' · ');
   setView(`<section class="research-home task-home" lang="${lang}">
     <header><h1>${copy.title}</h1><nav aria-label="Language">${[['zh','中文'],['en','English'],['ja','日本語']].map(([code,name])=>
       `<a href="#/home?${esc(new URLSearchParams({lang:code,...filters}).toString())}" lang="${code}" ${lang===code?'aria-current="page"':''}>${name}</a>`).join(' · ')}</nav></header>
     <section class="card home-evidence"><h2>${evidence.heading}</h2>
     <form id="home-asset-search"><label>${evidence.label}<input name="asset" type="search" required maxlength="400" value="${esc(asset)}"></label>
     <label>${evidence.cutoff}<input name="as_of" type="date" value="${esc(cutoff || '')}"></label><button class="btn primary">${evidence.search}</button></form>
+    <p>${exampleLinks}</p>
     <div id="home-evidence-results" aria-live="polite"></div><div id="home-asset-updates" aria-live="polite"></div></section>
     <div class="task-groups">${copy.groups.map(([role,first,second],i)=>`<section class="card"><h2>${role}</h2>
       <a href="#/${homeRoutes[i][0]}">${first}</a><a href="#/${homeRoutes[i][1]}">${second}</a></section>`).join('')}</div>
