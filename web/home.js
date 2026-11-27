@@ -38,9 +38,9 @@ const homeReport={
 };
 
 const homeUpdates={
-  zh:{title:'公开动态（按来源日期）',open:'查看动态、下载简报或订阅更新',empty:'该名称暂无匹配动态。',error:'暂时无法读取公开动态。'},
-  en:{title:'Public updates by source date',open:'View updates, download a digest or subscribe',empty:'No archived updates match this name.',error:'Archived updates are temporarily unavailable.'},
-  ja:{title:'公開情報（情報源の日付順）',open:'更新一覧・レポートのダウンロード・購読',empty:'この名称に該当する更新はありません。',error:'現在、更新情報を読み込めません。'}
+  zh:{title:'公开动态（按来源日期）',source:'查看原文',filed:'申报日',open:'查看动态、下载简报或订阅更新',empty:'该名称暂无匹配动态。',error:'暂时无法读取公开动态。'},
+  en:{title:'Public updates by source date',source:'Open original source',filed:'Filed',open:'View updates, download a digest or subscribe',empty:'No archived updates match this name.',error:'Archived updates are temporarily unavailable.'},
+  ja:{title:'公開情報（情報源の日付順）',source:'原資料を開く',filed:'提出日',open:'更新一覧・レポートのダウンロード・購読',empty:'この名称に該当する更新はありません。',error:'現在、更新情報を読み込めません。'}
 };
 
 async function showHomeUpdates(panel,filters,lang) {
@@ -53,7 +53,13 @@ async function showHomeUpdates(panel,filters,lang) {
     if (!panel.isConnected) return;
     const items=result.items.map(r=>{
       const href='#/public-events?'+new URLSearchParams({event:r.id,...(filters.as_of ? {as_of:filters.as_of} : {})});
-      return `<li><a href="${esc(href)}">${esc(r.field)}</a> · ${esc(r.source)} · ${esc([r.date_label,r.source_date].filter(Boolean).join(' '))}</li>`;
+      const filing=r.source==='SEC';
+      const title=filing && r.field==='公司申报' ? [r.subject,r.value].filter(Boolean).join(' · ') : r.field;
+      const dateLabel=r.date_label || (filing ? copy.filed : '');
+      const when=[dateLabel,r.source_date].filter(Boolean).join(' ');
+      const sourceLink=/^https?:\/\//i.test(r.url || '')
+        ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${copy.source}</a>` : '';
+      return `<li><a href="${esc(href)}">${esc(title)}</a> · ${esc(r.source)} · ${esc(when)}${sourceLink}</li>`;
     });
     panel.innerHTML=`<h3>${copy.title} (${result.total})</h3>`+
       (items.length?'<ul>'+items.join('')+'</ul>':'<p>'+copy.empty+'</p>')+archiveLink;
