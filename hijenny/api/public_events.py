@@ -23,7 +23,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                   discovered_from: date | None = None, discovered_to: date | None = None,
                   observed_after: datetime | None = None, disclosed_to: date | None = None, source: Literal["NMPA", "SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA", "jRCT", "FDA Orange Book"] | None = None,
                   document_type: Literal["Label", "Letter", "Review", "Summary Review", "Medication Guide"] | None = None,
-                  source_record: str = "", notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
+                  sec_form: str = "", source_record: str = "", notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None,
                   rolling_week: bool = False, exact_asset: bool = False, asset_label: str = "", unassigned_asset: bool = False):
     if rolling_week:
@@ -57,6 +57,24 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     if asset_label:
         sql += " AND json_extract(payload, '$.asset')=?"
         args.append(asset_label)
+    sec_form = sec_form.strip().upper()
+    if sec_form:
+        if sec_form != "UNKNOWN" and not re.fullmatch(r"(8-K|6-K|10-Q|10-K|20-F|40-F)(/A)?", sec_form):
+            raise HTTPException(422, "请输入已支持的 SEC 表格类型。")
+        filings = """SELECT json_extract(payload, '$.record') FROM events
+                     WHERE json_extract(payload, '$.source')='SEC'
+                     AND json_extract(payload, '$.field')='公司申报'
+                     AND json_extract(payload, '$.value') IS NOT NULL"""
+        if sec_form != "UNKNOWN":
+            filings += " AND json_extract(payload, '$.value')=?"
+            args.append(sec_form)
+        for cutoff, column in [(as_of, "date"), (as_of, OBSERVED_DAY),
+                               (disclosed_to, "date"), (discovered_to, OBSERVED_DAY)]:
+            if cutoff:
+                filings += f" AND {column}<=?"
+                args.append(cutoff.isoformat())
+        operator = "NOT IN" if sec_form == "UNKNOWN" else "IN"
+        sql += f" AND json_extract(payload, '$.source')='SEC' AND json_extract(payload, '$.record') {operator} ({filings})"
     if document_type:
         sql += """ AND json_extract(payload, '$.source')='Drugs@FDA' AND EXISTS (
                    SELECT 1 FROM json_each(payload, '$.documents') AS doc
@@ -141,7 +159,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     order = (" ORDER BY julianday(json_extract(payload, '$.observed')) DESC, date DESC, id"
              if source_record or discovered_from or discovered_to else " ORDER BY date DESC, id")
     labels = [f"{label}：{value}" for label, value in (
-        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("当前归档含 FDA 文件类型", document_type), ("来源", source), ("来源记录编号", source_record), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("完整归档资产标签" if exact_asset else "资产或公司", asset), ("选定资产标签", "未标注资产" if unassigned_asset else asset_label), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
+        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("当前归档含 FDA 文件类型", document_type), ("来源", source), ("来源记录编号", source_record), ("SEC 申报表格", "类型未收录" if sec_form == "UNKNOWN" else sec_form), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("完整归档资产标签" if exact_asset else "资产或公司", asset), ("选定资产标签", "未标注资产" if unassigned_asset else asset_label), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("仅含首次观察晚于", observed_after.isoformat() if observed_after else None), ("记录类型", KINDS.get(kind))) if value]
     table = "events"
     if as_of:

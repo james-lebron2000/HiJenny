@@ -447,6 +447,7 @@ function renderPublicEvents() {
     <label>试验登记号<input name="trial" placeholder="NCT 或 jRCT 编号" pattern="[Nn][Cc][Tt][0-9]{8}|[Jj][Rr][Cc][Tt][0-9]{10}" title="NCT 加八位数字或 jRCT 加十位数字"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
     <label>数据来源<select name="source"><option value="">全部来源</option><option>NMPA</option><option>Drugs@FDA</option><option>EMA</option><option>FDA Orange Book</option><option>jRCT</option><option>ClinicalTrials.gov</option><option>PubMed</option><option>SEC</option></select></label>
+    <label>SEC 申报表格<select name="sec_form"><option value="">全部</option>${['8-K','6-K','10-Q','10-K','20-F','40-F'].flatMap(form=>[form,form+'/A']).map(form=>option(form,'',form)).join('')}<option value="UNKNOWN">类型未收录</option></select><small>按同一申报编号的已归档表格类型匹配。</small></label>
     <label>来源记录编号（完整）<input name="source_record" placeholder="例如 BLA761234/ORIG/1"></label>
     <label>地区<input name="region" placeholder="例如：中东"></label>
     <label>来源披露起始日期<input type="date" name="since"></label>
