@@ -35,17 +35,26 @@ async function renderFollowup(seq) {
   if (seq !== state.renderSeq) return;
   const questions = data.questions;
   const params = hashParams();
-  const stage = Object.hasOwn(bdStages, params.get('stage')) ? params.get('stage') : '';
+  let stage = Object.hasOwn(bdStages, params.get('stage')) ? params.get('stage') : '';
   const stages = new Map(questions.map(q => [q.question_id, followupStage(q, data.history[q.question_id] || [])]));
+  const requested = params.get('question');
+  if (requested && stages.get(requested) !== stage) stage = '';
   const visible = questions.filter(q => !stage || stages.get(q.question_id) === stage);
-  const id = visible.find(q => q.question_id === params.get('question'))?.question_id || visible[0]?.question_id;
+  if (requested && !questions.some(q => q.question_id === requested)) {
+    setView(emptyPanel('当前项目中找不到这条卖方问题', '请核对报告版本，或查看当前项目的问题队列。',
+      `<a class="btn" href="#/followup?project=${encodeURIComponent(project)}">查看项目问题队列</a>`));
+    return;
+  }
+  const id = visible.find(q => q.question_id === requested)?.question_id || visible[0]?.question_id;
   const q = questions.find(row => row.question_id === id);
   if (!questions.length) { setView(emptyPanel('暂无可跟踪的问题', '请先在本项目生成或选择卖方问题。')); return; }
   const queue = `<section class="card bd"><h2>项目跟进队列</h2><label>按当前待办筛选<select id="bd-stage">
     ${option('', stage, '全部问题（'+questions.length+'）')}
     ${Object.entries(bdStages).map(([key,label]) => option(key, stage, label+'（'+questions.filter(row=>stages.get(row.question_id)===key).length+'）')).join('')}</select></label>
+    <form id="bd-locate"><label>按报告问题编号定位<input name="question" required placeholder="qst_…" maxlength="64"></label>
+      <button class="btn" type="submit">打开问题</button></form>
     ${q ? `<label>选择问题<select id="bd-question">${visible.map(row=>option(row.question_id,id,row.question)).join('')}</select></label>
-    <p>当前进度 · ${esc(bdStages[stages.get(id)])}</p>` : '<p>此阶段暂无问题。</p>'}</section>`;
+    <p>${esc(id)} · 当前进度 · ${esc(bdStages[stages.get(id)])}</p>` : '<p>此阶段暂无问题。</p>'}</section>`;
   const navigate = (stage, question) => {
     const query = new URLSearchParams({project});
     if (stage) query.set('stage',stage);
@@ -53,7 +62,12 @@ async function renderFollowup(seq) {
     location.hash = '#/followup?'+query;
   };
   const bindQueue = () => {
-    $('#bd-stage').onchange = e => navigate(e.target.value, id);
+    $('#bd-stage').onchange = e => navigate(e.target.value, null);
+    $('#bd-locate').onsubmit = e => {
+      e.preventDefault();
+      const value = e.currentTarget.elements.question.value.trim();
+      if (value) navigate('', value);
+    };
     if (q) $('#bd-question').onchange = e => navigate(stage, e.target.value);
   };
   if (!q) { setView(queue); bindQueue(); return; }

@@ -1538,6 +1538,10 @@ function renderMarkdown(md) {
       const rows = [];
       while (i < lines.length && /^\s*\|/.test(lines[i])) { rows.push(splitRow(lines[i])); i += 1; }
       const renderCell = (cell, index) => {
+        if (header[index] === 'Question ID' && /^qst_[A-Za-z0-9_-]+$/.test(cell)) {
+          const query = new URLSearchParams({project:state.projectId, question:cell});
+          return `<a href="#/followup?${esc(query.toString())}">查看跟进 · ${esc(cell)}</a>`;
+        }
         if (header[index] === 'Evidence ID' && /^ev_[A-Za-z0-9_-]+$/.test(cell)) {
           return evidenceLink(cell);
         }

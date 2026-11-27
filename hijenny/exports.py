@@ -1390,6 +1390,7 @@ def decision_brief_data(data: dict) -> dict:
 
     questions = [
         {
+            "question_id": _txt(question.get("question_id")),
             "priority": _txt(question.get("priority")),
             "owner": _txt(question.get("owner")),
             "question": _txt(question.get("question")),
@@ -1650,12 +1651,12 @@ def render_markdown_report(data: dict) -> str:
     add("### Top seller questions")
     add("")
     if brief["questions"]:
-        add("| Priority | Owner | Question |")
-        add("|---|---|---|")
+        add("| Priority | Owner | Question | Question ID |")
+        add("|---|---|---|---|")
         for question in brief["questions"]:
             add(
                 f"| {_md_escape(question['priority'])} | {_md_cell(question['owner'], 60)} | "
-                f"{_md_cell(question['question'], 300)} |"
+                f"{_md_cell(question['question'], 300)} | {_md_cell(question['question_id'])} |"
             )
     else:
         add("_No seller questions have been generated yet._")
@@ -1919,8 +1920,8 @@ def render_markdown_report(data: dict) -> str:
     add("## 7. Seller Questions")
     add("")
     if questions:
-        add("| Priority | Owner | Category | Question | Rationale | Required documents | Status |")
-        add("|---|---|---|---|---|---|---|")
+        add("| Priority | Owner | Category | Question | Rationale | Required documents | Status | Question ID |")
+        add("|---|---|---|---|---|---|---|---|")
         for q in questions:
             add(
                 "| "
@@ -1933,6 +1934,7 @@ def render_markdown_report(data: dict) -> str:
                         _md_cell(q.get("rationale"), 320),
                         _md_cell(_joined(q.get("required_documents")), 160),
                         _md_cell(q.get("status"), 30),
+                        _md_cell(q.get("question_id")),
                     ]
                 )
                 + " |"
@@ -2240,9 +2242,9 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     if brief["questions"]:
         _docx_table(
             doc,
-            ["Priority", "Owner", "Question"],
-            [[q["priority"], q["owner"], q["question"]] for q in brief["questions"]],
-            widths=(0.8, 1.4, 4.1),
+            ["Priority", "Owner", "Question", "Question ID"],
+            [[q["priority"], q["owner"], q["question"], q["question_id"]] for q in brief["questions"]],
+            widths=(0.7, 1.0, 3.4, 1.2),
             font_size=8,
         )
     else:
@@ -2503,7 +2505,7 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     if questions:
         _docx_table(
             doc,
-            ["Priority", "Owner", "Question", "Rationale", "Required documents"],
+            ["Priority", "Owner", "Question", "Rationale", "Required documents", "Question ID"],
             [
                 [
                     _txt(q.get("priority")),
@@ -2511,10 +2513,11 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
                     _txt(q.get("question")),
                     _txt(q.get("rationale")),
                     _joined(q.get("required_documents")),
+                    _txt(q.get("question_id")),
                 ]
                 for q in questions
             ],
-            widths=(0.6, 1.0, 2.0, 1.8, 1.0),
+            widths=(0.6, 0.7, 1.8, 1.4, 1.0, 1.0),
             font_size=8,
         )
     else:

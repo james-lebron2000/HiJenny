@@ -469,6 +469,10 @@ def test_generate_project_outputs_markdown_docx_xlsx(env):
     workbook = load_workbook(stats["questions_xlsx"])
     assert workbook.sheetnames == EXPECTED_SHEETS
     assert workbook["Questions"].max_row == 3
+    for question in seeded["questions"]:
+        qid = question["question_id"]
+        assert markdown.count(qid) >= 2 and table_text.count(qid) >= 2
+        assert qid in {row[0] for row in workbook["Questions"].values}
 
     # ---- Idempotent regeneration --------------------------------------
     # Same artefacts in the same place, no duplicated findings/questions; only
