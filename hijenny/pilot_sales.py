@@ -7,7 +7,7 @@ from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hijenny import store
-from hijenny.db import Base, PilotInquiry, PilotProgress
+from hijenny.db import Base, PilotAssetContext, PilotInquiry, PilotProgress
 
 
 class PilotAssignment(Base):
@@ -195,6 +195,9 @@ def quote_draft(session, receipt, *, currency, amount, scope, delivery, tax, val
 
     intake = table([("询价受理编号", receipt), ("联系邮箱", inquiry.email), ("资产阶段", inquiry.stage),
                     ("资料规模", inquiry.pages), ("计划会议日期", inquiry.meeting), ("部署需求", inquiry.deployment)])
+    context = session.get(PilotAssetContext, receipt)
+    if context:
+        intake += table([("询价资产", context.asset), ("公开证据截止日（台北）", context.as_of)])
     terms = table([("拟交付成果与范围", scope.strip()), ("拟交付时间", delivery.strip()),
                    ("固定总价", f"{currency} {Decimal(amount):,.{digits}f}"), ("税费口径", tax.strip()),
                    ("报价有效至", valid_until.isoformat())])

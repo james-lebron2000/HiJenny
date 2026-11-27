@@ -36,7 +36,14 @@ def track_engagement(payload: PilotEvent):
         store.record_pilot_engagement(session, str(payload.session_id), payload.sample_version, payload.event)
 
 
+class AssetContext(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    asset: str = Field(min_length=1, max_length=400)
+    as_of: date
+
+
 class PilotRequest(BaseModel):
+    asset_context: AssetContext | None = None
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     analytics: PilotSession | None = None
     request_key: UUID

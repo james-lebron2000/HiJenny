@@ -295,6 +295,13 @@ class PilotInquiry(Base):
     deployment: Mapped[str] = mapped_column(String(40))
 
 
+class PilotAssetContext(Base):
+    __tablename__ = "pilot_asset_context"
+    receipt: Mapped[str] = mapped_column(ForeignKey("pilot_inquiries.receipt"), primary_key=True)
+    asset: Mapped[str] = mapped_column(String(400))
+    as_of: Mapped[str] = mapped_column(String(10))
+
+
 class PilotProgress(Base):
     __tablename__ = "pilot_progress"
 

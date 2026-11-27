@@ -1292,19 +1292,25 @@ def get_pages_text(session: Session, document_id: str) -> dict[int, str]:
 
 def submit_pilot_inquiry(session, request_key, fields):
     from sqlalchemy.dialects.sqlite import insert
-    from hijenny.db import PilotInquiry
+    from hijenny.db import PilotAssetContext, PilotInquiry
 
+    fields = dict(fields)
+    context = fields.pop("asset_context", None)
     receipt = new_id("pilot")
-    session.execute(insert(PilotInquiry).values(receipt=receipt, request_key=request_key,
-                    created_at=utcnow(), **fields).on_conflict_do_nothing(index_elements=["request_key"]))
+    result = session.execute(insert(PilotInquiry).values(receipt=receipt, request_key=request_key,
+                             created_at=utcnow(), **fields).on_conflict_do_nothing(index_elements=["request_key"]))
+    if result.rowcount and context:
+        session.execute(insert(PilotAssetContext).values(receipt=receipt, **context))
     saved = session.scalar(select(PilotInquiry).where(PilotInquiry.request_key == request_key))
-    if any(getattr(saved, k) != v for k, v in fields.items()):
+    existing = session.get(PilotAssetContext, saved.receipt)
+    stored_context = {"asset": existing.asset, "as_of": existing.as_of} if existing else None
+    if stored_context != context or any(getattr(saved, k) != v for k, v in fields.items()):
         raise ValueError("受理请求已被使用，请为修改后的需求重新提交")
     return {"receipt": saved.receipt, "created_at": saved.created_at}
 
 
 def list_pilot_inquiries(session, receipt=None):
-    from hijenny.db import PilotInquiry, PilotProgress
+    from hijenny.db import PilotAssetContext, PilotInquiry, PilotProgress
 
     query = select(PilotInquiry).order_by(PilotInquiry.created_at.desc())
     if receipt:
@@ -1317,6 +1323,11 @@ def list_pilot_inquiries(session, receipt=None):
     by_receipt = {row["receipt"]: row for row in rows}
     for row in rows:
         row["progress"] = []
+    contexts = select(PilotAssetContext)
+    if receipt:
+        contexts = contexts.where(PilotAssetContext.receipt == receipt)
+    for item in session.scalars(contexts):
+        by_receipt[item.receipt]["asset_context"] = {"asset": item.asset, "as_of": item.as_of}
     for event in session.scalars(progress):
         if event.receipt in by_receipt:
             by_receipt[event.receipt]["progress"].append({

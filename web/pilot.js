@@ -60,6 +60,9 @@ const pilotEvidence=[
 function renderPilot() {
   const requested=hashParams().get('lang') || sessionStorage.getItem('hijenny.pilot.lang');
   let lang=Object.hasOwn(pilotCopy,requested)?requested:'zh';
+  const asset=hashParams().get('asset')?.trim().slice(0,400), cutoff=hashParams().get('as_of');
+  const scoped=asset && /^\d{4}-\d{2}-\d{2}$/.test(cutoff || '');
+  const contextLabel={zh:'随询价附上药名和公开证据截止日（台北）',en:'Include the asset and public evidence cutoff (Taipei) in this inquiry',ja:'医薬品名と公開資料の基準日（台北）を見積もり依頼に含める'};
   const sessionKey='hijenny.pilot.session';
   const analytics={session_id:sessionStorage.getItem(sessionKey) || crypto.randomUUID(),sample_version:'asd101-v1'};
   sessionStorage.setItem(sessionKey,analytics.session_id);
@@ -83,6 +86,7 @@ function renderPilot() {
       <p><a href="/api/pilot/decision-brief.docx?lang=${lang}">${t.decision}</a></p><p><a href="/api/pilot/seller-reply.xlsx">${t.seller}</a></p>
       <a href="/api/pilot/sample-report?${new URLSearchParams(analytics)}">${t.download}</a></details>
       <form id="pilot-form" class="card"><h2>${t.quote}</h2>
+      ${scoped?`<label><input type="checkbox" name="attach_asset" ${values.attach_asset!==false?'checked':''}> ${contextLabel[lang]} · ${esc(asset)} · ${esc(cutoff)}</label>`:''}
       <label>${t.email}<input name="email" type="email" required maxlength="254" autocomplete="email"></label>
       ${select('stage')}${select('pages')}<label>${t.meeting}<input type="date" name="meeting" required></label>${select('deployment')}
       <p>${t.terms}</p><button class="btn primary" type="submit">${t.submit}</button></form><div id="pilot-receipt" role="status"></div></section>`);
@@ -98,7 +102,7 @@ function renderPilot() {
       lang=change.value;sessionStorage.setItem('hijenny.pilot.lang',lang);
       const params=hashParams();params.set('lang',lang);
       history.replaceState(null,'','#/pilot?'+params.toString());
-      draw(Object.fromEntries(new FormData(form)),Boolean(form.parentElement.querySelector('details').open));
+      draw({...Object.fromEntries(new FormData(form)),attach_asset:form.elements.attach_asset?.checked},Boolean(form.parentElement.querySelector('details').open));
     };
     const show=id=>{status.textContent=t.receipt+' '+id+' · '+t.next;};
     const last=sessionStorage.getItem('hijenny.pilot.receipt');
@@ -108,6 +112,8 @@ function renderPilot() {
       if (button.disabled) return;
       const data=Object.fromEntries(new FormData(form));button.disabled=change.disabled=true;
       try {
+        if (scoped && form.elements.attach_asset.checked) data.asset_context={asset,as_of:cutoff};
+        delete data.attach_asset;
         data.email=data.email.trim();
         const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(data)));
         const key='hijenny.pilot.'+Array.from(new Uint8Array(hash),v=>v.toString(16).padStart(2,'0')).join('');

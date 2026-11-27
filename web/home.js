@@ -32,9 +32,9 @@ const homeEvidence={
 };
 
 const homeReport={
-  zh:{title:'公开资产证据简报',download:'下载可打印简报',scope:'范围为 HiJenny 公开关注名单和已收录指南。终点按登记名称列出。',source:'原始来源',date:'登记更新',version:'来源版本',observed:'首次收录',none:'此截面暂无记录',phase:'阶段',status:'登记状态',sponsor:'牵头申办方',conditions:'疾病',sites:'中心所在地区'},
-  en:{title:'Public asset evidence brief',download:'Download printable brief',scope:'Coverage includes the HiJenny public watchlist and indexed guidance. Endpoints use registry titles.',source:'Original source',date:'Registry update',version:'Source version',observed:'First indexed',none:'No records at this cutoff',phase:'Phase',status:'Registry status',sponsor:'Lead sponsor',conditions:'Conditions',sites:'Site countries or regions'},
-  ja:{title:'医薬品の公開エビデンス概要',download:'印刷用の概要をダウンロード',scope:'HiJenny の公開ウォッチリストと収録済みの指針が対象です。評価項目は登録名で表示します。',source:'原資料',date:'登録更新日',version:'資料の版',observed:'初回収録日',none:'この時点の収録記録なし',phase:'試験相',status:'登録状況',sponsor:'主たる依頼者',conditions:'対象疾患',sites:'実施国・地域'}
+  zh:{pilot:'就此资产申请试点报价',title:'公开资产证据简报',download:'下载可打印简报',scope:'范围为 HiJenny 公开关注名单和已收录指南。终点按登记名称列出。',source:'原始来源',date:'登记更新',version:'来源版本',observed:'首次收录',none:'此截面暂无记录',phase:'阶段',status:'登记状态',sponsor:'牵头申办方',conditions:'疾病',sites:'中心所在地区'},
+  en:{pilot:'Request a pilot quote for this asset',title:'Public asset evidence brief',download:'Download printable brief',scope:'Coverage includes the HiJenny public watchlist and indexed guidance. Endpoints use registry titles.',source:'Original source',date:'Registry update',version:'Source version',observed:'First indexed',none:'No records at this cutoff',phase:'Phase',status:'Registry status',sponsor:'Lead sponsor',conditions:'Conditions',sites:'Site countries or regions'},
+  ja:{pilot:'この医薬品の試行導入見積もり',title:'医薬品の公開エビデンス概要',download:'印刷用の概要をダウンロード',scope:'HiJenny の公開ウォッチリストと収録済みの指針が対象です。評価項目は登録名で表示します。',source:'原資料',date:'登録更新日',version:'資料の版',observed:'初回収録日',none:'この時点の収録記録なし',phase:'試験相',status:'登録状況',sponsor:'主たる依頼者',conditions:'対象疾患',sites:'実施国・地域'}
 };
 
 function downloadHomeEvidence(asset,result,lang) {
@@ -95,7 +95,7 @@ async function renderHome() {
       listed(evidence.trials,result.trials,r=>trialLink(r)+' · '+esc(r.phase || r.status))+
       listed(evidence.results,result.outcomes,r=>trialLink(r)+' · '+esc(r.endpoints.join(' / ')))+
       listed(evidence.guidance,result.guidance,g=>`<a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.publisher)} ${esc(g.reference)}</a> · ${esc(g.version_date)}`)+
-      `</div><a href="#/public-events?${esc(qs.toString())}">${evidence.more}</a> <button class="btn" type="button" data-asset-report>${homeReport[lang].download}</button>`;
+      `</div><a href="#/public-events?${esc(qs.toString())}">${evidence.more}</a> <button class="btn" type="button" data-asset-report>${homeReport[lang].download}</button> <a data-asset-pilot href="#/pilot?${esc(new URLSearchParams({lang,asset,as_of:result.as_of}).toString())}">${homeReport[lang].pilot}</a>`;
     output.querySelector('[data-asset-report]').onclick=()=>downloadHomeEvidence(asset,result,lang);
   } catch {
     if (output.isConnected) output.innerHTML=`<p>${evidence.error}</p>${researchLink}`;

@@ -209,3 +209,27 @@ def test_delivery_work_queue_latest_version_even_after_payment(tmp_path, monkeyp
         assert (row["version"], row["feedback"], row["response_ref"]) == ("v2", "客户反馈", "synthetic-response")
         assert not pilot_sales.delivery_queue(s, "已验收")
         assert not pilot_sales.delivery_queue(s, due_by=date(2026, 12, 31))
+
+
+def test_asset_scope_is_optional_and_survives_quote_and_retry(tmp_path, monkeypatch):
+    from datetime import date, timedelta
+    from hijenny import pilot_sales
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "asset-pilot.db")
+    monkeypatch.setattr(store, "_ENGINE", None)
+    monkeypatch.setattr(store, "_SESSION_FACTORY", None)
+    store.init_db()
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    request = dict(request_key=str(uuid4()), email="quote@example.invalid", stage="II 期", pages="待确认",
+                   meeting="2027-01-15", deployment="待讨论", asset_context={"asset":"奥希替尼","as_of":"2026-11-27"})
+    url = "/api/pilot/inquiries"
+    first = client.post(url, json=request)
+    assert first.status_code == 200 and client.post(url, json=request).json() == first.json()
+    assert client.post(url, json=dict(request, asset_context=None)).status_code == 409
+    receipt = first.json()["receipt"]
+    with store.session_scope() as session:
+        assert store.list_pilot_inquiries(session, receipt)[0]["asset_context"] == request["asset_context"]
+        quote = pilot_sales.quote_draft(session, receipt, currency="CNY", amount="900", scope="演练",
+                                       delivery="约定日期", tax="待确认", valid_until=date.today()+timedelta(days=2))
+        assert "奥希替尼" in quote and "2026-11-27" in quote
