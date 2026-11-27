@@ -323,6 +323,12 @@ def collect(root=ROOT, receipt=None):
                   "watchlist_sha256": watch_hash, "checks": checks, "new_events": len(events)}
         if os.environ.get("GITHUB_RUN_ID", "").isdigit():
             report.update(run_id=os.environ["GITHUB_RUN_ID"], trigger=os.environ.get("GITHUB_EVENT_NAME"))
+            commit = os.environ.get("HIJENNY_COLLECTION_COMMIT", "")
+            if re.fullmatch(r"[0-9a-f]{40}", commit):
+                report["collector_commit"] = commit
+            attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
+            if attempt.isdigit():
+                report["run_attempt"] = attempt
         receipt.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"New public events: {len(events)}", flush=True)
     for error in failures:
