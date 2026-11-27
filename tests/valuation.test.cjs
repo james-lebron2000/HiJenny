@@ -90,6 +90,12 @@ test('internal workbook keeps seller reply snapshots with their own valuation ve
     {event_id:'reply-1',ts:'2026-11-27',actor:'BD',note:'=A1 & <source>',filename:'CSR.pdf',locator:'page 10'}]}};
   const xml=workbook(current,'demo-project',plan);
   const sheet=name=>xml.split('<Worksheet ss:Name="'+name+'">')[1].split('</Worksheet>')[0];
+  assert.match(sheet('保存时的版本比较'),/本版新收录卖方答复.*CSR.pdf.*page 10.*reply-1/);
+  const unchanged=workbook({...current,id:'next',parent:'new'},'demo-project',current);
+  assert.doesNotMatch(unchanged,/本版新收录卖方答复/);
+  const relinked=workbook({...current,question:{...current.question,question_id:'Q2'}},'demo-project',plan);
+  assert.match(relinked,/关联卖方问题：Q1.*Q2/);
+  assert.doesNotMatch(relinked,/本版新收录卖方答复/);
   assert.match(sheet('卖方问题与答复'),/reply-1/);
   assert.match(sheet('卖方问题与答复'),/ss:Type="String">=A1 &amp; &lt;source>/);
   assert.match(sheet('卖方问题与答复'),/page 10/);

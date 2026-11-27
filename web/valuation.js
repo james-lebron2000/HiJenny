@@ -116,6 +116,23 @@ function versionComparison(parent, current) {
   else lines.push('估值日或币种不同，请先统一口径再比较金额。');
   if (+parent.rate!==+current.rate) lines.push('年折现率 '+parent.rate+'% → '+current.rate+'%');
   if (parent.basis!==current.basis) lines.push('估值口径依据：'+parent.basis+' → '+current.basis);
+  const beforeQuestion=parent.question, afterQuestion=current.question;
+  if (beforeQuestion?.question_id!==afterQuestion?.question_id) {
+    const describe=q=>q ? q.question_id+' · '+q.question : '未关联';
+    lines.push('关联卖方问题：'+describe(beforeQuestion)+' → '+describe(afterQuestion));
+  } else if (afterQuestion) {
+    if (beforeQuestion.status!==afterQuestion.status) lines.push('卖方问题状态：'+beforeQuestion.status+' → '+afterQuestion.status);
+    if (Array.isArray(beforeQuestion.replies) && Array.isArray(afterQuestion.replies)) {
+      const earlier=new Set(beforeQuestion.replies.map(reply=>reply.event_id));
+      for (const reply of afterQuestion.replies) {
+        if (reply.event_id && !earlier.has(reply.event_id)) {
+          lines.push('本版新收录卖方答复 · '+[reply.note,reply.filename,reply.locator,reply.actor,reply.ts,reply.event_id].filter(Boolean).join(' · '));
+        }
+      }
+    } else {
+      lines.push('历史版本缺少答复清单，无法逐条比较。');
+    }
+  }
   const flowValues=(plan,i)=>scenarioNames.map((name,j)=>name+'现值 '+format(plan.outputs[j].presentValues[i])).join(' · ')+' 百万 '+plan.currency;
   const old=valuationDraft(parent).flows, used=new Set();
   for (const [i,flow] of current.flows.entries()) {
@@ -192,6 +209,11 @@ async function renderValuation(seq) {
   let dirty = false;
   const number = value => Number(value).toLocaleString('zh-CN',{maximumFractionDigits:4});
   const searchTerms={asset:'',keyword:''};
+  const documents=new Map((detail.documents || []).map(doc=>[doc.document_id,doc]));
+  function replySource(reply) {
+    const url=documents.get(reply.document_id)?.file_url;
+    return url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(reply.filename)}</a>` : esc(reply.filename);
+  }
   function disclosureText(r) {
     return [r.asset || r.subject,r.field,r.value,r.region,'披露 '+r.source_date,
       r.effective?'发生或生效 '+r.effective:''].filter(Boolean).join(' · ');
@@ -282,7 +304,7 @@ async function renderValuation(seq) {
         <tbody>${v.deals.map(d=>`<tr><th>${esc(d.name)}<br>${esc(d.disclosed)}</th><td>${esc(d.scope)}</td><td>${esc(d.currency)}</td>
         <td>${esc(d.upfront || '未披露')}</td><td>${esc(d.milestones || '未披露')}</td><td>${esc(d.source)}<br>${esc(d.limits)}</td></tr>`).join('')}</tbody></table></div>` : ''}
         ${v.question?.replies ? `<details><summary>保存时已登记的卖方答复（${v.question.replies.length}）</summary>
-        ${v.question.replies.map(r=>`<p>${esc(fmtDate(r.ts))} · ${esc(r.actor)} · ${esc(r.note)}<br>${esc(r.filename)} · ${esc(r.locator)}</p>`).join('')}</details>` : ''}
+        ${v.question.replies.map(r=>`<p>${esc(fmtDate(r.ts))} · ${esc(r.actor)} · ${esc(r.note)}<br>${replySource(r)} · ${esc(r.locator)}</p>`).join('')}</details>` : ''}
         ${v.question?`<p><a href="#/followup?project=${encodeURIComponent(project)}&question=${encodeURIComponent(v.question.question_id)}">复核关联卖方问题</a> · 保存时状态 ${esc(v.question.status)}</p>`:''}
         ${revisions.length?`<details id="val-revisions"><summary>与上一个估值版本比较</summary><ul>${revisions.map(line=>'<li>'+esc(line)+'</li>').join('')}</ul></details>`:''}
         <button type="button" id="val-download" class="btn">下载内部估值底稿</button>
