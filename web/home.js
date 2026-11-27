@@ -32,9 +32,9 @@ const homeEvidence={
 };
 
 const homeReport={
-  zh:{pilot:'就此资产申请试点报价',title:'公开资产证据简报',download:'下载可打印简报',scope:'范围为 HiJenny 公开关注名单和已收录指南。终点按登记名称列出。',archive:'核对当时归档',source:'原始来源',date:'登记更新',version:'来源版本',observed:'首次收录',none:'此截面暂无记录',phase:'阶段',status:'登记状态',sponsor:'牵头申办方',conditions:'疾病',sites:'中心所在地区',planned:'方案登记的主要终点',unavailable:'该截面未收录方案主要终点。',posted:'查看本试验已归档的主要终点结果条目',noPosted:'该截面未收录本试验的主要终点结果条目。'},
-  en:{pilot:'Request a pilot quote for this asset',title:'Public asset evidence brief',download:'Download printable brief',scope:'Coverage includes the HiJenny public watchlist and indexed guidance. Endpoints use registry titles.',archive:'View archived evidence',source:'Original source',date:'Registry update',version:'Source version',observed:'First indexed',none:'No records at this cutoff',phase:'Phase',status:'Registry status',sponsor:'Lead sponsor',conditions:'Conditions',sites:'Site countries or regions',planned:'Protocol primary endpoints',unavailable:'Protocol primary endpoints are unavailable at this cutoff.',posted:'View archived primary outcome entries for this trial',noPosted:'No primary outcome entries for this trial are archived at this cutoff.'},
-  ja:{pilot:'この医薬品の試行導入見積もり',title:'医薬品の公開エビデンス概要',download:'印刷用の概要をダウンロード',scope:'HiJenny の公開ウォッチリストと収録済みの指針が対象です。評価項目は登録名で表示します。',archive:'当時の収録記録',source:'原資料',date:'登録更新日',version:'資料の版',observed:'初回収録日',none:'この時点の収録記録なし',phase:'試験相',status:'登録状況',sponsor:'主たる依頼者',conditions:'対象疾患',sites:'実施国・地域',planned:'計画書に登録された主要評価項目',unavailable:'この時点で計画書の主要評価項目は収録されていません。',posted:'この試験の収録済み主要評価項目の結果を見る',noPosted:'この時点でこの試験の主要評価項目の結果は収録されていません。'}
+  zh:{pilot:'就此资产申请试点报价',title:'公开资产证据简报',download:'下载可打印简报',scope:'范围为 HiJenny 公开关注名单和已收录指南。终点按登记名称列出。',archive:'核对当时归档',source:'原始来源',date:'登记更新',version:'来源版本',observed:'首次收录',none:'此截面暂无记录',phase:'阶段',status:'登记状态',sponsor:'牵头申办方',conditions:'疾病',sites:'中心所在地区',timeFrame:'评价时间',population:'分析人群',missing:'该字段未收录',planned:'方案登记的主要终点',unavailable:'该截面未收录方案主要终点。',posted:'查看本试验已归档的主要终点结果条目',noPosted:'该截面未收录本试验的主要终点结果条目。'},
+  en:{pilot:'Request a pilot quote for this asset',title:'Public asset evidence brief',download:'Download printable brief',scope:'Coverage includes the HiJenny public watchlist and indexed guidance. Endpoints use registry titles.',archive:'View archived evidence',source:'Original source',date:'Registry update',version:'Source version',observed:'First indexed',none:'No records at this cutoff',phase:'Phase',status:'Registry status',sponsor:'Lead sponsor',conditions:'Conditions',sites:'Site countries or regions',timeFrame:'Assessment time frame',population:'Analysis population',missing:'Field unavailable in archive',planned:'Protocol primary endpoints',unavailable:'Protocol primary endpoints are unavailable at this cutoff.',posted:'View archived primary outcome entries for this trial',noPosted:'No primary outcome entries for this trial are archived at this cutoff.'},
+  ja:{pilot:'この医薬品の試行導入見積もり',title:'医薬品の公開エビデンス概要',download:'印刷用の概要をダウンロード',scope:'HiJenny の公開ウォッチリストと収録済みの指針が対象です。評価項目は登録名で表示します。',archive:'当時の収録記録',source:'原資料',date:'登録更新日',version:'資料の版',observed:'初回収録日',none:'この時点の収録記録なし',phase:'試験相',status:'登録状況',sponsor:'主たる依頼者',conditions:'対象疾患',sites:'実施国・地域',timeFrame:'評価期間',population:'解析対象集団',missing:'この項目は未収録',planned:'計画書に登録された主要評価項目',unavailable:'この時点で計画書の主要評価項目は収録されていません。',posted:'この試験の収録済み主要評価項目の結果を見る',noPosted:'この時点でこの試験の主要評価項目の結果は収録されていません。'}
 };
 
 const homeUpdates={
@@ -83,13 +83,16 @@ function downloadHomeEvidence(asset,result,lang) {
     return `<h4>${copy.planned}</h4>`+(items?'<ul>'+items+'</ul>'+archive(r.field_events?.planned_endpoints):'<p>'+copy.unavailable+'</p>')+
       '<p>'+posted+'</p>';
   };
+  const outcomeMeasures=r=>(r.measures || r.endpoints.map(title=>({title}))).map(m=>
+    `<li><strong>${esc(m.title)}</strong>${details([[copy.timeFrame,m.timeFrame || copy.missing],
+      [copy.population,m.populationDescription || copy.missing]])}</li>`).join('');
   const report=`<!doctype html><html lang="${lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(asset)} · ${copy.title}</title>
     <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}@media print{body{margin:0;font-size:10pt}h2,h3{break-after:avoid}article{break-inside:avoid}}</style>
     <main><p>HiJenny · ${copy.title}</p><h1>${esc(asset)}</h1><p>${headers.cutoff} ${esc(result.as_of)}</p><p>${copy.scope}</p>`+
     section(headers.trials,result.trials,r=>`<h3>${esc(r.record)} · ${esc(r.asset)}</h3>`+
       details([['phase',copy.phase],['status',copy.status],['sponsor',copy.sponsor],['conditions',copy.conditions],['countries',copy.sites]]
         .map(([key,label])=>[label,r[key],r.field_events?.[key]]).concat([[copy.date,r.source_date,r.id]]))+protocol(r)+link(registry(r)))+
-    section(headers.results,result.outcomes,r=>`<h3 id="outcome-${esc(r.record)}">${esc(r.record)}</h3><ul>${r.endpoints.map(v=>'<li>'+esc(v)+'</li>').join('')}</ul>`+
+    section(headers.results,result.outcomes,r=>`<h3 id="outcome-${esc(r.record)}">${esc(r.record)}</h3><ul>${outcomeMeasures(r)}</ul>`+
       details([[copy.date,r.source_date,r.id]])+link(registry(r)+'?tab=results'))+
     section(headers.guidance,result.guidance,g=>`<h3>${esc(g.publisher)} · ${esc(g.reference)}</h3><p>${esc(g.type)} · ${esc(g.topic)} · ${esc(g.region)}</p>`+
       details([[copy.version,g.version_date],[copy.observed,g.observed]])+link(g.url))+'</main></html>';
