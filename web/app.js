@@ -986,7 +986,7 @@ function filteredEvidence() {
     if (f.document_id && ev.document_id !== f.document_id) return false;
     if (f.verification_status && ev.verification_status !== f.verification_status) return false;
     if (needle) {
-      const hay = `${ev.quote || ''} ${ev.value_text || ''} ${ev.filename || ''} ${ev.field_name || ''} ${ev.arm || ''} ${ev.population || ''}`.toLowerCase();
+      const hay = `${ev.evidence_id} ${ev.quote || ''} ${ev.value_text || ''} ${ev.filename || ''} ${ev.field_name || ''} ${ev.arm || ''} ${ev.population || ''}`.toLowerCase();
       if (!hay.includes(needle)) return false;
     }
     return true;
@@ -1024,7 +1024,7 @@ function evidenceFiltersHtml() {
   const verifications = ['pending', 'verified', 'failed', 'unverifiable'];
   return `
     <div class="inline-filters">
-      <input class="search" type="search" placeholder="Search quote / field / value…" value="${esc(f.q)}" data-input="evidence-search" />
+      <input class="search" type="search" placeholder="搜索证据编号、引文、字段或数值" value="${esc(f.q)}" data-input="evidence-search" />
       <select data-change="evidence-filter" data-field="field_name">${selectOptions(fields, f.field_name, 'All fields')}</select>
       <select data-change="evidence-filter" data-field="category">
         <option value="">All categories</option>
@@ -1071,6 +1071,12 @@ function renderEvidenceCards() {
   const countEl = document.querySelector('#evidence-count');
   if (countEl) countEl.textContent = `${rows.length} of ${state.evidenceAll.length} evidence items`;
   if (!rows.length) {
+    const id = state.filters.evidence.q.trim();
+    if (/^ev_[a-z0-9]+$/i.test(id)) {
+      const query = new URLSearchParams({project:state.projectId, evidence:id, preview:'text'});
+      host.innerHTML = `<a class="btn" href="#/evidence?${esc(query.toString())}">按完整编号查找项目证据</a>`;
+      return;
+    }
     host.innerHTML = `<div class="evidence-hint">${state.evidenceAll.length ? 'No evidence matches the current filters.' : 'No evidence extracted yet — upload a package and run analysis.'}</div>`;
     return;
   }
@@ -1248,12 +1254,32 @@ async function renderEvidence(seq) {
       state.selectedEvidenceId = null;
     }
     if (state.pendingFocusEvidence) {
-      const target = state.evidenceAll.find((ev) => ev.evidence_id === state.pendingFocusEvidence);
+      const id = state.pendingFocusEvidence;
+      let target = state.evidenceAll.find((ev) => ev.evidence_id === id);
       state.pendingFocusEvidence = null;
-      if (target) {
-        state.selectedEvidenceId = target.evidence_id;
-        state.previewDocId = target.document_id;
-        state.previewPage = Number(target.page || 1);
+      if (!target) {
+        try {
+          const detail = await api('/api/evidence/' + encodeURIComponent(id));
+          if (seq !== state.renderSeq) return;
+          if (detail.evidence?.project_id === state.projectId) {
+            target = detail.evidence;
+            state.evidenceAll.unshift(target);
+          }
+        } catch (error) {
+          if (seq !== state.renderSeq) return;
+          if (error.status !== 404) throw error;
+        }
+      }
+      if (!target) {
+        setView(emptyPanel('当前项目中找不到这条证据', '请核对报告版本和项目，再打开对应证据。',
+          '<button class="btn" data-nav="report">返回尽调报告</button>'));
+        return;
+      }
+      state.selectedEvidenceId = target.evidence_id;
+      state.previewDocId = target.document_id;
+      state.previewPage = Number(target.page || 1);
+      if (!filteredEvidence().slice(0, 600).some(ev => ev.evidence_id === id)) {
+        state.filters.evidence = {q:id, field_name:'', category:'', document_id:'', verification_status:''};
       }
     }
     renderEvidenceView();
@@ -1476,7 +1502,7 @@ function renderMarkdown(md) {
     return html;
   };
 
-  const splitRow = (line) => line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  const splitRow = (line) => line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim());
 
   while (i < lines.length) {
     const line = lines[i];
@@ -1505,8 +1531,15 @@ function renderMarkdown(md) {
       i += 2;
       const rows = [];
       while (i < lines.length && /^\s*\|/.test(lines[i])) { rows.push(splitRow(lines[i])); i += 1; }
+      const renderCell = (cell, index) => {
+        if (header[index] === 'Evidence ID' && /^ev_[A-Za-z0-9_-]+$/.test(cell)) {
+          const query = new URLSearchParams({project:state.projectId, evidence:cell, preview:'text'});
+          return `<a href="#/evidence?${esc(query.toString())}">查看原文 · ${esc(cell)}</a>`;
+        }
+        return inlineMd(cell);
+      };
       out.push(`<table><thead><tr>${header.map((h) => `<th>${inlineMd(h)}</th>`).join('')}</tr></thead><tbody>${
-        rows.map((row) => `<tr>${row.map((cell) => `<td>${inlineMd(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+        rows.map((row) => `<tr>${row.map((cell, index) => `<td>${renderCell(cell, index)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
       continue;
     }
     if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flushParagraph(); out.push('<hr/>'); i += 1; continue; }

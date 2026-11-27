@@ -913,7 +913,8 @@ def test_source_review_exceptions_follow_evidence_into_exports(env):
     report = Document(outputs["report_docx"])
     review_table = next(t for t in report.tables if t.cell(0, 0).text == "Field" and t.cell(0, 1).text == "Source")
     assert len(review_table.rows) == 4
-    assert any([c.text for c in row.cells][2:] == ["failed", "reviewer-27", "Check original orr"] for row in review_table.rows)
+    assert any([c.text for c in row.cells][2:5] == ["failed", "reviewer-27", "Check original orr"]
+               and row.cells[5].text in md and row.cells[5].text.startswith("ev_") for row in review_table.rows)
     sheet = load_workbook(outputs["questions_xlsx"], read_only=True)["Evidence Matrix"]
     headers, *rows = list(sheet.values)
     matrix = [dict(zip(headers, row)) for row in rows]

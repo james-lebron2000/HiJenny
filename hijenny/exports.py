@@ -1440,7 +1440,8 @@ def decision_brief_data(data: dict) -> dict:
         "highlights": highlights,
         "review_limits": [
             [str(ev.get("field_name") or "").upper(), f"{ev.get('filename') or ev.get('document_name')} p.{ev.get('page')}",
-             ev["verification_status"], ev.get("verified_by") or DEFAULT_DASH, ev.get("verification_note") or DEFAULT_DASH]
+             ev["verification_status"], ev.get("verified_by") or DEFAULT_DASH, ev.get("verification_note") or DEFAULT_DASH,
+             ev.get("evidence_id") or DEFAULT_DASH]
             for ev in data.get("evidence") or [] if ev.get("verification_status") in UNSUPPORTED_REVIEW_STATUSES
         ],
         "risks": risks,
@@ -1623,8 +1624,8 @@ def render_markdown_report(data: dict) -> str:
     if brief["review_limits"]:
         add("### Source review exceptions")
         add("")
-        add("| Field | Source | Review | Reviewer | Note |")
-        add("|---|---|---|---|---|")
+        add("| Field | Source | Review | Reviewer | Note | Evidence ID |")
+        add("|---|---|---|---|---|---|")
         for row in brief["review_limits"]:
             add("| " + " | ".join(_md_cell(v) for v in row) + " |")
         add("")
@@ -2218,7 +2219,7 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
         doc.add_paragraph("No extracted evidence is available yet.")
     if brief["review_limits"]:
         doc.add_heading("Source review exceptions", level=2)
-        _docx_table(doc, ["Field", "Source", "Review", "Reviewer", "Note"], brief["review_limits"])
+        _docx_table(doc, ["Field", "Source", "Review", "Reviewer", "Note", "Evidence ID"], brief["review_limits"])
     doc.add_heading("Top open risks", level=2)
     if brief["risks"]:
         _docx_table(
