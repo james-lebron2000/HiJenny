@@ -38,12 +38,12 @@ function measureRows(measure, scopes=['整个终点','分层','总体']) {
 }
 
 const analysisHeaders=['登记分析序号','字段','原报内容'];
-function analysisRows(measure) {
-  const groups=new Map((measure.groups || []).map(g=>[g.id,g.title]));
-  const labels={groupIds:'纳入分析的组',paramType:'效应量类型',paramValue:'效应估计值',ciPctValue:'置信水平（%）',
+const analysisFields={groupIds:'纳入分析的组',paramType:'效应量类型',paramValue:'效应估计值',ciPctValue:'置信水平（%）',
     ciNumSides:'区间侧数',ciLowerLimit:'区间下限',ciUpperLimit:'区间上限',pValue:'P 值',
     statisticalMethod:'检验方法',statisticalComment:'方法说明',nonInferiorityType:'比较类型',
-    groupDescription:'组别说明',estimateComment:'估计值说明',pValueComment:'P 值说明'};
+    groupDescription:'组别说明',estimateComment:'估计值说明',pValueComment:'P 值说明',nonInferiorityComment:'比较设计说明'};
+function analysisRows(measure, labels=analysisFields) {
+  const groups=new Map((measure.groups || []).map(g=>[g.id,g.title]));
   return (measure.analyses || []).flatMap((analysis,index)=>Object.entries(analysis).map(([field,value])=>{
     const text=field==='groupIds' ? value.map(id=>[id,groups.get(id)].filter(Boolean).join(' · ')).join(' / ') : value;
     return [index+1,labels[field] || field,text];

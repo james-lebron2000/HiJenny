@@ -88,12 +88,22 @@ function downloadHomeEvidence(asset,result,lang) {
     en:{denoms:['Scope','Group','Denominator','Denominator unit'],values:['Category','Group','Reported value','Unit','Dispersion','Lower limit','Upper limit','Comment'],scopes:['Entire endpoint','Stratum','Overall'],stat:'Statistic',spread:'Dispersion type'},
     ja:{denoms:['適用範囲','群','解析分母','分母の単位'],values:['区分','群','報告値','単位','ばらつき','下限','上限','注記'],scopes:['評価項目全体','層','全体'],stat:'統計量',spread:'ばらつきの種類'}
   }[lang];
+  const analyses={
+    zh:{title:'登记统计分析',headers:analysisHeaders,fields:analysisFields,empty:'本终点归档列出的统计分析为 0 项。',missing:'此版归档缺少统计分析字段。'},
+    en:{title:'Registered statistical analyses',headers:['Analysis','Field','Reported content'],empty:'This endpoint archive lists zero analyses.',missing:'The analyses field is unavailable in this archive version.',
+      fields:{groupIds:'Groups',paramType:'Effect measure',paramValue:'Estimate',ciPctValue:'Confidence level (%)',ciNumSides:'Interval sides',ciLowerLimit:'Lower limit',ciUpperLimit:'Upper limit',pValue:'P value',statisticalMethod:'Statistical method',statisticalComment:'Method comment',nonInferiorityType:'Comparison type',nonInferiorityComment:'Comparison design comment',groupDescription:'Group description',estimateComment:'Estimate comment',pValueComment:'P value comment'}},
+    ja:{title:'登録された統計解析',headers:['解析番号','項目','報告内容'],empty:'この評価項目の収録記録に記載された統計解析は0件です。',missing:'この版には統計解析の項目が収録されていません。',
+      fields:{groupIds:'解析対象群',paramType:'効果指標',paramValue:'推定値',ciPctValue:'信頼水準（%）',ciNumSides:'区間の片側・両側',ciLowerLimit:'下限',ciUpperLimit:'上限',pValue:'P値',statisticalMethod:'統計手法',statisticalComment:'手法の注記',nonInferiorityType:'比較の種類',nonInferiorityComment:'比較デザインの注記',groupDescription:'群の説明',estimateComment:'推定値の注記',pValueComment:'P値の注記'}}
+  }[lang];
   const outcomeMeasures=r=>(r.measures || r.endpoints.map(title=>({title}))).map(m=>{
     const {denoms,rows}=measureRows(m,tableLabels.scopes);
     return `<li><strong>${esc(m.title)}</strong>`+details([[copy.timeFrame,m.timeFrame || copy.missing],
       [copy.population,m.populationDescription || copy.missing],[tableLabels.stat,m.paramType],[tableLabels.spread,m.dispersionType]])+
       registryTable(tableLabels.denoms,denoms,copy.missing,copy.missing)+
-      registryTable(tableLabels.values,rows,copy.missing,copy.missing)+'</li>';
+      registryTable(tableLabels.values,rows,copy.missing,copy.missing)+
+      `<h4>${analyses.title}</h4>`+(Array.isArray(m.analyses)
+        ? registryTable(analyses.headers,analysisRows(m,analyses.fields),analyses.empty,copy.missing)
+        : '<p>'+analyses.missing+'</p>')+'</li>';
   }).join('');
   const report=`<!doctype html><html lang="${lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(asset)} · ${copy.title}</title>
     <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}.comparison-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.85em}th,td{padding:.25rem;text-align:left;vertical-align:top;border:1px solid #aab8be;overflow-wrap:anywhere}@media print{.comparison-scroll{overflow:visible}li:has(table){break-inside:auto}body{margin:0;font-size:10pt}h2,h3{break-after:avoid}article{break-inside:avoid}}</style>
