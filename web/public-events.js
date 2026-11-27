@@ -157,7 +157,34 @@ function bindSavedPublicFilters(onApply) {
           try {localStorage.removeItem(key); draw(); message.textContent='已移除 '+entry.name;}
           catch {message.textContent='本浏览器无法移除此筛选。';}
         };
-        li.append(open,remove); list.append(li);
+        const mark=document.createElement('button');
+        mark.type='button'; mark.className='btn'; mark.textContent=entry.checkpoint?'更新核对时间':'记录核对起点';
+        mark.onclick=async()=>{
+          mark.disabled=true;
+          try {
+            const {receipt}=await api('/api/public-events/collection');
+            if (!receipt?.finished_utc) throw new Error('尚无采集回执');
+            const current=JSON.parse(localStorage.getItem(key));
+            if (!current || current.query!==entry.query) return;
+            current.checkpoint=receipt.finished_utc;
+            localStorage.setItem(key,JSON.stringify(current)); draw();
+            message.textContent='已按最新入库回执记录核对时间：'+fmtDate(current.checkpoint);
+          } catch {message.textContent='无法记录核对时间，请稍后重试。';}
+          finally {mark.disabled=false;}
+        };
+        li.append(open);
+        if (entry.checkpoint) {
+          const updates=document.createElement('button');
+          updates.type='button'; updates.className='btn'; updates.textContent='查看核对后新增';
+          updates.onclick=()=>{
+            const params=new URLSearchParams(entry.query);
+            if (entry.week) recentPublicWeek(params);
+            params.set('observed_after',entry.checkpoint);
+            onApply(params);
+          };
+          li.append(updates,' 核对起点 '+fmtDate(entry.checkpoint)+' ');
+        }
+        li.append(mark,remove); list.append(li);
       }
     } catch {message.textContent='本浏览器暂时无法读取已存筛选。';}
   }
@@ -168,7 +195,8 @@ function bindSavedPublicFilters(onApply) {
     try {
       const key=prefix+encodeURIComponent(name);
       if (localStorage.getItem(key)!==null) {message.textContent='此名称已使用，请更换名称。';return;}
-      localStorage.setItem(key,JSON.stringify({name,query:applied.toString(),week:form.elements.week.checked}));
+      const saved=new URLSearchParams(applied); saved.delete('observed_after');
+      localStorage.setItem(key,JSON.stringify({name,query:saved.toString(),week:form.elements.week.checked}));
       form.reset(); draw(); message.textContent='已保存 '+name;
     } catch {message.textContent='本浏览器无法保存筛选。';}
   };
@@ -400,6 +428,7 @@ function renderPublicEvents() {
     <label>来源披露结束日期<input type="date" name="disclosed_to"></label>
     <label>首次发现起始日（台北）<input type="date" name="discovered_from"></label>
     <label>首次发现结束日（台北）<input type="date" name="discovered_to"></label>
+    <div id="public-observed-after" hidden><label>首次观察晚于<input name="observed_after" readonly></label><button type="button" class="btn" data-clear>取消核对起点</button></div>
     <label>记录类型<select name="kind"><option value="">全部</option><option value="change">字段变化</option>
     <option value="reviewed">原文核实</option><option value="baseline">首次收录</option></select></label>
     <label><input type="checkbox" name="publication_status" value="true"> 仅看论文出版状态</label>
@@ -408,6 +437,7 @@ function renderPublicEvents() {
     <p><a href="#/public-events?asset=奥希替尼">查看奥希替尼的管线、结果和指南</a></p>
     <section class="card" id="asset-evidence" aria-live="polite" hidden></section>
     <details class="card" id="public-saved-filters"><summary>我的常用筛选（本浏览器）</summary>
+    <p>记录核对起点使用数据库最新采集回执的时间。查看新增沿用原筛选条件；更新核对时间后，从新起点计算。</p>
     <ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
     <label><input type="checkbox" name="week"> 每次打开时查看最近七天发现，替换已选的历史截面和发现日期</label>
     <button class="btn" disabled>保存当前结果的筛选条件</button></form><p role="status"></p></details>
@@ -502,6 +532,7 @@ function renderPublicEvents() {
       showAssetEvidence($('#asset-evidence'),query.get('asset')?.trim() || '',query.get('as_of'));
       setSavedQuery(null); offset = 0; generation++; list.replaceChildren();
     }
+    $('#public-observed-after').hidden=!query.has('observed_after');
     const request = generation;
     query.set('offset', String(offset));
     const counts = $('#public-source-counts');
@@ -762,6 +793,9 @@ function renderPublicEvents() {
     if (eventId) params.set('event',eventId);
     history.replaceState(history.state,'','#/public-events'+(params.size?'?'+params:''));
     load(true);
+  };
+  $('#public-observed-after [data-clear]').onclick=()=>{
+    form.elements.observed_after.value=''; form.requestSubmit();
   };
   $('#public-event-week').onclick = ()=>{
     const params=new URLSearchParams();

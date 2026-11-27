@@ -59,6 +59,11 @@ def test_review_digest_uses_taipei_discovery_day_and_exports_all_matches(tmp_pat
     snapshot_report = client.get("/api/public-events/report.txt", params={"as_of": "2026-11-26"})
     assert "历史截面" in snapshot_report.text and "共 1 条" in snapshot_report.text
     params = dict(disclosed_to="2026-11-27", discovered_from="2026-11-27", discovered_to="2026-11-27", kind="reviewed")
+    cutoff = dict(params, observed_after="2026-11-27T00:00:00+08:00")
+    assert [r["id"] for r in client.get("/api/public-events", params=cutoff).json()["items"]] == ["2"]
+    filtered_report = client.get("/api/public-events/report.txt", params=cutoff).text
+    assert "仅含首次观察晚于" in filtered_report and "共 1 条" in filtered_report
+    assert client.get("/api/public-events", params={"observed_after": "2026-11-27T00:00:00"}).status_code == 422
     result = client.get("/api/public-events", params=dict(params, limit=1)).json()
     assert result["total"] == 2 and result["items"][0]["id"] == "2"
     report = client.get("/api/public-events/report.txt", params=params)
