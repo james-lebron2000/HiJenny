@@ -477,12 +477,31 @@ function renderPublicEvents() {
     <button type="button" class="btn" data-refresh-counts hidden>刷新新增数量</button><ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
     <label><input type="checkbox" name="week"> 每次打开时查看最近七天发现，替换已选的历史截面和发现日期</label>
     <button class="btn" disabled>保存当前结果的筛选条件</button></form><p role="status"></p></details>
-    <p id="public-event-feed" hidden><a>订阅当前筛选（Atom）</a> · <a data-week>订阅滚动七天</a><br><small>滚动订阅每次读取时按台北日期重算最近七天，替换历史截面和发现日期。两种订阅均保留其他条件，最多列出最近 100 条。</small></p>
+    <p id="public-event-feed" hidden><a>订阅当前筛选（Atom）</a> <button class="btn" type="button" data-copy-feed="a">复制当前筛选订阅地址</button>
+    <a data-week>订阅滚动七天</a> <button class="btn" type="button" data-copy-feed="a[data-week]">复制滚动七天订阅地址</button>
+    <span role="status"></span><input type="text" aria-label="可复制的订阅地址" readonly hidden><br><small>滚动订阅每次读取时按台北日期重算最近七天，替换历史截面和发现日期。两种订阅均保留其他条件，最多列出最近 100 条。</small></p>
     <a id="public-event-report" hidden>下载当前筛选的完整简报</a>
     <p id="public-event-status" role="status"></p><nav id="public-source-counts" aria-label="按来源查看归档"></nav><div id="public-event-list"></div>
     <button type="button" class="btn" id="public-event-more" hidden>加载更多</button></section>`);
   const form = $('#public-event-filters'), status = $('#public-event-status');
   const list = $('#public-event-list'), more = $('#public-event-more');
+  const feed=$('#public-event-feed'), feedStatus=feed.querySelector('[role=status]'), feedAddress=feed.querySelector('input');
+  let copyAttempt=0;
+  for (const button of feed.querySelectorAll('[data-copy-feed]')) button.onclick=async()=>{
+    const attempt=++copyAttempt;
+    const address=feed.querySelector(button.dataset.copyFeed).href;
+    feedAddress.hidden=true;
+    feedStatus.textContent='';
+    try {
+      await navigator.clipboard.writeText(address);
+      if (attempt===copyAttempt) feedStatus.textContent='已复制，可粘贴到阅读器。';
+    } catch {
+      if (attempt!==copyAttempt) return;
+      feedAddress.value=address; feedAddress.hidden=false;
+      feedStatus.textContent='请复制下方地址到阅读器。';
+      feedAddress.focus(); feedAddress.select();
+    }
+  };
   bindArchivedComparison($('#archived-comparison'));
   const collection=$('#public-collection');
   api('/api/public-events/collection').then(({receipt,verification,source_timing})=>{
@@ -574,7 +593,7 @@ function renderPublicEvents() {
     const counts = $('#public-source-counts');
     if (reset) counts.replaceChildren();
     const download = $('#public-event-report');
-    const feed=$('#public-event-feed');
+    copyAttempt++; feedAddress.hidden=true; feedAddress.value=''; feedStatus.textContent='';
     feed.hidden=true;
     download.hidden = true;
     more.hidden = true; status.textContent = '正在读取…';
