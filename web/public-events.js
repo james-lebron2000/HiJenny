@@ -541,7 +541,7 @@ function renderPublicEvents() {
   };
   bindArchivedComparison($('#archived-comparison'));
   const collection=$('#public-collection');
-  api('/api/public-events/collection').then(({receipt,verification,source_timing})=>{
+  api('/api/public-events/collection').then(({receipt,verification,source_timing,collection_links})=>{
     if (!collection.isConnected) return;
     const body=collection.querySelector('div');
     const coverage=$('#public-coverage div');
@@ -574,11 +574,16 @@ function renderPublicEvents() {
         names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':r.status==='manual_review'?'待人工复核':'待更新 · '+r.error,
         r.last_success_utc?fmtDate(r.last_success_utc):r.status==='ok'?fmtDate(receipt.finished_utc):'未记录',r.records ?? '待核',r.new_events ?? '待核']));
     body.prepend(syncStatus,publicScheduleStatus(verification?.scheduled_collection));
-    if (/^[0-9]+$/.test(receipt.run_id)) {
+    if (collection_links?.run) {
       const link=document.createElement('a');
-      link.href='https://github.com/james-lebron2000/HiJenny/actions/runs/'+receipt.run_id;
+      link.href=collection_links.run;
       link.textContent=({schedule:'查看定时采集运行',workflow_dispatch:'查看手动采集运行'})[receipt.trigger] || '查看采集运行';
       body.append(link);
+    }
+    if (collection_links?.watchlist) {
+      const link=document.createElement('a');
+      link.href=collection_links.watchlist; link.textContent='查看本次采集采用的公开监测名单';
+      body.append(document.createElement('br'),link);
     }
   }).catch(()=>{
     if (collection.isConnected) collection.querySelector('div').textContent=$('#public-coverage div').textContent='暂时无法读取采集回执。';

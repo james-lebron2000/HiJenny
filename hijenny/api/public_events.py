@@ -214,8 +214,23 @@ def latest_collection():
         """)
         timing = {source: dict(event_id=event_id, source_date=source_date, observed_day=day, days=days)
                   for source, event_id, source_date, day, days in samples}
-    return {"receipt": json.loads(row[0]) if row else None,
+    receipt = json.loads(row[0]) if row else None
+    return {"receipt": receipt, "collection_links": collection_links(receipt or {}),
             "verification": json.loads(check[0]) if check else None, "source_timing": timing}
+
+
+def collection_links(receipt):
+    repo = "https://github.com/james-lebron2000/HiJenny"
+    links = {}
+    run_id = str(receipt.get("run_id", ""))
+    attempt = str(receipt.get("run_attempt", ""))
+    if re.fullmatch(r"[0-9]+", run_id):
+        url = f"{repo}/actions/runs/{run_id}"
+        links["run"] = f"{url}/attempts/{attempt}" if re.fullmatch(r"[1-9][0-9]*", attempt) else url
+    commit = str(receipt.get("collector_commit", ""))
+    if re.fullmatch(r"[0-9a-f]{40}", commit):
+        links["watchlist"] = f"{repo}/blob/{commit}/data/public/watchlist.json"
+    return links
 
 
 def source_counts(db, table, sql, args):
@@ -399,9 +414,15 @@ def report(request: Request, filters=Depends(event_filters)):
         if receipt_row:
             receipt = json.loads(receipt_row[0])
             lines.append("导出时数据库所载最近一次采集回执 · " + receipt["finished_utc"])
-            run_id = str(receipt.get("run_id", ""))
-            if re.fullmatch(r"[0-9]+", run_id):
-                lines.append("采集记录 · https://github.com/james-lebron2000/HiJenny/actions/runs/" + run_id)
+            links = collection_links(receipt)
+            if "run" in links:
+                lines.append("采集记录 · " + links["run"])
+            if "watchlist" in links:
+                lines.append("本次采集采用的公开监测名单 · " + links["watchlist"])
+            for check in receipt.get("checks", []):
+                if check.get("status") in ("failed", "manual_review"):
+                    status = "待人工复核" if check["status"] == "manual_review" else "采集失败"
+                    lines.append(f"本批监测目标{status} · {check['source']} · {check['target']}")
         else:
             lines.append("导出时数据库尚无采集回执")
         archive_page = str(request.base_url) + "#/public-events?"
