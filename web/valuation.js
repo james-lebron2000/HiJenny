@@ -90,7 +90,7 @@ async function renderValuation(seq) {
   }
   let dirty = false;
   const number = value => Number(value).toLocaleString('zh-CN',{maximumFractionDigits:4});
-  let searchAsset = '';
+  const searchTerms={asset:'',keyword:''};
   function disclosureText(r) {
     return [r.asset || r.subject,r.field,r.value,r.region,'披露 '+r.source_date,
       r.effective?'发生或生效 '+r.effective:''].filter(Boolean).join(' · ');
@@ -122,7 +122,8 @@ async function renderValuation(seq) {
       <label>关联卖方问题<select id="val-question"><option value="">无关联</option>${questions.map(q=>option(q.question_id,draft.question?.question_id,q.question)).join('')}</select></label>
       </fieldset><h2>可比交易披露</h2><p>每笔交易按原币种记录。未披露金额留空，已披露为零填 0。里程碑上限单独展示，现金流假设由评审人填写。</p>
       <section class="card"><h3>公开交易依据</h3>
-      <label>按资产或公司查已核实的 SEC 披露<input id="val-public-query" value="${esc(searchAsset)}" placeholder="例如 ivonescimab"></label>
+      <label>按资产或公司查已核实的 SEC 披露<input id="val-public-query" data-disclosure-search="asset" value="${esc(searchTerms.asset)}" placeholder="例如 ivonescimab"></label>
+      <label>交易条款关键词<input data-disclosure-search="keyword" value="${esc(searchTerms.keyword)}" placeholder="例如 首付款、里程碑"></label>
       <button type="button" class="btn" id="val-public-search">查找估值日已披露的记录</button>
       <div id="val-public-list" aria-live="polite"></div>
       ${(draft.disclosures || []).map((r,i)=>`<p>${esc(disclosureText(r))} · ${disclosureLinks(r)}
@@ -215,7 +216,17 @@ async function renderValuation(seq) {
       };
     }
     if (prior && !dirty) show(prior);
-    form.oninput=e=>{if(e.target.id==='val-public-query') {searchAsset=e.target.value;return;} dirty=true;result.textContent='输入已修改，请重新计算。';};
+    let searchRevision=0;
+    form.oninput=e=>{
+      const term=e.target.dataset.disclosureSearch;
+      if (term || e.target.dataset.head==='asOf') {
+        searchRevision++;
+        search.disabled=false;
+        list.replaceChildren();
+      }
+      if (term) {searchTerms[term]=e.target.value;return;}
+      dirty=true;result.textContent='输入已修改，请重新计算。';
+    };
     $('#val-history').onchange=e=>{
       if (dirty && !confirm('放弃未保存的修改并切换版本？')) {e.target.value=prior?.id || '';return;}
       prior=versions().find(v=>v.id===e.target.value) || null;draft=structuredClone(prior || newPlan());dirty=false;rememberVersion();paint();
@@ -224,13 +235,14 @@ async function renderValuation(seq) {
     search.onclick=async ()=>{
       const asOf=form.querySelector('[data-head="asOf"]').value;
       if (!asOf) {list.textContent='请先填写估值日。';return;}
+      const revision=++searchRevision;
       search.disabled=true; list.textContent='正在读取公开披露…';
-      const params=new URLSearchParams({asset:searchAsset.trim(),kind:'reviewed',source:'SEC',disclosed_to:asOf});
+      const params=new URLSearchParams({asset:searchTerms.asset.trim(),keyword:searchTerms.keyword.trim(),kind:'reviewed',source:'SEC',disclosed_to:asOf});
       let offset=0;
       async function loadPage() {
         params.set('offset',String(offset));
         const page=await api('/api/public-events?'+params);
-        if (!list.isConnected) return;
+        if (!list.isConnected || revision!==searchRevision) return;
         if (!offset) list.replaceChildren();
         for (const r of page.items) {
           const entry=document.createElement('p');
@@ -248,11 +260,11 @@ async function renderValuation(seq) {
         if (!page.total) list.textContent='当前范围没有已核实的交易披露。';
         if (offset<page.total) {
           const more=document.createElement('button');more.type='button';more.className='btn';more.textContent='加载更多披露';
-          list.append(more);more.onclick=()=>{more.remove();loadPage().catch(err=>list.textContent=err.message);};
+          list.append(more);more.onclick=()=>{more.remove();loadPage().catch(err=>{if (revision===searchRevision) list.textContent=err.message;});};
         }
       }
-      try {await loadPage();} catch(err) {list.textContent='读取失败：'+err.message;}
-      finally {search.disabled=false;}
+      try {await loadPage();} catch(err) {if (revision===searchRevision) list.textContent='读取失败：'+err.message;}
+      finally {if (revision===searchRevision) search.disabled=false;}
     };
     for (const el of $$('[data-remove-disclosure]',form)) el.onclick=()=>{
       collect();
