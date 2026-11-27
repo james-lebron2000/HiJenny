@@ -64,3 +64,20 @@ test('unchanged cash flows distinguish scenario-only disclosures by archive iden
     '仅基准引用：付款披露 · 2024-06-03 · old','仅替代引用：付款披露 · 2024-06-03 · new'
   ]);
 });
+
+test('parent comparison follows legacy row identities across rename and deletion and suppresses cross-currency deltas',()=>{
+  const compare=runInNewContext(source+'\nversionComparison',{structuredClone});
+  const cases=(amount)=>[0,1].map(()=>({amount,year:0,probability:100}));
+  const plan=(id,flows,currency='USD')=>({id,flows,currency,asOf:'2026-11-27',rate:0,
+    outputs:[0,1].map(j=>price(flows.map(f=>f.cases[j]),0))});
+  const old=plan('a',[{label:'X',cases:cases(5)},{label:'X',cases:cases(-10)}]);
+  const next=plan('b',[{id:'legacy:a:1',label:'Y',cases:cases(-8)}]);
+  const rows=compare(old,next).join('\n');
+  assert.match(rows,/基准 -3 · 替代 -3/);
+  assert.match(rows,/现金流名称：X → Y/);
+  assert.match(rows,/Y · 基准 · 金额 -10 → -8 · 现值变化 2/);
+  assert.match(rows,/仅原版列入：X · 基准现值 5/);
+  const other=compare(old,{...next,currency:'EUR'}).join('\n');
+  assert.match(other,/统一口径/);
+  assert.doesNotMatch(other,/现值变化/);
+});

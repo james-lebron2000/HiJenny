@@ -80,6 +80,52 @@ function scenarioDifferences(plan) {
   }).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta) || a.index-b.index);
 }
 
+function valuationDraft(plan) {
+  const draft=structuredClone(plan);
+  draft.flows.forEach((flow,i)=>{flow.id ||= plan.id ? 'legacy:'+plan.id+':'+i : crypto.randomUUID();});
+  return draft;
+}
+
+function versionComparison(parent, current) {
+  const comparable=parent.currency===current.currency && parent.asOf===current.asOf;
+  const totals=plan=>plan.outputs.map(o=>o.total.toLocaleString('zh-CN',{maximumFractionDigits:4})).join(' / ');
+  const lines=[`原版 ${parent.id} · ${parent.asOf} · 百万 ${parent.currency} · 基准 / 替代 ${totals(parent)}`,
+    `本版 ${current.id} · ${current.asOf} · 百万 ${current.currency} · 基准 / 替代 ${totals(current)}`];
+  const format=n=>n.toLocaleString('zh-CN',{maximumFractionDigits:4});
+  if (comparable) lines.push('净现值变化（百万 '+current.currency+'） · '+scenarioNames.map((s,j)=>
+    s+' '+format(current.outputs[j].total-parent.outputs[j].total)).join(' · '));
+  else lines.push('估值日或币种不同，请先统一口径再比较金额。');
+  if (+parent.rate!==+current.rate) lines.push('年折现率 '+parent.rate+'% → '+current.rate+'%');
+  if (parent.basis!==current.basis) lines.push('估值口径依据：'+parent.basis+' → '+current.basis);
+  const flowValues=(plan,i)=>scenarioNames.map((name,j)=>name+'现值 '+format(plan.outputs[j].presentValues[i])).join(' · ')+' 百万 '+plan.currency;
+  const old=valuationDraft(parent).flows, used=new Set();
+  for (const [i,flow] of current.flows.entries()) {
+    const matches=old.map((f,k)=>({f,k})).filter(({f,k})=>!used.has(k) && (flow.id ?
+      f.id===flow.id : f.label===flow.label && old.filter(x=>x.label===flow.label).length===1 &&
+      current.flows.filter(x=>x.label===flow.label).length===1));
+    const previous=matches[0];
+    if (!previous) {lines.push('本版列入：'+flow.label+' · '+flowValues(current,i));continue;}
+    used.add(previous.k);
+    const before=previous.f;
+    if (before.label!==flow.label) lines.push('现金流名称：'+before.label+' → '+flow.label);
+    if (before.basis!==flow.basis) lines.push(flow.label+' · 依据：'+before.basis+' → '+flow.basis);
+    flow.cases.forEach((c,j)=>{
+      const prior=before.cases[j], changes=[];
+      for (const [key,name,suffix] of [['amount','金额',''],['year','年份',''],['probability','概率','%']]) {
+        if (+c[key]!==+prior[key]) changes.push(name+' '+prior[key]+suffix+' → '+c[key]+suffix);
+      }
+      const ids=new Set(c.disclosureIds || []), oldIds=new Set(prior.disclosureIds || []);
+      for (const id of oldIds) if (!ids.has(id)) changes.push('移除引用 '+id);
+      for (const id of ids) if (!oldIds.has(id)) changes.push('新增引用 '+id);
+      const delta=current.outputs[j].presentValues[i]-parent.outputs[j].presentValues[previous.k];
+      if (comparable && delta) changes.push('现值变化 '+format(delta)+' 百万 '+current.currency);
+      if (changes.length) lines.push(flow.label+' · '+scenarioNames[j]+' · '+changes.join(' · '));
+    });
+  }
+  old.forEach((f,k)=>{if (!used.has(k)) lines.push('仅原版列入：'+f.label+' · '+flowValues(parent,k));});
+  return lines;
+}
+
 const dealFields = [
   ['name','交易双方与资产','text'], ['disclosed','披露日','date'],
   ['scope','授权地区、权利范围及资产阶段','text'], ['currency','披露币种','text'],
@@ -105,7 +151,7 @@ async function renderValuation(seq) {
   const [response, detail] = await Promise.all([api(projectPath+'/questions'), api(projectPath)]);
   if (seq !== state.renderSeq) return;
   const versions = () => projectValuations(project);
-  const newFlow = () => ({label:'',basis:'',cases:[{},{}]});
+  const newFlow = () => ({id:crypto.randomUUID(),label:'',basis:'',cases:[{},{}]});
   const newPlan = () => ({name:detail.project.asset_name || '',origin:detail.project.meta?.opportunity || null,deals:[],asOf:'',currency:'USD',rate:'',basis:'',comparable:'', flows:[newFlow()],question:null});
   const requested = response.questions.find(q=>q.question_id===hashParams().get('question'));
   const previous = versions();
@@ -116,7 +162,7 @@ async function renderValuation(seq) {
       <a href="#/valuation?project=${encodeURIComponent(project)}">查看本项目的估值</a></section>`);return;
   }
   let prior = exact || (requested ? previous.find(v=>v.question?.question_id===requested.question_id) : previous[0]) || null;
-  let draft = structuredClone(prior || newPlan());
+  let draft = valuationDraft(prior || newPlan());
   if (requested && !prior) draft.question=requested;
   function rememberVersion() {
     const params=new URLSearchParams({project});
@@ -202,6 +248,9 @@ async function renderValuation(seq) {
       const totals=v.outputs.map(o=>o.total);
       const differences=scenarioDifferences(v);
       const late=laterDisclosures(v);
+      const parent=v.parent && versions().find(item=>item.id===v.parent);
+      const revisions=parent ? versionComparison(parent,v) : v.parent ? ['本浏览器未找到原版 '+v.parent] : [];
+
       result.innerHTML=`<h2>买方风险调整净现值</h2><p>${esc(v.asOf)} · 百万 ${esc(v.currency)} · 年折现率 ${esc(v.rate)}%</p>
         ${late.length?`<section class="card"><h3>本版含估值日后披露的依据</h3><ul>${late.map(line=>`<li>${esc(line)}</li>`).join('')}</ul></section>`:''}
         <table><caption>按现值差额的绝对值排序，差额为替代减基准</caption><thead><tr><th>现金流</th><th>基准现值</th><th>替代现值</th><th>差额</th></tr></thead><tbody>
@@ -216,6 +265,7 @@ async function renderValuation(seq) {
         ${v.question?.replies ? `<details><summary>保存时已登记的卖方答复（${v.question.replies.length}）</summary>
         ${v.question.replies.map(r=>`<p>${esc(fmtDate(r.ts))} · ${esc(r.actor)} · ${esc(r.note)}<br>${esc(r.filename)} · ${esc(r.locator)}</p>`).join('')}</details>` : ''}
         ${v.question?`<p><a href="#/followup?project=${encodeURIComponent(project)}&question=${encodeURIComponent(v.question.question_id)}">复核关联卖方问题</a> · 保存时状态 ${esc(v.question.status)}</p>`:''}
+        ${revisions.length?`<details id="val-revisions"><summary>与上一个估值版本比较</summary><ul>${revisions.map(line=>'<li>'+esc(line)+'</li>').join('')}</ul></details>`:''}
         <button type="button" id="val-download" class="btn">下载内部估值底稿</button>
         <button type="button" id="val-formulas" class="btn">下载可复算表（Excel XML）</button>`;
       $('#val-formulas').onclick=()=>{
@@ -228,6 +278,7 @@ async function renderValuation(seq) {
           '年折现率 '+v.rate+'% · '+v.basis,'参照交易及限制 '+(v.comparable || '未提供'),
           '关联问题 '+(v.question ? v.question.question_id+' '+v.question.question+' · '+v.question.status : '未关联'),
           '单笔现值 = 有符号金额 × 无条件发生概率 ÷ (1 + 年折现率)^年份'];
+        if (revisions.length) lines.push('', '与上一个估值版本比较', ...revisions);
         if (v.question?.replies) {
           lines.push('保存时的跟进版本 '+v.question.revision+' · 已登记卖方答复 '+v.question.replies.length+' 条');
           for (const r of v.question.replies) lines.push(r.ts+' · '+r.actor+' · '+r.note,r.filename+' · '+r.locator+' · '+r.event_id);
@@ -271,7 +322,7 @@ async function renderValuation(seq) {
     };
     $('#val-history').onchange=e=>{
       if (dirty && !confirm('放弃未保存的修改并切换版本？')) {e.target.value=prior?.id || '';return;}
-      prior=versions().find(v=>v.id===e.target.value) || null;draft=structuredClone(prior || newPlan());dirty=false;rememberVersion();paint();
+      prior=versions().find(v=>v.id===e.target.value) || null;draft=valuationDraft(prior || newPlan());dirty=false;rememberVersion();paint();
     };
     const search=$('#val-public-search',form), list=$('#val-public-list',form);
     search.onclick=async ()=>{
