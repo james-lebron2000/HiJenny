@@ -26,6 +26,10 @@
     {
       "id": "NCT03470922",
       "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
+    },
+    {
+      "id": "NCT02296125",
+      "asset": "Tagrisso (osimertinib)"
     }
   ],
   "publications": [
@@ -48,6 +52,10 @@
     {
       "id": "NCT03470922",
       "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
+    },
+    {
+      "id": "NCT02296125",
+      "asset": "Tagrisso (osimertinib)"
     }
   ],
   "fda": [
@@ -75,6 +83,10 @@
     {
       "id": "EMEA/H/C/005481",
       "asset": "Opdualag (nivolumab + relatlimab-rmbw)"
+    },
+    {
+      "id": "EMEA/H/C/004124",
+      "asset": "Tagrisso (osimertinib)"
     }
   ],
   "jrct": [
