@@ -760,6 +760,6 @@ ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:18878:$pilot_socket" hijenny-pi
 
 ### 资料分析中的扫描页 OCR
 
-在文档表展开「需核对 PDF 原页」，填写已列为疑似扫描的页码，选择与原页相符的语言，再点「读取本页文字」。核对窗口同时显示该页原图和识别草稿，可打开 PDF 对应页放大核实；按 Esc 或点击「关闭」可返回选择其他页。识别使用本地 PyMuPDF 的 Tesseract 引擎，每次读取一页，结果供对照原件复核。识别结果仅显示在当前页面，刷新即清除。
+在文档表展开「需核对 PDF 原页」，填写已列为疑似扫描的页码，选择与原页相符的语言，再点「读取本页文字」。核对窗口同时显示该页原图和识别草稿，可打开 PDF 对应页放大核实；按 Esc 或点击「关闭」可返回选择其他页。识别使用本地 PyMuPDF 的 Tesseract 引擎，每次读取一页，结果供对照原件复核。识别结果显示在当前页面，刷新即清除。复核人可展开「校订并导出核对记录」，填写署名并下载 JSON，保留登记文件哈希、页码、OCR 原稿、校订文本和复核结果。遇到模糊原件时可标记为待补件。
 
 私有部署需将 Tesseract 的 `eng.traineddata`、`chi_sim.traineddata`、`chi_tra.traineddata`、`jpn.traineddata` 放入服务账号的 `~/.local/share/hijenny/tessdata/`。仓库的 systemd 模板已将 `TESSDATA_PREFIX` 指向该目录。其他启动方式可将此环境变量设为本机语言文件所在目录。每个服务进程最多同时识别两页，单页超时为 60 秒。

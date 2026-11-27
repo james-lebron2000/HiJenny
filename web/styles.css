@@ -984,8 +984,12 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 .task-home > .btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .ocr-review { width:min(94vw,76rem); max-height:90vh; overflow:auto; border:1px solid var(--border); border-radius:8px; padding:18px; white-space:normal; }
 .ocr-review::backdrop { background:rgb(15 30 45 / .5); }
-.ocr-review form { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.ocr-review > form { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
 .ocr-columns { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:16px; }
 .ocr-columns img { display:block; width:100%; height:auto; margin-top:8px; border:1px solid var(--border); }
 .ocr-columns pre { font:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
 @media (max-width:680px) { .ocr-columns { grid-template-columns:minmax(0,1fr); } }
+
+.ocr-note, .ocr-note label { display:grid; gap:6px; }
+.ocr-note { margin-top:12px; }
+.ocr-note textarea { width:100%; font:inherit; }

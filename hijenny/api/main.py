@@ -815,7 +815,8 @@ def create_app() -> FastAPI:
             _OCR_SLOTS.release()
         if result.returncode:
             raise HTTPException(422, "该页识别失败，请核对原页。")
-        return {"document_id": document_id, "page": page, "language": language,
+        return {"project_id": project_id, "document_id": document_id, "filename": document["filename"],
+                "registered_sha256": document["sha256"], "page": page, "language": language,
                 **json.loads(result.stdout)}
 
     # Convenience aliases (document id is globally unique).

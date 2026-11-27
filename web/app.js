@@ -1597,10 +1597,35 @@ async function handleAction(action, el) {
         dialog.className='ocr-review'; dialog.setAttribute('aria-label','扫描原页与 OCR 草稿对照');
         dialog.innerHTML=`<form method="dialog"><strong>第 ${result.page} 页 · 原页核对</strong><button class="btn" autofocus>关闭</button></form>
           <div class="ocr-columns"><div><a target="_blank" rel="noopener">打开原始 PDF 第 ${result.page} 页</a><img alt="第 ${result.page} 页原图"></div>
-          <section><h3>OCR 草稿</h3><p>请对照原图核实数字、单位和符号。</p><pre></pre></section></div>`;
+          <section><h3>OCR 草稿</h3><p>请对照原图核实数字、单位和符号。</p><pre></pre>
+          <details><summary>校订并导出核对记录</summary><form class="ocr-note">
+          <label>复核人姓名或代号<input name="reviewer" required maxlength="120"></label>
+          <label>复核结果<select name="outcome"><option value="reviewed">已逐字核对</option><option value="illegible">原页不清，需补原件</option></select></label>
+          <label>核对后文字<textarea name="transcript" rows="6"></textarea></label>
+          <button type="submit" class="btn">下载核对记录（JSON）</button><span role="status"></span>
+          </form></details></section></div>`;
         dialog.querySelector('a').href=panel.dataset.original+'#page='+result.page;
         dialog.querySelector('img').src='data:image/jpeg;base64,'+result.preview_jpeg;
         dialog.querySelector('pre').textContent=result.text || '本页未识别出文字。';
+        const note=dialog.querySelector('.ocr-note');
+        note.elements.transcript.value=result.text;
+        note.elements.outcome.onchange=()=>{note.elements.transcript.disabled=note.elements.outcome.value==='illegible';};
+        note.onsubmit=event=>{
+          event.preventDefault();
+          const reviewer=note.elements.reviewer.value.trim(), outcome=note.elements.outcome.value;
+          const reviewedText=note.elements.transcript.value.trim(), feedback=note.querySelector('[role=status]');
+          if (!reviewer || (outcome==='reviewed' && !reviewedText)) {
+            feedback.textContent='请填写复核人和已核对的文字；原页无法辨认时请选择需补原件。';
+            return;
+          }
+          const record={project_id:result.project_id,document_id:result.document_id,filename:result.filename,
+            registered_sha256:result.registered_sha256,page:result.page,language:result.language,
+            ocr_draft:result.text,reviewed_text:outcome==='reviewed' ? reviewedText : null,outcome,reviewer,reviewed_at:new Date().toISOString()};
+          const url=URL.createObjectURL(new Blob([JSON.stringify(record,null,2)],{type:'application/json'}));
+          const link=document.createElement('a');link.href=url;link.download=`HiJenny-${result.document_id}-p${result.page}-review.json`;link.click();
+          setTimeout(()=>URL.revokeObjectURL(url),1000);
+          feedback.textContent='已请求下载，请与对应 PDF 一起保存。';
+        };
         panel.append(dialog);
         dialog.onclose=()=>dialog.remove();
         dialog.showModal();
