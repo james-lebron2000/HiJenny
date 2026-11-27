@@ -40,6 +40,50 @@ const publicUsePolicies = {
   jRCT:['https://jrct.mhlw.go.jp/agreement','采用 PDL 1.0 并设例外；全面收集须申请许可。站方要求避免自动巡回采集，HiJenny 仅保留历史归档供人工核对。']
 };
 
+function manualRegistryReview(check,receipt,sourceUrl) {
+  const section=document.createElement('div'), open=document.createElement('button');
+  open.type='button';open.className='btn sm';open.textContent='对照历史归档并记录人工复核';section.append(open);
+  open.onclick=async()=>{
+    open.disabled=true;
+    const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei'}).format(new Date(receipt.finished_utc));
+    const query=new URLSearchParams({source:'jRCT',source_record:check.target,as_of:day,limit:'100'});
+    try {
+      const result=await api('/api/public-events?'+query);
+      if (!section.isConnected) return;
+      if (!result.total || result.total!==result.items.length) throw new Error('归档字段为空或未完整返回。');
+      const form=document.createElement('form');
+      form.innerHTML=`<p>归档截面：台北 ${esc(day)}。请打开原登记逐项核对。</p>
+        ${result.items.map((r,i)=>`<label>${esc(r.field)} · ${esc(r.value)}（来源日期 ${esc(r.source_date)}）
+        <select name="field${i}" required><option value="">选择核对结果</option>
+        <option value="matches">与登记一致</option><option value="differs">发现差异</option>
+        <option value="unverified">无法核实</option></select></label>`).join('')}
+        <label>复核人姓名或代号<input name="reviewer" required maxlength="120"></label>
+        <label>差异、无法核实的原因或后续事项<textarea name="note"></textarea></label>
+        <button type="submit" class="btn">下载人工复核记录</button><p role="status"></p>`;
+      form.onsubmit=event=>{
+        event.preventDefault();
+        const reviewer=form.elements.reviewer.value.trim(), note=form.elements.note.value.trim();
+        const fields=result.items.map((r,i)=>({event_id:r.id,field:r.field,archived_value:r.value,
+          source_date:r.source_date,outcome:form.elements['field'+i].value}));
+        const status=form.querySelector('[role=status]');
+        if (!reviewer || (!note && fields.some(f=>f.outcome!=='matches'))) {
+          status.textContent='请填写复核人，并说明差异或无法核实的原因。';return;
+        }
+        const record={source:'jRCT',target:check.target,source_url:sourceUrl,archive_as_of:day,
+          collection_run:receipt.run_id,collection_finished_utc:receipt.finished_utc,
+          reviewer,reviewed_utc:new Date().toISOString(),fields,note};
+        const url=URL.createObjectURL(new Blob([JSON.stringify(record,null,2)],{type:'application/json'}));
+        const a=document.createElement('a');a.href=url;a.download=check.target+'-manual-review-'+day+'.json';a.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);status.textContent='已请求下载本次人工复核记录。';
+      };
+      section.replaceChildren(form);
+    } catch (error) {
+      open.disabled=false;open.textContent='重新读取归档字段';open.title=error.message;
+    }
+  };
+  return section;
+}
+
 function publicCoverage(receipt, timing) {
   // Region refers to the source institution, independent of study sites and patient location.
   const sources = {
@@ -109,7 +153,7 @@ function publicCoverage(receipt, timing) {
             const link=document.createElement('a');
             link.href='https://jrct.mhlw.go.jp/en-latest-detail/'+check.target;
             link.textContent='打开 jRCT 原登记'; link.target='_blank'; link.rel='noopener noreferrer';
-            item.append(' · ',link);
+            item.append(' · ',link,manualRegistryReview(check,receipt,link.href));
           }
         }
         else item.append(' · 核对失败'+(check.error?' · '+check.error:''));
