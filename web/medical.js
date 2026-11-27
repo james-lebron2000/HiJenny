@@ -106,7 +106,7 @@ async function renderMedical() {
     const relevantConflicts = ids => conflictPool.filter(c=>ids.has(c.left) || ids.has(c.right));
     const selected = new Map((version?.refs || []).map(ref=>[ref.id,ref]));
     const superseded=confirmedMeetingHistory(saved);
-    const actions=saved.filter(v=>v.confirmed && v.action && !superseded.has(v.id))
+    const actions=saved.filter(v=>v.confirmed && v.action)
       .sort((a,b)=>(a.due || "9999").localeCompare(b.due || "9999"));
     const affected=saved.filter(v=>v.confirmed).map(v=>({version:v,
       alerts:meetingPublicationAlerts(v,checks,briefDates.get(v.briefId))})).filter(row=>row.alerts.length);
@@ -134,8 +134,8 @@ async function renderMedical() {
         <label>问题、答复、复核人、待办或来源编号<input id="meeting-answer-query" type="search" value="${esc(answerQuery)}"></label>
         <label><input id="meeting-answer-earlier" type="checkbox" ${includeEarlier?'checked':''}> 包含已有后续确认版的历史答复</label>
         <div id="meeting-answer-hits" aria-live="polite"></div></details>`:''}
-      ${actions.length?`<details id="meeting-actions" class="card"><summary>会后行动台账（${actions.length}）</summary>
-        <label>显示<select data-action-filter>${[['open','待跟进'],['closed','已完成'],['all','全部']].map(([id,title])=>option(id,actionFilter,title)).join('')}</select></label>
+      ${actions.length?`<details id="meeting-actions" class="card"><summary>会后行动台账</summary>
+        <label>显示<select data-action-filter>${[['open','待跟进'],['closed','已完成'],['all','全部当前行动'],['history','历史确认版']].map(([id,title])=>option(id,actionFilter,title)).join('')}</select></label>
         <div data-actions-list></div><p role="status"></p></details>`:''}
       ${affected.length ? `<section class="card"><h2>引文需要复查的已确认简报（${affected.length}）</h2>
       ${affected.map(row=>`<p><button type="button" class="btn" data-affected="${esc(row.version.id)}">${esc(row.version.question)} · ${esc(fmtDate(row.version.created))}</button> · 涉及 ${row.alerts.map(a=>esc(a.id)).join('、')}</p>`).join('')}</section>` : ''}
@@ -163,7 +163,8 @@ async function renderMedical() {
       ${authorPapers.length ? `<details class="card" id="meeting-authors"><summary>从纳入论文查找讨论对象</summary>
         <label>按姓名、论文署名单位或题名筛选<input type="search" id="meeting-author-query"></label>
         <div id="meeting-author-papers"></div></details>` : ''}
-      ${Object.entries(meetingFields).map(([key,label])=>`<label>${label}
+      ${Object.entries(meetingFields).map(([key,label])=>key==='due' && (! (version?.due || revisionBase?.due) || /^\d{4}-\d{2}-\d{2}$/.test(version?.due || revisionBase?.due)) ?
+        `<label>${label}<input type="date" data-meeting="due" value="${esc(version?.due || revisionBase?.due || '')}"></label>` : `<label>${label}
         <textarea rows="${['answer','discussion','action'].includes(key)?3:1}" maxlength="8000" data-meeting="${key}">${esc(version?.[key] || (key!=='reviewer' && revisionBase?.[key]) || (key==='question'?run?.question:'') || '')}</textarea></label>`).join('')}
       <label><input id="meeting-confirm" type="checkbox"> 我已核对本版答复和所选来源</label>
       <div><button class="btn" type="submit">保存草稿版本</button>
@@ -207,13 +208,16 @@ async function renderMedical() {
         const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei'}).format(new Date());
         const items=[];
         for (const v of actions) {
+          const historical=superseded.has(v.id);
+          if (historical!==(actionFilter==='history')) continue;
           const closed=JSON.parse(localStorage.getItem(key(v.id)) || 'null');
           if ((actionFilter==='open' && closed) || (actionFilter==='closed' && !closed)) continue;
-          const timing=!v.due?'未设期限':v.due<today?'已过计划日期':v.due===today?'今日到期':'计划日期';
+          const dated=/^\d{4}-\d{2}-\d{2}$/.test(v.due || '');
+          const timing=!v.due?'未设期限':!dated?'原记录期限':v.due<today?'已过计划日期':v.due===today?'今日到期':'计划日期';
           items.push(`<article><h3>${esc(v.action)}</h3><p>${esc(v.owner || '负责人未填')} · ${closed?'计划日期':timing} ${esc(v.due || '')}</p>
             <button type="button" class="btn" data-open-action="${esc(v.id)}">${esc(v.question)} · 查看确认版</button>
             ${closed?`<p>完成记录 · ${esc(closed.actor)} · ${esc(fmtDate(closed.at))} · ${esc(closed.note)}</p>`:
-              `<details><summary>登记完成情况</summary><form data-close-action="${esc(v.id)}">
+              historical?'<p>历史版本未登记完成情况。</p>':`<details><summary>登记完成情况</summary><form data-close-action="${esc(v.id)}">
               <label>登记人<input required name="actor" maxlength="120"></label>
               <label>完成结果或交付物位置<textarea required name="note" maxlength="2000"></textarea></label>
               <button class="btn">保存完成记录</button></form></details>`}</article>`);
