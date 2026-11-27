@@ -13,6 +13,42 @@ function priceScenario(flows, rate) {
   return {presentValues,total};
 }
 
+function valuationWorkbook(plan, project) {
+  const xml=value=>esc(String(value ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'')).replace(/&#39;/g,'&apos;');
+  const label=value=>`<Cell><Data ss:Type="String">${xml(value)}</Data></Cell>`;
+  const number=(value,style='input',formula='')=>`<Cell ss:StyleID="${style}"${formula?' ss:Formula="'+xml(formula)+'"':''}><Data ss:Type="Number">${Number(value)}</Data></Cell>`;
+  const row=cells=>'<Row>'+cells.join('')+'</Row>';
+  const end=6+plan.flows.length*2;
+  const rows=[
+    row([label('内部估值复算 · '+plan.name),label('百万 '+plan.currency),label(plan.asOf)]),
+    row([label('年折现率（%）'),number(plan.rate),label(plan.basis)]),
+    row([label('项目'),label(project),label('版本'),label(plan.id)]),
+    row([label('基准净现值'),label('替代净现值'),label('替代减基准')]),
+    row(plan.outputs.map((out,j)=>number(out.total,'calc',`=SUMIF(R7C2:R${end}C2,"${scenarioNames[j]}",R7C6:R${end}C6)`))
+      .concat(number(plan.outputs[1].total-plan.outputs[0].total,'calc','=RC[-1]-RC[-2]'))),
+    row(['现金流','情景','年份','有符号金额（百万）','无条件概率（%）','折现现值（百万）','假设依据','引用的披露编号'].map(label))
+  ];
+  plan.flows.forEach((flow,i)=>flow.cases.forEach((c,j)=>{
+    rows.push(row([label(flow.label),label(scenarioNames[j]),number(c.year),number(c.amount),number(c.probability),
+      number(plan.outputs[j].presentValues[i],'calc','=IF(AND(ISNUMBER(RC[-2]),ISNUMBER(RC[-1]),RC[-1]>=0,RC[-1]<=100,ISNUMBER(RC[-3]),RC[-3]=INT(RC[-3]),RC[-3]>=0,RC[-3]<=100,ISNUMBER(R2C2),R2C2>=0,R2C2<=100),RC[-2]*(RC[-1]/100)/(1+R2C2/100)^RC[-3],NA())'),
+      label(flow.basis),label((c.disclosureIds || []).join(' · '))]));
+  }));
+  if (plan.comparable) rows.push(row([label('参照交易及限制'),label(plan.comparable)]));
+  for (const warning of laterDisclosures(plan)) rows.push(row([label('晚于估值日的依据'),label(warning)]));
+  const sources=[row(['披露编号','字段','披露日','值','来源网址'].map(label)),
+    ...(plan.disclosures || []).map(r=>row([r.id,r.field,r.source_date,r.value,r.url].map(label)))];
+  const sheet=(name,widths,data)=>`<Worksheet ss:Name="${name}"><Table>${widths.map(w=>'<Column ss:Width="'+w+'"/>').join('')}${data.join('')}</Table></Worksheet>`;
+  return '<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>'+
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+
+    '<Styles><Style ss:ID="Default"><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style>'+
+    '<Style ss:ID="input"><Font ss:Color="#174FA3"/><Interior ss:Color="#EDF5FF" ss:Pattern="Solid"/></Style>'+
+    '<Style ss:ID="calc"><NumberFormat ss:Format="#,##0.0000"/></Style></Styles>'+
+    sheet('情景复算',[150,100,170,155,125,130,260,220],rows)+
+    (sources.length>1?sheet('引用的公开披露',[230,170,90,240,260],sources):'')+
+    (plan.deals?.length?sheet('可比交易',dealFields.map(()=>150),[row(dealFields.map(([,title])=>label(title))),
+      ...plan.deals.map(deal=>row(dealFields.map(([key])=>label(deal[key] ?? ''))))]):'')+'</Workbook>';
+}
+
 function laterDisclosures(plan) {
   return [
     ...(plan.deals || []).filter(d=>d.disclosed>plan.asOf).map(d=>'手工可比交易「'+d.name+'」 · '+d.disclosed),
@@ -180,7 +216,13 @@ async function renderValuation(seq) {
         ${v.question?.replies ? `<details><summary>保存时已登记的卖方答复（${v.question.replies.length}）</summary>
         ${v.question.replies.map(r=>`<p>${esc(fmtDate(r.ts))} · ${esc(r.actor)} · ${esc(r.note)}<br>${esc(r.filename)} · ${esc(r.locator)}</p>`).join('')}</details>` : ''}
         ${v.question?`<p><a href="#/followup?project=${encodeURIComponent(project)}&question=${encodeURIComponent(v.question.question_id)}">复核关联卖方问题</a> · 保存时状态 ${esc(v.question.status)}</p>`:''}
-        <button type="button" id="val-download" class="btn">下载内部估值底稿</button>`;
+        <button type="button" id="val-download" class="btn">下载内部估值底稿</button>
+        <button type="button" id="val-formulas" class="btn">下载可复算表（Excel XML）</button>`;
+      $('#val-formulas').onclick=()=>{
+        const url=URL.createObjectURL(new Blob([valuationWorkbook(v,project)],{type:'application/xml;charset=utf-8'}));
+        const link=document.createElement('a');link.href=url;link.download='HiJenny-估值复算-'+v.id+'.xml';link.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      };
       $('#val-download').onclick=()=>{
         const lines=['内部交易评审 · '+v.name,'版本 '+v.id,'项目 '+project,'估值日 '+v.asOf+' · 百万 '+v.currency,
           '年折现率 '+v.rate+'% · '+v.basis,'参照交易及限制 '+(v.comparable || '未提供'),
