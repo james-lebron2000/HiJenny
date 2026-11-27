@@ -38,6 +38,17 @@ jobs:
           test "${added:-0}" = "$(jq -r .new_events "$receipt")"
           test "${removed:-0}" = 0
           cp "$receipt" data/public/events/collection.json
+          HIJENNY_DATA_DIR="$(mktemp -d)" python3 - <<'PYTHON'
+          from pathlib import Path
+          from hijenny.public_events import sync
+
+          folder = Path("data/public/events")
+          archived = sum(len(month.read_bytes().splitlines()) for month in folder.glob("*.jsonl"))
+          indexed = sync(local=True)
+          if indexed != archived:
+              raise ValueError(f"Archive contains {archived} rows but only {indexed} unique events")
+          print(f"Validated {indexed} public events with the server importer")
+          PYTHON
           git add -- data/public/events/collection.json
           if git diff --cached --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"
@@ -51,7 +62,7 @@ jobs:
             tip=$(git rev-parse FETCH_HEAD)
             if git merge-base --is-ancestor HEAD "$tip"; then exit 0; fi
             git merge-base --is-ancestor "$base" "$tip"
-            if ! git diff --quiet "$base" "$tip" -- data/public tools hijenny/publication.py .github/workflows/public-events.yml; then
+            if ! git diff --quiet "$base" "$tip" -- data/public tools hijenny/publication.py hijenny/public_events.py hijenny/config.py .github/workflows/public-events.yml; then
               echo "The public collection inputs or archive changed. Run a fresh collection from main." >&2
               exit 1
             fi
