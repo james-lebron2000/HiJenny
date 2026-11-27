@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hijenny import config, exports, pipeline, reporting, store
 from sqlalchemy import text
+from hijenny.api.org_scope import request_org
 from hijenny.parse_coverage import pdf_review_ranges
 from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
@@ -86,11 +87,6 @@ def _documents_dir(project_id: str) -> Path:
 
 def _exports_dir(project_id: str) -> Path:
     return exports.exports_dir(project_id)
-
-
-def _org(header_value: str | None) -> str | None:
-    value = (header_value or "").strip()
-    return value or None
 
 
 def _project_or_404(session, project_id: str, org_id: str | None = None) -> dict:
@@ -488,7 +484,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - exercised by TestClient
 
 
 def _check_org_scope(request: Request):
-    scope = _org(request.headers.get("X-Org-Id"))
+    scope = request_org(request.headers.get("X-Org-Id"))
     if not scope:
         return
     params = request.path_params
@@ -603,7 +599,7 @@ def create_app() -> FastAPI:
             project = store.create_project(
                 session,
                 name=payload.name.strip(),
-                org_id=_org(x_org_id) or payload.org_id,
+                org_id=request_org(x_org_id) or payload.org_id,
                 asset_name=payload.asset_name.strip(),
                 indication=payload.indication.strip(),
                 phase=payload.phase.strip(),
@@ -616,7 +612,7 @@ def create_app() -> FastAPI:
         org_id: str | None = Query(default=None),
         x_org_id: str | None = Header(default=None, alias="X-Org-Id"),
     ):
-        scope = _org(x_org_id) or _org(org_id)
+        scope = request_org(x_org_id) or (org_id or "").strip() or None
         with store.session_scope() as session:
             projects = store.list_projects(session, org_id=scope)
             enriched = []
@@ -637,7 +633,7 @@ def create_app() -> FastAPI:
         x_org_id: str | None = Header(default=None, alias="X-Org-Id"),
     ):
         with store.session_scope() as session:
-            project = _project_or_404(session, project_id, _org(x_org_id))
+            project = _project_or_404(session, project_id, request_org(x_org_id))
             stats = store.project_stats(session, project_id)
             runs = store.list_runs(session, project_id, limit=5)
             documents = store.list_documents(session, project_id)
@@ -675,7 +671,7 @@ def create_app() -> FastAPI:
         x_org_id: str | None = Header(default=None, alias="X-Org-Id"),
     ):
         with store.session_scope() as session:
-            _project_or_404(session, project_id, _org(x_org_id))
+            _project_or_404(session, project_id, request_org(x_org_id))
             documents = store.list_documents(session, project_id, latest_only=latest_only)
             evidence = store.get_evidence(session, project_id, limit=10000)
         evidence_counts: dict[str, int] = {}
@@ -706,7 +702,7 @@ def create_app() -> FastAPI:
         warnings: list[str] = []
 
         with store.session_scope() as session:
-            project = _project_or_404(session, project_id, _org(x_org_id))
+            project = _project_or_404(session, project_id, request_org(x_org_id))
             docs_dir = _documents_dir(project_id)
             docs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1281,9 +1277,10 @@ def create_app() -> FastAPI:
         )
         if not allowed:
             raise HTTPException(status_code=404, detail="File not found")
-        if _org(x_org_id):
+        scope = request_org(x_org_id)
+        if scope:
             with store.session_scope() as session:
-                _project_or_404(session, parts[1], _org(x_org_id))
+                _project_or_404(session, parts[1], scope)
         if not candidate.is_file():
             raise HTTPException(status_code=404, detail="File not found")
         media_type = _media_type(candidate)

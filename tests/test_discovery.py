@@ -35,7 +35,7 @@ def test_filtered_page_preserves_registry_scope_and_continuation():
     asyncio.run(check())
 
 
-def test_concurrent_handoff_reuses_project_and_retains_original_reason(tmp_path):
+def test_concurrent_handoff_reuses_project_and_retains_original_reason(tmp_path, monkeypatch):
     store.configure(tmp_path / "discovery.db")
     store.init_db()
     seed = Opportunity(snapshot_id=uuid4(), retrieved="2026-11-26T00:00:00Z",
@@ -57,3 +57,11 @@ def test_concurrent_handoff_reuses_project_and_retains_original_reason(tmp_path)
     assert other["project"]["project_id"] != restored["project_id"]
     assert not start_project(seed, "ORG_OTHER")["created"]
     assert start_project(seed.model_copy(update={"asset": "Drug B"}))["created"]
+    from fastapi import HTTPException
+    import pytest
+    from hijenny import config
+    monkeypatch.setattr(config, "REQUIRE_ORG_HEADER", True)
+    with pytest.raises(HTTPException) as missing:
+        start_project(seed)
+    assert missing.value.status_code == 403
+    assert not start_project(seed, "ORG_OTHER")["created"]

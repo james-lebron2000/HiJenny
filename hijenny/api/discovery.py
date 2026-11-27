@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 
 from hijenny import store
+from hijenny.api.org_scope import request_org
 from hijenny.asset_names import chinese_search_name
 
 router = APIRouter()
@@ -151,7 +152,7 @@ class Opportunity(BaseModel):
 
 @router.post("/api/discovery/projects")
 def start_project(request: Opportunity, x_org_id: Annotated[str | None, Header(alias="X-Org-Id")] = None):
-    org_id = (x_org_id or "").strip() or "ORG_DEFAULT"
+    org_id = request_org(x_org_id) or "ORG_DEFAULT"
     record = request.model_dump(mode="json")
     record["url"] = f"https://clinicaltrials.gov/study/{request.nct}"
     # Each screened trial can contain several assets. A double submission for

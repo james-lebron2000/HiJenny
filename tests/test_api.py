@@ -273,6 +273,22 @@ def test_projects_crud_and_404(client):
     assert scoped.status_code == 404
 
 
+def test_gateway_mode_requires_org_context_for_private_resources(client, monkeypatch):
+    monkeypatch.setattr(config, "REQUIRE_ORG_HEADER", True)
+    headers = {"X-Org-Id": "PILOT"}
+    project = client.post("/api/projects", headers=headers, json={"name": "QA"}).json()["project"]
+    assert project["org_id"] == "PILOT"
+    base = "/api/projects/" + project["project_id"]
+    doc = seed_review_data(project["project_id"])
+    for path in ("/api/projects", base, base + "/outputs", "/api/questions/" + doc["question_id"],
+                 "/api/files/projects/" + project["project_id"] + "/documents/CSR.pdf"):
+        assert client.get(path).status_code == 403
+    assert client.post("/api/projects", json={"name": "QA", "org_id": "PILOT"}).status_code == 403
+    assert client.get("/api/projects", params={"org_id": "PILOT"}).status_code == 403
+    assert client.get(base, headers=headers).status_code == 200
+    assert client.get("/api/public-events/count").status_code == 200
+
+
 def test_org_scope_follows_project_resources_and_downloads(client):
     project = create_project(client)["project_id"]
     rows = seed_review_data(project)

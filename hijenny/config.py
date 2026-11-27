@@ -29,6 +29,11 @@ LLM_MAX_RETRIES = int(os.getenv("HIJENNY_LLM_RETRIES", "2"))
 # "rules" (default, offline) | "hybrid" (rules first, LLM fills gaps) | "llm"
 EXTRACT_MODE = os.getenv("HIJENNY_EXTRACT_MODE", "rules").lower()
 
+_org_mode = os.getenv("HIJENNY_REQUIRE_ORG_HEADER", "0").strip()
+if _org_mode not in {"0", "1"}:
+    raise ValueError("HIJENNY_REQUIRE_ORG_HEADER must be 0 or 1")
+REQUIRE_ORG_HEADER = _org_mode == "1"
+
 # Capabilities / limits
 PDF_WORKERS = int(os.getenv("HIJENNY_PDF_WORKERS", "0"))
 SQLITE_BUSY_TIMEOUT_MS = int(os.getenv("HIJENNY_SQLITE_BUSY_TIMEOUT_MS", "8000"))
