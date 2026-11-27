@@ -446,6 +446,7 @@ function renderPublicEvents() {
     <button class="btn">对照归档终点</button></form><div aria-live="polite" data-comparison></div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="依达方、奥希替尼或 Summit"></label>
+    <label>字段名称或文本值关键词<input name="keyword" type="search" placeholder="例如：首付款、里程碑、登记状态"></label>
     <input type="hidden" name="asset_label"><input type="hidden" name="unassigned_asset">
     <label><input type="checkbox" name="exact_asset" value="true"> 仅匹配完整归档资产标签（按卡片所列原名）</label>
     <label>国家药监局公告编号<input name="notice_id" inputmode="numeric" pattern="[0-9]+" placeholder="1073516"></label>
