@@ -256,6 +256,11 @@ function renderPublicEvents() {
           link.textContent='查看此来源编号的归档历史';
           trail.append(link); card.append(trail);
         }
+        if (r.source==='ClinicalTrials.gov' && r.asset) {
+          const link=document.createElement('a'), p=document.createElement('p');
+          link.href='#/discovery?event='+encodeURIComponent(r.id);
+          link.textContent='以此资产筛选候选试验'; p.append(link); card.append(p);
+        }
         if (r.source==='NMPA' && r.asset && (!query.has('asset') || query.has('source') || query.has('notice_id'))) {
           const params = new URLSearchParams({asset:r.asset});
           if (query.has('as_of')) params.set('as_of',query.get('as_of'));

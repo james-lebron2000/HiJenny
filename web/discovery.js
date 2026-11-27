@@ -18,12 +18,19 @@ function registrySearchTerm(input, effective) {
   return effective && effective!==input ? `<p>登记库实际干预检索词 · <code>${esc(effective)}</code></p>` : '';
 }
 
+function screeningOriginHtml(origin) {
+  if (!origin) return '';
+  return `<p>发起筛选的归档 · ${esc(origin.asset)} · ${esc(origin.trial)} · ${esc(origin.field)} · ${esc(origin.disclosed)}
+    <a href="#/public-events?event=${encodeURIComponent(origin.event_id)}">回看原动态</a></p>`;
+}
+
 function opportunityOrigin(record) {
   if (!record || !/^NCT[0-9]{8}$/.test(record.nct)) return '';
   return `<section class="card"><h2>机会来源与入选理由</h2>
     <p>${esc(record.rationale)}</p><a href="${esc(sourceLink({id:record.nct}))}" target="_blank" rel="noopener noreferrer">${esc(record.nct)} · ${esc(record.trial_title)}</a>
     <p>登记申办方 ${esc(record.sponsor || '未披露')} · 登记更新 ${esc(record.updated || '未提供')} · 检索于 ${esc(fmtDate(record.retrieved))}</p>
     <p>筛选条件 · ${esc([record.criteria?.condition,record.criteria?.intervention,record.criteria?.phase,record.criteria?.sponsor,record.criteria?.country,record.criteria?.results && registryResultLabel(record.criteria.results==='Yes')].filter(Boolean).join(' / '))}</p>
+    ${screeningOriginHtml(record.screening_origin)}
     ${registrySearchTerm(record.criteria?.intervention,record.registry_intervention)}
     ${record.countries?.length ? `<p>登记研究中心所在国家或地区 · ${esc(record.countries.join(' / '))}</p>` : ''}
     ${record.has_results!=null ? `<p>${registryResultLabel(record.has_results)} · 首次公布日期 ${esc(record.results_posted || '未提供')}</p>` : ''}
@@ -77,6 +84,9 @@ function downloadOpportunityReport(snapshot, baseline, changes) {
   const lines=['HiJenny 候选试验筛选报告', opportunityTopic(criteria), '',
     '来源 ClinicalTrials.gov', '快照编号 '+snapshot.id, '检索时间 '+snapshot.created,
     '数据库命中 '+(snapshot.total ?? '未记录')+' 条，本快照取回 '+snapshot.items.length+' 条'];
+  const origin=snapshot.screening_origin;
+  if (origin) lines.push('发起筛选的归档 · '+origin.asset+' · '+origin.trial+' · '+origin.field+' · '+origin.disclosed,
+    'HiJenny 动态编号 '+origin.event_id, sourceLink({id:origin.trial}));
   if (snapshot.pages) lines.push('已取页数 '+snapshot.pages);
   for (const [key,label] of Object.entries({condition:'适应症',intervention:'输入的干预名称',phase:'阶段',
     sponsor:'主要申办方',country:'研究中心所在地',results:'登记结果'})) {
@@ -120,10 +130,12 @@ function renderDiscovery() {
   const history = () => Object.keys(localStorage).filter(k=>k.startsWith(prefix))
     .map(k=>JSON.parse(localStorage.getItem(k))).sort((a,b)=>b.created.localeCompare(a.created));
   const requested = hashParams().get('snapshot');
+  const trigger=hashParams().get('event');
+  let startingOrigin=null;
   const snapshots = history();
-  let snapshot = requested ? snapshots.find(row => row.id === requested) : snapshots[0];
+  let snapshot = requested ? snapshots.find(row => row.id === requested) : trigger ? null : snapshots[0];
   setView(`<section class="research-home" id="opportunities"><h1>筛选候选资产与潜在伙伴</h1>
-    <form id="screen-form" class="card"><label>适应症（英文）<input name="condition" maxlength="200" placeholder="例如 melanoma"></label>
+    <div id="screen-start"></div><form id="screen-form" class="card"><label>适应症（英文）<input name="condition" maxlength="200" placeholder="例如 melanoma"></label>
     <label>药物或干预名称<input name="intervention" maxlength="200" placeholder="例如 依达方、泰瑞沙或 pembrolizumab"></label>
     <small>适应症和干预名称至少填写一项。</small>
     <label>登记的临床阶段<select name="phase">${['','EARLY_PHASE1','PHASE1','PHASE2','PHASE3','PHASE4'].map(v=>option(v,'',v || '全部阶段')).join('')}</select></label>
@@ -155,6 +167,7 @@ function renderDiscovery() {
     const changes = baseline ? opportunityChanges(baseline, snapshot) : [];
     results.innerHTML=`<h2>${esc(opportunityTopic(snapshot.criteria))} · 候选试验</h2>
       <p>筛选时数据库命中 ${esc(snapshot.total)} 条；本快照保存 ${snapshot.items.length} 条。检索时间 ${esc(fmtDate(snapshot.created))}。</p>
+      ${screeningOriginHtml(snapshot.screening_origin)}
       ${registrySearchTerm(snapshot.criteria.intervention,snapshot.registry_intervention)}
       ${parent?`<p><a href="#/discovery?snapshot=${encodeURIComponent(parent.id)}">打开上一版候选快照</a></p>`:''}
       <button type="button" class="btn" id="screen-export">下载候选集报告</button>
@@ -218,9 +231,10 @@ function renderDiscovery() {
         cursor = data.cursor;
         pages++;
       } while (recheck && cursor && pages < depth);
-      const next={id:crypto.randomUUID(),criteria,registry_intervention:registryTerm,created:retrieved,total,cursor,pages,
+      const next={id:crypto.randomUUID(),criteria,screening_origin:previous ? previous.screening_origin : startingOrigin,registry_intervention:registryTerm,created:retrieved,total,cursor,pages,
         items:[...byId.values()],parent:previous?.id || null,recheckedFrom:recheck ? previous.id : null};
       localStorage.setItem(prefix+next.id,JSON.stringify(next));
+      startingOrigin=null; $('#screen-start',root).replaceChildren();
       snapshot=next;window.history.replaceState(null,'','#/discovery?snapshot='+encodeURIComponent(next.id));paint();status.textContent='候选集已保存在本浏览器。';
     } catch (err) {status.textContent='筛选未保存：'+err.message;}
     finally {lock(false);}
@@ -233,6 +247,7 @@ function renderDiscovery() {
     retrieve(null);
   };
   select.onchange=()=>{
+    startingOrigin=null; $('#screen-start',root).replaceChildren();
     snapshot=history().find(s=>s.id===select.value);
     window.history.replaceState(null,'','#/discovery'+(snapshot?'?snapshot='+encodeURIComponent(snapshot.id):''));
     paint();status.textContent='';
@@ -259,7 +274,7 @@ function renderDiscovery() {
     const values=Object.fromEntries(new FormData(candidate));
     lock(true);
     try {
-      const res=await api('/api/discovery/projects',jsonOptions('POST',{...values,snapshot_id:snapshot.id,
+      const res=await api('/api/discovery/projects',jsonOptions('POST',{...values,snapshot_id:snapshot.id,screening_origin:snapshot.screening_origin,
         criteria:snapshot.criteria,registry_intervention:snapshot.registry_intervention ?? snapshot.criteria.intervention,nct:entry.id,trial_title:entry.title,has_results:entry.has_results ?? null,results_posted:entry.results_posted || '',countries:entry.countries || [],intervention_aliases:entry.intervention_aliases || [],sponsor:entry.sponsor,
         phase:entry.phases.join(' / '),updated:entry.updated,retrieved:entry.retrieved}));
       if (!root.isConnected) return;
@@ -269,5 +284,19 @@ function renderDiscovery() {
     finally {lock(false);}
   };
   paint();
+  if (trigger && !requested) {
+    lock(true);
+    status.textContent='正在核对发起筛选的公开归档…';
+    api('/api/public-events?event_id='+encodeURIComponent(trigger)).then(data=>{
+      if (!root.isConnected) return;
+      const row=data.items[0];
+      if (!row || row.id!==trigger || row.source!=='ClinicalTrials.gov' || !row.asset) throw Error('找不到指定的试验归档。');
+      startingOrigin={event_id:row.id,trial:row.record,asset:row.asset,field:row.field,disclosed:row.source_date};
+      form.elements.intervention.value=row.asset;
+      $('#screen-start',root).innerHTML=screeningOriginHtml(startingOrigin);
+      status.textContent='可调整药物或登记条件后执行筛选。';
+    }).catch(err=>{if (root.isConnected) status.textContent=err.message;})
+      .finally(()=>{if (root.isConnected) lock(false);});
+  }
   if (requested && !snapshot) status.textContent='当前浏览器找不到此候选集快照。';
 }

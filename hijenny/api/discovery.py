@@ -115,7 +115,16 @@ class InterventionAliases(BaseModel):
     aliases: list[str]
 
 
+class ScreeningOrigin(BaseModel):
+    event_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    trial: str = Field(pattern=r"^NCT[0-9]{8}$")
+    asset: str = Field(min_length=1, max_length=200)
+    field: str = Field(min_length=1, max_length=300)
+    disclosed: str = Field(pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+
+
 class Opportunity(BaseModel):
+    screening_origin: ScreeningOrigin | None = None
     registry_intervention: str | None = Field(default=None, max_length=200)
     snapshot_id: UUID
     retrieved: datetime
