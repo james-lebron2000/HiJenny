@@ -7,7 +7,7 @@ const pilotChoices = {
 };
 const pilotCopy = {
   zh:{
-    title:'为一项资产准备首轮临床尽调',intro:'面向即将召开资产引进评审会的 BD、医学和统计团队。按一项资产、一轮评审确定试点范围。',
+    title:'为一项资产准备首轮临床尽调',observation:'主持客户独立试用（中文记录表）',intro:'面向即将召开资产引进评审会的 BD、医学和统计团队。按一项资产、一轮评审确定试点范围。',
     outputs:['内部决策简报，列出影响交易判断的发现、证据缺口与待决事项。','卖方问题单，逐项说明需要补充的材料，供 BD 对外沟通。','证据底稿，保留数字口径、原件位置和专家复核意见。'],
     example:'查看合成样例：同一资产的缓解率为何需要追问？',
     figures:'ASD-101 的样例研究报告第 10 页列出客观缓解率 42.0%（53/126），商业预测第 3 页使用 48.4%（61/126）。',
@@ -20,7 +20,7 @@ const pilotCopy = {
     receipt:'受理编号',next:'HiJenny 试点交付团队将核对材料范围，并通过所填工作邮箱联系。',last:'本标签页最近的受理编号',error:'提交未确认，请重试。'
   },
   en:{
-    title:'Clinical diligence for a single licensing opportunity',intro:'Prepare for an in-licensing review with your BD, medical and statistics teams. Each pilot covers one asset and one round of review.',
+    title:'Clinical diligence for a single licensing opportunity',observation:'Run an observed pilot session (Chinese worksheet)',intro:'Prepare for an in-licensing review with your BD, medical and statistics teams. Each pilot covers one asset and one round of review.',
     outputs:['An internal decision brief sets out findings, evidence gaps and decisions for the review meeting.',
       'A seller question list specifies which source materials BD should request.',
       'An evidence workbook records how each figure was defined, where it came from and what reviewers concluded.'],
@@ -36,7 +36,7 @@ const pilotCopy = {
     receipt:'Request ID',next:'The HiJenny pilot team will review the scope and contact you at the work email provided.',last:'Latest request ID in this tab',error:'Submission could not be confirmed. Please retry.'
   },
   ja:{
-    title:'導入候補品目の臨床デューデリジェンス',intro:'導入審査を控えた事業開発、メディカル、生物統計の各担当者向けに、1 品目・1 回の審査を対象とするパイロットを提供します。',
+    title:'導入候補品目の臨床デューデリジェンス',observation:'顧客による試用を記録（中国語フォーム）',intro:'導入審査を控えた事業開発、メディカル、生物統計の各担当者向けに、1 品目・1 回の審査を対象とするパイロットを提供します。',
     outputs:['社内審査用の要約に、取引判断に関わる所見、不足している根拠、判断を要する事項をまとめます。',
       '導出側への質問票に、事業開発担当者が追加で依頼する資料を明記します。','根拠資料には、数値の定義、出典箇所、専門家のレビュー所見を記録します。'],
     example:'架空の事例で見る奏効率の確認',
@@ -83,6 +83,7 @@ function renderPilot() {
         <p>${t.finding}</p></details><p>${t.question}</p>
       <p><a href="/api/pilot/decision-brief.docx?lang=${lang}">${t.decision}</a></p><p><a href="/api/pilot/seller-reply.xlsx">${t.seller}</a></p>
       <a href="/api/pilot/sample-report?${new URLSearchParams(analytics)}">${t.download}</a></details>
+      <p><a href="/static/pilot-observation.html" target="_blank" rel="noopener">${t.observation}</a></p>
       <form id="pilot-form" class="card"><h2>${t.quote}</h2>
       ${scoped?`<label><input type="checkbox" name="attach_asset" ${values.attach_asset!==false?'checked':''}> ${contextLabel[lang]} · ${esc(asset)} · ${esc(cutoff)}</label>`:''}
       <label>${t.email}<input name="email" type="email" required maxlength="254" autocomplete="email"></label>

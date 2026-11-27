@@ -25,6 +25,7 @@ input,textarea,select{width:100%;padding:.4rem}textarea{min-height:4.5rem}button
 </fieldset>
 <fieldset><legend>独立操作</legend>
 <button id="start" type="button">开始计时</button>
+<a id="workspace" hidden target="_blank" rel="noopener">在新标签页打开工作台</a>
 <button id="stop" type="button" disabled>结束计时</button>
 <output id="timing" aria-live="polite"></output>
 <label>试用结果<select name="outcome" required><option value="">请选择</option><option>独立完成</option><option>提示后完成</option><option>未完成</option></select></label>
@@ -49,12 +50,25 @@ const examples={
   '医学事务':'可选任务：围绕一次具体的专家会议问题，准备含公开引文、待核实事项及后续行动的会前简报。',
   '个人研究者':'可选任务：围绕一个研究问题，从试验登记和论文中筛选材料，交付说明纳入理由、可供同事复查的研究底稿。'
 };
+const routes={'商务拓展':'public-events','临床开发':'home','医学事务':'medical','个人研究者':'research'};
+const workspace=document.querySelector('#workspace');
+function updateWorkspace(){
+  const route=routes[fields.role.value];
+  workspace.hidden=!route || !['http:','https:'].includes(location.protocol);
+  if (workspace.hidden) workspace.removeAttribute('href');
+  else workspace.href='/#/'+route;
+}
 let started,ended,elapsedStart,seconds;
 fields.role.onchange=()=>{
   example.textContent=examples[fields.role.value] || '';
   example.hidden=!example.textContent;
+  updateWorkspace();
 };
+updateWorkspace();
 fields.start.onclick=()=>{
+  for (const input of form.querySelectorAll('fieldset:first-child [required]')) {
+    if (!input.reportValidity()) return;
+  }
   started=new Date().toISOString();
   elapsedStart=performance.now();
   fields.start.disabled=true;
