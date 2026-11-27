@@ -934,3 +934,25 @@ def test_concurrent_evidence_review_preserves_first_result(client):
     assert client.get(events).json()["count"] == 1
     assert save("reconciled", winner["review_token"]).is_success
     assert client.get(events).json()["count"] == 2
+
+
+def test_download_review_state_tracks_each_generated_file(client, env):
+    pid = create_project(client)["project_id"]
+    rows = seed_review_data(pid)
+    base = f"/api/projects/{pid}"
+
+    def states():
+        return {k: v["evidence_review_state"] for k, v in client.get(base + "/outputs").json()["outputs"].items()}
+
+    client.post(base + "/exports/report").raise_for_status()
+    assert set(states().values()) == {"current"}
+    client.patch("/api/evidence/" + rows["evidence_id"],
+                 json={"verification_status": "failed", "note": "Page mismatch"}).raise_for_status()
+    assert set(states().values()) == {"changed"}
+    client.post(base + "/exports/questions").raise_for_status()
+    assert states() == {"report_md": "changed", "report_docx": "changed", "questions_xlsx": "current"}
+    md = env["data_dir"] / "projects" / pid / "exports" / "HiJenny_Report.md"
+    md.write_text("# Earlier report", encoding="utf-8")
+    assert states()["report_md"] == "unknown"
+    client.post(base + "/exports/report").raise_for_status()
+    assert set(states().values()) == {"current"}

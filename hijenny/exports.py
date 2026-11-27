@@ -339,7 +339,7 @@ def collect_export_data(session, project_id: str) -> dict:
     documents = store.list_documents(session, project_id)
     assets = store.list_assets(session, project_id)
     trials = store.list_trials(session, project_id)
-    evidence = store.get_evidence(session, project_id, limit=10000)
+    evidence = store.get_evidence(session, project_id, limit=None)
     findings_all = store.list_findings(session, project_id)
     findings, findings_history = split_findings(findings_all)
     questions = store.list_questions(session, project_id)
@@ -363,6 +363,7 @@ def collect_export_data(session, project_id: str) -> dict:
     from hijenny.diligence import brief_updates
 
     return {
+        "review_digest": store.review_digest(ev["review_token"] for ev in evidence),
         "bd_updates": brief_updates(session, project_id, questions),
         "project": project,
         "stats": stats,
@@ -1054,6 +1055,7 @@ def build_workbook(data: dict, out_path: str | Path | None = None) -> Path:
 
     wb.properties.title = "HiJenny — Due Diligence Workbook"
     wb.properties.creator = "HiJenny"
+    wb.properties.keywords = data.get("review_digest")
     wb.properties.subject = _txt((data.get("project") or {}).get("name"))
     wb.save(target)
     return target
@@ -1566,6 +1568,8 @@ def render_markdown_report(data: dict) -> str:
     lines: list[str] = []
     add = lines.append
 
+    if data.get("review_digest"):
+        add(f"<!-- hijenny-review {data['review_digest']} -->")
     add(f"# {_txt(project.get('name')) or 'Asset'} — Asset Due Diligence Report")
     add("")
     add(f"**Asset:** {_txt(project.get('asset_name')) or DEFAULT_DASH}  ")
@@ -2125,6 +2129,8 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     doc = Document()
     core = doc.core_properties
     core.title = "HiJenny — Asset Due Diligence Report"
+    if data.get("review_digest"):
+        core.keywords = data["review_digest"]
     core.author = "HiJenny"
     core.comments = "Evidence-first pharmaceutical due diligence report. AI-generated; requires expert human review."
     normal = doc.styles["Normal"]

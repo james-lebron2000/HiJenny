@@ -1456,7 +1456,7 @@ async function renderFindings(seq) {
 
 /* ----------------------------------------------------------------- report */
 function renderMarkdown(md) {
-  const lines = String(md || '').split(/\r?\n/);
+  const lines = String(md || '').replace(/^<!-- hijenny-review [0-9a-f]{64} -->\r?\n/, '').split(/\r?\n/);
   const out = [];
   let i = 0;
   let paragraph = [];
@@ -1546,13 +1546,15 @@ async function renderReport(seq) {
     if (seq !== state.renderSeq) return;
     state.outputs = outputsRes.outputs || {};
     const md = state.outputs.report_md || {};
-    state.reportMd = null;
+    let reportMd = null;
     if (md.exists && md.url) {
       try {
         const raw = await fetch(md.url);
-        if (raw.ok) state.reportMd = await raw.text();
-      } catch (error) { state.reportMd = null; }
+        if (raw.ok) reportMd = await raw.text();
+      } catch (error) { reportMd = null; }
     }
+    if (seq !== state.renderSeq) return;
+    state.reportMd = reportMd;
     renderReportView();
   } catch (error) {
     if (seq === state.renderSeq) setView(errorPanel(error));
@@ -1565,6 +1567,8 @@ function renderReportView() {
   const docx = outputs.report_docx || {};
   const xlsx = outputs.questions_xlsx || {};
   const stats = state.stats || {};
+  const reviewStatus = {changed:'证据或复核意见已有变化', unknown:'缺少可核对的复核版本'};
+  const warnings = Object.values(outputs).filter(file => file.exists && reviewStatus[file.evidence_review_state]);
   setView(`
     <div class="page-head">
       <div><h1>Report</h1>
@@ -1586,6 +1590,9 @@ function renderReportView() {
       { k: 'Questions', v: stats.questions || 0 },
       { k: 'Coverage', v: stats.coverage || 0 },
     ])}
+    ${warnings.length ? `<div class="notice" role="status"><div><strong>分发前需重新生成</strong>
+      <ul>${warnings.map(file => `<li>${esc(file.name)} · ${reviewStatus[file.evidence_review_state]}</li>`).join('')}</ul>
+      ${state.projectPermissions.edit === false ? '请联系项目编辑人员更新文件。' : '点击 Regenerate report，生成包含当前复核结果的文件。'}</div></div>` : ''}
     <div class="notice info"><span>📋</span><div><strong>Decision Brief — Section 1</strong> — one-page summary for BD heads / investment committee, with evidence highlights, top open risks, seller questions and missing evidence. No automated Go/No-Go recommendation is made; the brief summarises evidence and open items for human review.</div></div>
     ${md.exists && state.reportMd ? `<div class="report">${renderMarkdown(state.reportMd)}</div>` : `
       <div class="card">${emptyPanel('No report generated yet',

@@ -190,6 +190,21 @@ def _doc_dict(r: Document) -> dict:
     }
 
 
+def _review_token(evidence_id, status, note, reviewer) -> str:
+    return hashlib.sha256(_dump([evidence_id, status, note, reviewer]).encode()).hexdigest()
+
+
+def review_digest(tokens: Iterable[str]) -> str:
+    return hashlib.sha256("".join(sorted(tokens)).encode("ascii")).hexdigest()
+
+
+def project_review_digest(session: Session, project_id: str) -> str:
+    rows = session.execute(select(Evidence.evidence_id, Evidence.verification_status,
+                                  Evidence.verification_note, Evidence.verified_by)
+                           .where(Evidence.project_id == project_id))
+    return review_digest(_review_token(*row) for row in rows)
+
+
 def _evidence_dict(r: Evidence) -> dict:
     bbox = _load(r.bbox_json, [])
     return {
@@ -218,8 +233,7 @@ def _evidence_dict(r: Evidence) -> dict:
         "bbox": bbox,
         "confidence": r.confidence,
         "extractor": r.extractor,
-        "review_token": hashlib.sha256(_dump([r.evidence_id, r.verification_status,
-                                              r.verification_note, r.verified_by]).encode()).hexdigest(),
+        "review_token": _review_token(r.evidence_id, r.verification_status, r.verification_note, r.verified_by),
         "verification_status": r.verification_status,
         "verification_note": r.verification_note,
         "verified_by": r.verified_by,
@@ -787,7 +801,7 @@ def get_evidence(
     trial_id: str | None = None,
     trial_key: str | None = None,
     verification_status: str | None = None,
-    limit: int = 5000,
+    limit: int | None = 5000,
 ) -> list[dict]:
     stmt = select(Evidence).where(Evidence.project_id == project_id)
     if field_name:

@@ -1279,7 +1279,13 @@ def create_app() -> FastAPI:
     def get_outputs(project_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
-        return {"project_id": project_id, "outputs": _outputs_info(project_id)}
+            digest = store.project_review_digest(session, project_id)
+        outputs = _outputs_info(project_id)
+        for file in outputs.values():
+            if file["exists"]:
+                path = exports.exports_dir(project_id) / file["name"]
+                file["evidence_review_state"] = reporting.export_review_state(path, digest)
+        return {"project_id": project_id, "outputs": outputs}
 
     # -- Safe file serving --------------------------------------------------
     @app.get("/api/files/{file_path:path}", dependencies=[Depends(check_project_role)])
