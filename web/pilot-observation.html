@@ -39,7 +39,13 @@ input,textarea,select{width:100%;padding:.4rem}textarea{min-height:4.5rem}button
 </fieldset>
 <button type="submit">下载本次试用记录（JSON）</button>
 <output id="message" aria-live="polite"></output>
-</form></main>
+</form>
+<details><summary>汇总多次试用</summary>
+<p>选择同一客户项目的试用记录。按应用版本和角色汇总，每次尝试计一次，耗时包含未完成的尝试。文件仅在本机读取。</p>
+<label>试用记录（可多选 JSON）<input type="file" multiple accept=".json,application/json" id="batch"></label>
+<pre id="summary" style="white-space:pre-wrap;overflow-wrap:anywhere" aria-live="polite"></pre>
+<button id="save-summary" type="button" disabled>下载试用汇总（文本）</button>
+</details></main>
 <script>
 const form=document.querySelector('form'), fields=form.elements;
 const example=document.querySelector('#example'), timing=document.querySelector('#timing');
@@ -101,6 +107,61 @@ form.onsubmit=event=>{
   link.href=url;link.download='HiJenny-试用记录-'+started.replace(/[:.]/g,'-')+'.json';link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   message.textContent='已请求下载。请核对文件并与本次交付物一同保存在私有项目目录。';
+};
+const batch=document.querySelector('#batch'), summary=document.querySelector('#summary'), saveSummary=document.querySelector('#save-summary');
+const outcomes=['独立完成','提示后完成','未完成'];
+const required=['participant','role','task','workflow','release','cutoff','outcome','artifact','reviewer','review','started_utc','ended_utc'];
+let batchNumber=0;
+batch.onchange=async()=>{
+  const number=++batchNumber, records=new Map(), issues=[], conflicts=new Set();
+  saveSummary.disabled=true;
+  summary.textContent='正在核对试用记录…';
+  for (const file of Array.from(batch.files)) {
+    try {
+      if (file.size>4*1024*1024) throw Error('超过 4 MiB');
+      const r=JSON.parse(await file.text());
+      if (!required.every(k=>typeof r?.[k]==='string' && r[k].trim()) || !Object.hasOwn(examples,r.role) ||
+          !outcomes.includes(r.outcome) || !Number.isSafeInteger(r.elapsed_seconds) || r.elapsed_seconds<0 ||
+          !Number.isFinite(Date.parse(r.started_utc)) || !Number.isFinite(Date.parse(r.ended_utc)) ||
+          Date.parse(r.ended_utc)<Date.parse(r.started_utc) ||
+          (r.outcome!=='独立完成' && !(typeof r.assistance==='string' && r.assistance.trim()))) throw Error('试用记录字段无效');
+      const id=JSON.stringify([r.participant,Date.parse(r.started_utc)]);
+      const content=JSON.stringify([...required,'elapsed_seconds','assistance','feedback'].map(k=>r[k] ?? ''));
+      const existing=records.get(id);
+      if (!existing) records.set(id,{r,content,file:file.name});
+      else if (content===existing.content) issues.push(file.name+' · 重复记录');
+      else {conflicts.add(id);issues.push(existing.file+' / '+file.name+' · 同次试用内容冲突，整次排除');}
+    } catch (e) {issues.push(file.name+' · '+e.message);}
+  }
+  if (number!==batchNumber) return;
+  const groups=new Map();
+  for (const [id,item] of records) {
+    if (conflicts.has(id)) continue;
+    const group=JSON.stringify([item.r.release,item.r.role]);
+    if (!groups.has(group)) groups.set(group,[]);
+    groups.get(group).push(item);
+  }
+  const lines=['HiJenny 试用汇总','选择 '+batch.files.length+' 个文件，纳入 '+(records.size-conflicts.size)+' 次尝试。'];
+  for (const items of groups.values()) {
+    const {release,role}=items[0].r;
+    const counts=outcomes.map(outcome=>items.filter(({r})=>r.outcome===outcome).length);
+    const times=items.map(({r})=>r.elapsed_seconds).sort((a,b)=>a-b), half=Math.floor(times.length/2);
+    const median=times.length%2?times[half]:(times[half-1]+times[half])/2;
+    lines.push('',role+' · '+release,'独立完成 '+counts[0]+'/'+items.length+'（'+(100*counts[0]/items.length).toFixed(1)+'%） · 提示后完成 '+counts[1]+' · 未完成 '+counts[2]+' · 全部尝试耗时中位数 '+median+' 秒');
+    for (const {r,file} of items) {
+      lines.push('','记录 '+file+' · '+r.participant+' · '+r.started_utc,r.task+' · '+r.outcome+' · '+r.elapsed_seconds+' 秒',
+        '交付物或未产出原因 · '+r.artifact,'复核 · '+r.reviewer+' · '+r.review);
+      if (r.assistance) lines.push('卡点或提示 · '+r.assistance);
+      if (r.feedback) lines.push('参与者反馈 · '+r.feedback);
+    }
+  }
+  if (issues.length) lines.push('','导入核对',...issues);
+  summary.textContent=lines.join('\n');saveSummary.disabled=!batch.files.length;
+};
+saveSummary.onclick=()=>{
+  const url=URL.createObjectURL(new Blob([summary.textContent],{type:'text/plain;charset=utf-8'}));
+  const link=document.createElement('a');link.href=url;link.download='HiJenny-试用汇总.txt';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
 </script>
 </html>
