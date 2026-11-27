@@ -546,3 +546,36 @@ def test_atom_overflow_links_to_complete_filtered_report(tmp_path, monkeypatch):
     report = client.get(link)
     assert report.text.count("HiJenny 单条归档") == 101
     assert "event=0&" not in report.text and "as_of=2026-11-27" in report.text
+
+
+def test_exported_coverage_scopes_gaps_to_receipt_subject(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from xml.etree import ElementTree
+    from hijenny.api.public_events import router
+
+    monkeypatch.setattr(public_events, "DATA_DIR", tmp_path)
+    app = FastAPI()
+    app.include_router(router)
+    receipt = dict(finished_utc="2026-11-27T08:00:00Z", checks=[
+        dict(subject="Tagrisso (osimertinib)", source="fda", target="NDA1", status="ok"),
+        dict(subject="ivonescimab", source="jrct", target="JRCT1", status="manual_review"),
+        dict(subject="tiragolumab + ivonescimab", source="trials", target="NCT1", status="ok")])
+    with closing(public_events.connect()) as db, db:
+        db.execute("insert into collection_receipt values (1,?)", (json.dumps(receipt),))
+    client = TestClient(app)
+    for params, expected, has_gap in [
+        ({"asset": "奥希替尼", "as_of": "2026-11-26"}, "成功 1/1", False),
+        ({"asset": "依达方"}, "成功 0/1", True),
+        ({"asset": "ivonescimab", "asset_label": "tiragolumab + ivonescimab"}, "成功 1/1", False),
+        ({"asset": "ivo"}, "未匹配到此名称", False),
+        ({"asset": "依达方", "unassigned_asset": True}, "无法对应具体对象", False),
+        ({}, "成功 2/3", True),
+    ]:
+        report = client.get("/api/public-events/report.txt", params=params)
+        feed = client.get("/api/public-events/feed.atom", params=params)
+        report.raise_for_status()
+        feed.raise_for_status()
+        for text in (report.text, ElementTree.fromstring(feed.content).findtext("{*}subtitle")):
+            assert expected in text and ("JRCT1" in text) == has_gap
+            assert receipt["finished_utc"] in text

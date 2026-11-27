@@ -374,14 +374,45 @@ def event_details(row):
     return lines
 
 
-def collection_gaps(receipt):
+def collection_coverage(receipt, subject="", unassigned=False):
+    checks = receipt.get("checks", [])
+    if unassigned:
+        return ["当前筛选为未标注资产，无法对应具体对象的采集回执。"]
+    subject = subject.strip()
+    scope = "全库关注名单"
+    unknown_subjects = sum(not c.get("subject") for c in checks)
+    if subject:
+        scope = f"监测对象 {subject}"
+        canonical = verified_asset(subject)
+        selected = []
+        for check in checks:
+            label = check.get("subject") or ""
+            if label.strip().casefold() == subject.casefold() or (canonical and verified_asset(label) == canonical):
+                selected.append(check)
+        if not selected:
+            if unknown_subjects:
+                return [f"{scope} · 未匹配到已标注对象；本批有 {unknown_subjects} 项未记录对象名称，覆盖待核。"]
+            return [f"{scope} · 本批关注名单未匹配到此名称。"]
+        checks = selected
+    ok = sum(c.get("status") == "ok" for c in checks)
+    lines = [f"{scope} · 成功 {ok}/{len(checks)} 个监测目标"]
+    if subject:
+        sources = sorted({c.get("source") for c in checks if c.get("source")})
+        names = {"trials": "ClinicalTrials.gov", "publications": "PubMed", "jrct": "jRCT", "fda": "Drugs@FDA",
+                 "ema": "EMA", "sec": "SEC", "nmpa": "NMPA", "nmpa_index": "NMPA 公告目录",
+                 "orange_book": "FDA Orange Book", "orange_book_uses": "FDA 专利用途代码"}
+        lines.append("本对象监测来源 · " + "、".join(names.get(source, source) for source in sources))
+        if unknown_subjects:
+            lines.append(f"本批另有 {unknown_subjects} 项未记录对象名称，归属待核。")
     labels = {"failed": "采集失败", "manual_review": "待人工复核"}
-    return [f"本批监测目标{labels[c['status']]} · {c['source']} · {c['target']}"
-            for c in receipt.get("checks", []) if c.get("status") in labels]
+    lines.extend(f"本批监测目标{labels[c['status']]} · {c['source']} · {c['target']}"
+                 for c in checks if c.get("status") in labels)
+    return lines
 
 
 @router.get("/api/public-events/feed.atom")
-def event_feed(request: Request, filters=Depends(event_filters), rolling_week: bool = False, as_of: date | None = None):
+def event_feed(request: Request, filters=Depends(event_filters), rolling_week: bool = False, as_of: date | None = None,
+               asset: str = "", asset_label: str = "", unassigned_asset: bool = False):
     table, sql, args, _, labels, _ = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
@@ -403,10 +434,8 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
     if receipt:
         latest = json.loads(receipt[0])
         timestamps.append(latest["finished_utc"])
-        checks = latest.get("checks", [])
-        ok = sum(c.get("status") == "ok" for c in checks)
-        coverage = [f"当前公开库最近一批采集 · {latest['finished_utc']} · 成功 {ok}/{len(checks)} 个监测目标",
-                    *collection_gaps(latest)]
+        coverage = [f"当前公开库最近一批采集 · {latest['finished_utc']}",
+                    *collection_coverage(latest, asset_label.strip() or asset, unassigned_asset)]
         run_url = collection_links(latest).get("run")
         if run_url:
             ET.SubElement(feed, "link", rel="related", title="本批公开库采集记录", href=run_url)
@@ -436,7 +465,8 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
 
 
 @router.get("/api/public-events/report.txt", response_class=PlainTextResponse)
-def report(request: Request, filters=Depends(event_filters), as_of: date | None = None):
+def report(request: Request, filters=Depends(event_filters), as_of: date | None = None,
+           asset: str = "", asset_label: str = "", unassigned_asset: bool = False):
     table, sql, args, order, labels, _ = filters
     lines = ["HiJenny 公开资产动态", "筛选范围（发现日期按台北时间）", *labels]
     with closing(connect()) as db:
@@ -450,7 +480,7 @@ def report(request: Request, filters=Depends(event_filters), as_of: date | None 
                 lines.append("采集记录 · " + links["run"])
             if "watchlist" in links:
                 lines.append("本次采集采用的公开监测名单 · " + links["watchlist"])
-            lines.extend(collection_gaps(receipt))
+            lines.extend(collection_coverage(receipt, asset_label.strip() or asset, unassigned_asset))
         else:
             lines.append("导出时数据库尚无采集回执")
         archive_page = str(request.base_url) + "#/public-events?"
