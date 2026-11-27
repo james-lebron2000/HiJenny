@@ -62,7 +62,7 @@ function renderPilot() {
   let lang=Object.hasOwn(pilotCopy,requested)?requested:'zh';
   const asset=hashParams().get('asset')?.trim().slice(0,400), cutoff=hashParams().get('as_of');
   const scoped=asset && /^\d{4}-\d{2}-\d{2}$/.test(cutoff || '');
-  const contextLabel={zh:'随询价附上药名和公开证据截止日（台北）',en:'Include the asset and public evidence cutoff (Taipei) in this inquiry',ja:'医薬品名と公開資料の基準日（台北）を見積もり依頼に含める'};
+  const contextLabel={zh:'随询价附上药物或公司名称和公开证据截止日（台北）',en:'Include the drug or company name and public evidence cutoff (Taipei) in this inquiry',ja:'医薬品名または企業名と公開資料の基準日（台北）を見積もり依頼に含める'};
   const analytics={session_id:pilotSessionId(),sample_version:'asd101-v1'};
   function track(event) {
     fetch('/api/pilot/events',{...jsonOptions('POST',{...analytics,event}),keepalive:true}).catch(()=>{});
