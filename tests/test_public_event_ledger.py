@@ -61,6 +61,8 @@ def test_review_digest_uses_taipei_discovery_day_and_exports_all_matches(tmp_pat
     params = dict(disclosed_to="2026-11-27", discovered_from="2026-11-27", discovered_to="2026-11-27", kind="reviewed")
     cutoff = dict(params, observed_after="2026-11-27T00:00:00+08:00")
     assert [r["id"] for r in client.get("/api/public-events", params=cutoff).json()["items"]] == ["2"]
+    assert client.get("/api/public-events/count", params=cutoff).json() == {"total": 1}
+    assert client.get("/api/public-events/count", params=dict(cutoff, event_id="1")).json() == {"total": 0}
     filtered_report = client.get("/api/public-events/report.txt", params=cutoff).text
     assert "仅含首次观察晚于" in filtered_report and "共 1 条" in filtered_report
     assert client.get("/api/public-events", params={"observed_after": "2026-11-27T00:00:00"}).status_code == 422

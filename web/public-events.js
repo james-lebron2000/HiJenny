@@ -138,8 +138,10 @@ function bindSavedPublicFilters(onApply) {
   const panel=$('#public-saved-filters'), form=panel.querySelector('form');
   const list=panel.querySelector('ul'), message=panel.querySelector('[role=status]');
   const prefix='hijenny.public-filter.';
-  let applied=null;
+  let applied=null, generation=0;
+  const refresh=panel.querySelector('[data-refresh-counts]');
   function draw() {
+    const version=++generation, pending=[];
     list.replaceChildren();
     try {
       for (const key of Object.keys(localStorage).filter(k=>k.startsWith(prefix)).sort()) {
@@ -176,18 +178,38 @@ function bindSavedPublicFilters(onApply) {
         if (entry.checkpoint) {
           const updates=document.createElement('button');
           updates.type='button'; updates.className='btn'; updates.textContent='查看核对后新增';
-          updates.onclick=()=>{
+          function updateQuery() {
             const params=new URLSearchParams(entry.query);
             if (entry.week) recentPublicWeek(params);
             params.set('observed_after',entry.checkpoint);
-            onApply(params);
-          };
+            return params;
+          }
+          updates.onclick=()=>onApply(updateQuery());
+          pending.push({button:updates,query:updateQuery()});
           li.append(updates,' 核对起点 '+fmtDate(entry.checkpoint)+' ');
         }
         li.append(mark,remove); list.append(li);
       }
+      refresh.hidden=!pending.length;
+      if (panel.open) showCounts();
+      async function showCounts() {
+        for (const {button,query} of pending) {
+          if (generation!==version || !panel.isConnected || !panel.open) return;
+          if (query.has('event')) {
+            query.set('event_id',query.get('event')); query.delete('event');
+          }
+          try {
+            const {total}=await api('/api/public-events/count?'+query);
+            button.textContent='查看核对后新增 · '+total+' 条';
+          } catch {
+            button.textContent='查看核对后新增 · 数量暂不可用';
+          }
+        }
+      }
     } catch {message.textContent='本浏览器暂时无法读取已存筛选。';}
   }
+  panel.ontoggle=()=>{if (panel.open) draw();};
+  refresh.onclick=draw;
   form.onsubmit=event=>{
     event.preventDefault();
     const name=form.elements.label.value.trim();
@@ -438,7 +460,7 @@ function renderPublicEvents() {
     <section class="card" id="asset-evidence" aria-live="polite" hidden></section>
     <details class="card" id="public-saved-filters"><summary>我的常用筛选（本浏览器）</summary>
     <p>记录核对起点使用数据库最新采集回执的时间。查看新增沿用原筛选条件；更新核对时间后，从新起点计算。</p>
-    <ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
+    <button type="button" class="btn" data-refresh-counts hidden>刷新新增数量</button><ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
     <label><input type="checkbox" name="week"> 每次打开时查看最近七天发现，替换已选的历史截面和发现日期</label>
     <button class="btn" disabled>保存当前结果的筛选条件</button></form><p role="status"></p></details>
     <a id="public-event-report" hidden>下载当前筛选的完整简报</a>

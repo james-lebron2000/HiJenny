@@ -218,6 +218,14 @@ def asset_evidence(asset: str, as_of: date | None = None):
     return {"as_of": cutoff.isoformat(), "trials": [r for r in trials.values() if "id" in r], "outcomes": outcomes, "guidance": guidance}
 
 
+@router.get("/api/public-events/count")
+def public_event_count(filters=Depends(event_filters)):
+    table, sql, args, _, _, _ = filters
+    with closing(connect()) as db:
+        count = db.execute(f"SELECT count(*) FROM {table}" + sql, args).fetchone()[0]
+    return {"total": count}
+
+
 @router.get("/api/public-events")
 def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
                   limit: int = Query(50, ge=1, le=100)):
