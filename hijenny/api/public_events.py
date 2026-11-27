@@ -370,7 +370,7 @@ def event_details(row):
 
 
 @router.get("/api/public-events/feed.atom")
-def event_feed(request: Request, filters=Depends(event_filters), rolling_week: bool = False):
+def event_feed(request: Request, filters=Depends(event_filters), rolling_week: bool = False, as_of: date | None = None):
     table, sql, args, _, labels, _ = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
@@ -388,11 +388,12 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
     ET.SubElement(ET.SubElement(feed, "author"), "name").text = "HiJenny"
     updated = json.loads(receipt[0])["finished_utc"] if receipt else "1970-01-01T00:00:00Z"
     ET.SubElement(feed, "updated").text = events[0]["observed"] if events else updated
+    snapshot_suffix = "&as_of=" + as_of.isoformat() if as_of else ""
     for row in events:
         entry = ET.SubElement(feed, "entry")
         archive = str(request.base_url) + "#/public-events?" + urlencode({"event": row["id"]})
         ET.SubElement(entry, "id").text = archive
-        ET.SubElement(entry, "link", rel="alternate", href=archive)
+        ET.SubElement(entry, "link", rel="alternate", href=archive + snapshot_suffix)
         ET.SubElement(entry, "link", rel="related", title=row["source"], href=row["url"])
         ET.SubElement(entry, "updated").text = row["observed"]
         ET.SubElement(entry, "title").text = f'{row["asset"] or row["subject"]} · {row["field"]}'
@@ -407,7 +408,7 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
 
 
 @router.get("/api/public-events/report.txt", response_class=PlainTextResponse)
-def report(request: Request, filters=Depends(event_filters)):
+def report(request: Request, filters=Depends(event_filters), as_of: date | None = None):
     table, sql, args, order, labels, _ = filters
     lines = ["HiJenny 公开资产动态", "筛选范围（发现日期按台北时间）", *labels]
     with closing(connect()) as db:
@@ -437,6 +438,9 @@ def report(request: Request, filters=Depends(event_filters)):
         for count, (payload,) in enumerate(rows, 1):
             row = json.loads(payload)
             lines.extend(["", f'{count}. {row["asset"] or row["subject"]} · {row["field"]}', *event_details(row)])
-            lines.append("HiJenny 单条归档 · " + archive_page + urlencode({"event": row["id"]}))
+            params = {"event": row["id"]}
+            if as_of:
+                params["as_of"] = as_of.isoformat()
+            lines.append("HiJenny 单条归档 · " + archive_page + urlencode(params))
     lines.append(f"\n共 {count} 条")
     return PlainTextResponse("\n".join(lines), headers={"Content-Disposition": 'attachment; filename="HiJenny-public-events.txt"'})

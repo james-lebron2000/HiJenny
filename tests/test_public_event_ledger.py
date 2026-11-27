@@ -71,6 +71,13 @@ def test_review_digest_uses_taipei_discovery_day_and_exports_all_matches(tmp_pat
     assert entry.findtext(atom + "id") == "http://testserver/#/public-events?event=2"
     assert entry.findtext(atom + "updated") == "2026-11-27T15:59:59Z"
     assert entry.find(atom + "link[@rel='related']").get("href") == row["url"]
+    historical = {"as_of": "2026-11-27", "source": "SEC"}
+    feed = client.get("/api/public-events/feed.atom", params=historical)
+    frozen, = ElementTree.fromstring(feed.content).findall(atom + "entry")
+    identity = entry.findtext(atom + "id")
+    assert frozen.findtext(atom + "id") == identity
+    assert frozen.find(atom + "link[@rel='alternate']").get("href") == identity + "&as_of=2026-11-27"
+    assert identity + "&as_of=2026-11-27" in client.get("/api/public-events/report.txt", params=historical).text
     empty = client.get("/api/public-events/feed.atom", params=dict(cutoff, asset="missing"))
     assert not ElementTree.fromstring(empty.content).findall(atom + "entry")
     filtered_report = client.get("/api/public-events/report.txt", params=cutoff).text
