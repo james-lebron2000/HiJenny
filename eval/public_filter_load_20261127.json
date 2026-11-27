@@ -1,0 +1,134 @@
+{
+  "release": "b381b22665d1f74b29746cc145de5aec55c84008",
+  "archive_events": 410,
+  "sources": 8,
+  "transport": "localhost via SSH port forwarding to deployed Unix socket",
+  "runs": [
+    {
+      "started_utc": "2026-11-27T11:47:47.250464+00:00",
+      "concurrent_users": 20,
+      "results": {
+        "company": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 525.8,
+          "max_ms": 627.3,
+          "error_examples": []
+        },
+        "regulator": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 485.6,
+          "max_ms": 593.8,
+          "error_examples": []
+        },
+        "clinical": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 467.5,
+          "max_ms": 508.8,
+          "error_examples": []
+        },
+        "historical": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 622.4,
+          "max_ms": 684.1,
+          "error_examples": []
+        },
+        "all": {
+          "requests": 240,
+          "errors": 0,
+          "p95_ms": 518.2,
+          "max_ms": 684.1,
+          "error_examples": []
+        }
+      },
+      "passed": true
+    },
+    {
+      "started_utc": "2026-11-27T11:48:07.676460+00:00",
+      "concurrent_users": 20,
+      "results": {
+        "company": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 336.3,
+          "max_ms": 379.1,
+          "error_examples": []
+        },
+        "regulator": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 344.2,
+          "max_ms": 347.0,
+          "error_examples": []
+        },
+        "clinical": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 290.0,
+          "max_ms": 336.3,
+          "error_examples": []
+        },
+        "historical": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 365.7,
+          "max_ms": 386.4,
+          "error_examples": []
+        },
+        "all": {
+          "requests": 240,
+          "errors": 0,
+          "p95_ms": 341.0,
+          "max_ms": 386.4,
+          "error_examples": []
+        }
+      },
+      "passed": true
+    },
+    {
+      "started_utc": "2026-11-27T11:48:11.075009+00:00",
+      "concurrent_users": 20,
+      "results": {
+        "company": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 389.0,
+          "max_ms": 391.2,
+          "error_examples": []
+        },
+        "regulator": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 372.4,
+          "max_ms": 387.3,
+          "error_examples": []
+        },
+        "clinical": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 322.0,
+          "max_ms": 329.6,
+          "error_examples": []
+        },
+        "historical": {
+          "requests": 60,
+          "errors": 0,
+          "p95_ms": 366.6,
+          "max_ms": 388.7,
+          "error_examples": []
+        },
+        "all": {
+          "requests": 240,
+          "errors": 0,
+          "p95_ms": 375.4,
+          "max_ms": 391.2,
+          "error_examples": []
+        }
+      },
+      "passed": true
+    }
+  ]
+}
