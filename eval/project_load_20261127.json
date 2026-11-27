@@ -521,6 +521,271 @@
       ],
       "pdf_workers": 4,
       "busy_timeout_ms": 120000
+    },
+    "deployed_build": {
+      "mode": "rules",
+      "fixture": "first 200 pages of synthetic CSR repeated eight times",
+      "source_sha256": "0aed7bb9d6c29a447a4ff3fc2c2696fd9d54165160ca1f33c987d399e711e255",
+      "passed_projects": 10,
+      "p95_seconds": 411.815,
+      "median_seconds": 315.983,
+      "projects": [
+        {
+          "project": "prj_2d58927dd890",
+          "run": "run_723d011de727",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "8c45c8f8a46cd8aa7f0b6363ac2733f57f249ac371019ae663025b944fecab31",
+          "seconds": 199.4,
+          "passed": true
+        },
+        {
+          "project": "prj_92ae25bcbb30",
+          "run": "run_9f29e8f3b65c",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "063bf571406f4f4ac9f0fbe4f9e742fcc6e9de86347b1282222976ad4cbe4c13",
+          "seconds": 321.333,
+          "passed": true
+        },
+        {
+          "project": "prj_7b254251a1f9",
+          "run": "run_afd00d08db24",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "0cf043a66e05d8bed105ad57e48e8fdf58babe6e0b416c5bf46938ce09b17727",
+          "seconds": 190.769,
+          "passed": true
+        },
+        {
+          "project": "prj_36cb437d39f5",
+          "run": "run_e573b84dd01b",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "a26119cbbc8cc4646552611ccba078f12f0adc680e87b3f8d23355b2a1582e5c",
+          "seconds": 411.815,
+          "passed": true
+        },
+        {
+          "project": "prj_307341d39714",
+          "run": "run_274aaad487ab",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "5b22fe6310ff3bb17961351af33ac5a51f2f2f4f3af23dd0f37781c3a72e2188",
+          "seconds": 310.633,
+          "passed": true
+        },
+        {
+          "project": "prj_3e360b367145",
+          "run": "run_19ce883bdc06",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "1d0266404073a98e342471e828c4e19a0184957fe6babd2267b843d28f03e8bf",
+          "seconds": 187.244,
+          "passed": true
+        },
+        {
+          "project": "prj_d6b7acedb93f",
+          "run": "run_158848421409",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "4ab5b27286c946d60b311fd70eae9d8687fa4b256aaed514eb1d7fae96e5066d",
+          "seconds": 411.536,
+          "passed": true
+        },
+        {
+          "project": "prj_ee976da91b96",
+          "run": "run_dbc6a96da091",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "f922ad2aca13715e3794de703516c5a33dac381401473bb3cb3d25c72e09941b",
+          "seconds": 321.335,
+          "passed": true
+        },
+        {
+          "project": "prj_559bae4f2e46",
+          "run": "run_e62d7d668b8a",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "e4bdca0a644a1d15e9ca0ade2c411566caa03090e7dfd58ced9d7cb3f26a80a1",
+          "seconds": 199.273,
+          "passed": true
+        },
+        {
+          "project": "prj_5b0fc4ee21c4",
+          "run": "run_3e4a7b638811",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33620,
+          "report_sha256": "6f41a4e5f250fc3edc5bfe21c310dfca7724a078cc4bfe94be4f7b7a688e14e4",
+          "seconds": 322.188,
+          "passed": true
+        }
+      ],
+      "pdf_workers": 4,
+      "busy_timeout_ms": 120000,
+      "application_release": "a19e69b30faad1c9cae16855c8be78b2cda11fda"
     }
+  },
+  "public_api_during_deployed_build_test": {
+    "started_utc": "2026-11-27T12:45:22.021169+00:00",
+    "concurrent_users": 20,
+    "results": {
+      "company": {
+        "requests": 60,
+        "errors": 0,
+        "p95_ms": 494.8,
+        "max_ms": 505.2,
+        "error_examples": []
+      },
+      "regulator": {
+        "requests": 60,
+        "errors": 0,
+        "p95_ms": 486.5,
+        "max_ms": 495.0,
+        "error_examples": []
+      },
+      "clinical": {
+        "requests": 60,
+        "errors": 0,
+        "p95_ms": 401.0,
+        "max_ms": 415.7,
+        "error_examples": []
+      },
+      "historical": {
+        "requests": 60,
+        "errors": 0,
+        "p95_ms": 459.1,
+        "max_ms": 504.9,
+        "error_examples": []
+      },
+      "all": {
+        "requests": 240,
+        "errors": 0,
+        "p95_ms": 475.7,
+        "max_ms": 505.2,
+        "error_examples": []
+      }
+    },
+    "passed": true
   }
 }
