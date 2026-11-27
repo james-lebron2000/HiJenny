@@ -116,8 +116,10 @@ function renderPublicEvents() {
     <label>试验登记号<input name="trial" placeholder="NCT 或 jRCT 编号" pattern="[Nn][Cc][Tt][0-9]{8}|[Jj][Rr][Cc][Tt][0-9]{10}" title="NCT 加八位数字或 jRCT 加十位数字"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
     <label>数据来源<select name="source"><option value="">全部来源</option><option>NMPA</option><option>Drugs@FDA</option><option>EMA</option><option>FDA Orange Book</option><option>jRCT</option><option>ClinicalTrials.gov</option><option>PubMed</option><option>SEC</option></select></label>
+    <label>来源记录编号（完整）<input name="source_record" placeholder="例如 BLA761234/ORIG/1"></label>
     <label>地区<input name="region" placeholder="例如：中东"></label>
     <label>来源披露起始日期<input type="date" name="since"></label>
+    <label>来源披露结束日期<input type="date" name="disclosed_to"></label>
     <label>首次发现起始日（台北）<input type="date" name="discovered_from"></label>
     <label>首次发现结束日（台北）<input type="date" name="discovered_to"></label>
     <label>记录类型<select name="kind"><option value="">全部</option><option value="change">字段变化</option>
@@ -239,6 +241,18 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (!query.has('source_record') || !query.has('source') ||
+            [...query.keys()].some(key=>!['source_record','source','offset','disclosed_to','discovered_to'].includes(key))) {
+          const params=new URLSearchParams({source:r.source,source_record:r.record});
+          for (const end of ['disclosed_to','discovered_to']) {
+            const dates=[query.get('as_of'),query.get(end)].filter(Boolean).sort();
+            if (dates.length) params.set(end,dates[0]);
+          }
+          const trail=document.createElement('p'), link=document.createElement('a');
+          link.href='#/public-events?'+params;
+          link.textContent='查看此来源编号的归档历史';
+          trail.append(link); card.append(trail);
+        }
         if (r.source==='NMPA' && r.asset && (!query.has('asset') || query.has('source') || query.has('notice_id'))) {
           const params = new URLSearchParams({asset:r.asset});
           if (query.has('as_of')) params.set('as_of',query.get('as_of'));

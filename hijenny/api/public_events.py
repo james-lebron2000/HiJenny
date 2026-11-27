@@ -19,10 +19,12 @@ KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原�
 def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
                   disclosed_to: date | None = None, source: Literal["NMPA", "SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA", "jRCT", "FDA Orange Book"] | None = None,
-                  notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
+                  source_record: str = "", notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None):
     if discovered_from and discovered_to and discovered_from > discovered_to:
         raise HTTPException(422, "发现起始日期须早于或等于结束日期。")
+    if since and disclosed_to and since > disclosed_to:
+        raise HTTPException(422, "披露起始日期须早于或等于结束日期。")
     asset = asset.strip()
     match = ["instr(lower(asset), lower(?))>0", "instr(lower(json_extract(payload, '$.subject')), lower(?))>0"]
     args = [asset, asset]
@@ -32,6 +34,10 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
         args.append(mapping["name"])
     sql = " WHERE (" + " OR ".join(match) + ") AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"
     args.extend([region.strip(), since.isoformat() if since else ""])
+    source_record = source_record.strip()
+    if source_record:
+        sql += " AND json_extract(payload, '$.record')=?"
+        args.append(source_record)
     notice_id = notice_id.strip()
     if notice_id:
         if not re.fullmatch(r"[0-9]+", notice_id):
@@ -100,9 +106,9 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
         sql += " AND json_extract(payload, '$.kind')=?"
         args.append(kind)
     order = (" ORDER BY julianday(json_extract(payload, '$.observed')) DESC, date DESC, id"
-             if discovered_from or discovered_to else " ORDER BY date DESC, id")
+             if source_record or discovered_from or discovered_to else " ORDER BY date DESC, id")
     labels = [f"{label}：{value}" for label, value in (
-        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("来源", source), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
+        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("来源", source), ("来源记录编号", source_record), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("记录类型", KINDS.get(kind))) if value]
     table = "events"
     if as_of:
