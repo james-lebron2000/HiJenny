@@ -188,7 +188,7 @@ async function showAssetEvidence(panel, asset, cutoff) {
       }))+section('已公布主要终点的试验',outcomes.map(r=>trialLink(r)+' · '+esc(r.endpoints.join('、'))));
     }
     filters.form.oninput=draw;
-    filters.form.onreset=()=>queueMicrotask(draw);
+    filters.form.onreset=()=>setTimeout(draw,0);
     filters.form.onsubmit=e=>e.preventDefault();
     draw();
   } catch (err) {if (current()) panel.textContent='资产证据暂时无法读取，请重新筛选。'+err.message;}
