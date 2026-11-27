@@ -6,27 +6,8 @@ const bdColumns = {asset:'资产', population:'分析人群', line:'治疗线次
   followup:'随访', endpoint:'终点', value:'结果', limits:'可比性限制'};
 const bdDecisions = {documents:'资料复核即可，无需新增实验', experiment:'需要实验验证', clarify:'继续补资料'};
 
-const bdStages = {request:'待发起资料请求', reply:'待卖方答复', review:'待内部复核',
+const bdStages = {request:'待发起资料请求', reply:'待卖方答复', clarify:'待向卖方补问', review:'待内部复核',
   experiment:'待验证结果', publish:'待更新简报', done:'简报已更新', closed:'已关闭', rejected:'已驳回或搁置', record:'待登记答复材料'};
-
-function followupStage(question, history) {
-  if (question.review_status === 'rejected' || question.status === 'dismissed') return 'rejected';
-  if (question.status === 'closed') return 'closed';
-  const steps = history.filter(event => event.action !== 'comparison');
-  const last = steps.at(-1);
-  if (!last) {
-    if (question.status === 'sent') return 'reply';
-    if (question.status === 'answered') return 'record';
-    return 'request';
-  }
-  if (last.action === 'request') return 'reply';
-  if (['reply', 'experiment_result'].includes(last.action)) return 'review';
-  const decision = steps.findLast(event => event.action === 'review')?.after.decision;
-  if (last.action === 'publish' && history.at(-1) !== last) return 'review';
-  if (decision === 'experiment') return 'experiment';
-  if (decision === 'clarify') return 'reply';
-  return last.action === 'publish' && history.at(-1) === last ? 'done' : 'publish';
-}
 
 async function renderFollowup(seq) {
   const project = state.projectId;
@@ -36,7 +17,7 @@ async function renderFollowup(seq) {
   const questions = data.questions;
   const params = hashParams();
   let stage = Object.hasOwn(bdStages, params.get('stage')) ? params.get('stage') : '';
-  const stages = new Map(questions.map(q => [q.question_id, followupStage(q, data.history[q.question_id] || [])]));
+  const stages = new Map(Object.entries(data.stages));
   const requested = params.get('question');
   if (requested && stages.get(requested) !== stage) stage = '';
   const visible = questions.filter(q => !stage || stages.get(q.question_id) === stage);
@@ -139,7 +120,7 @@ async function renderFollowup(seq) {
   const form = $('#bd-form');
   if (!form) return;
   const select = form.elements.kind;
-  const preferred = {request:'request', reply:'reply', record:'reply', review:'review', experiment:'experiment_result', publish:'publish'}[stages.get(id)];
+  const preferred = {request:'request', clarify:'request', reply:'reply', record:'reply', review:'review', experiment:'experiment_result', publish:'publish'}[stages.get(id)];
   select.value = data.allowed[id].includes(preferred) ? preferred : data.allowed[id].find(k=> !['comparison','request'].includes(k)) || 'request';
   const fields = () => {
     const kind = select.value;

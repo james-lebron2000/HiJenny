@@ -58,12 +58,33 @@ DECISIONS = {"documents": "资料复核即可，无需新增实验", "experiment
 
 def histories(session, project_id):
     result = {}
-    for event in store.list_review_events(session, project_id, limit=-1):
-        if event["entity_type"] == "bd_followup":
-            result.setdefault(event["entity_id"], []).append(event)
+    for event in store.list_review_events(session, project_id, limit=-1, entity_type="bd_followup"):
+        result.setdefault(event["entity_id"], []).append(event)
     for events in result.values():
         events.sort(key=lambda e: e["after"]["revision"])
     return result
+
+
+def followup_stage(question, events):
+    if question.get("review_status") == "rejected" or question.get("status") == "dismissed":
+        return "rejected"
+    if question.get("status") == "closed":
+        return "closed"
+    last = next((e for e in reversed(events) if e["action"] != "comparison"), None)
+    if not last:
+        return {"sent": "reply", "answered": "record"}.get(question.get("status"), "request")
+    kind = last["action"]
+    if kind == "request":
+        return "reply"
+    if kind in ("reply", "experiment_result") or (kind == "publish" and events[-1] is not last):
+        return "review"
+    review = next(e for e in reversed(events) if e["action"] == "review")
+    decision = review["after"]["decision"]
+    return {"experiment": "experiment", "clarify": "clarify"}.get(decision, "done" if kind == "publish" else "publish")
+
+
+def question_stages(questions, history):
+    return {q["question_id"]: followup_stage(q, history.get(q["question_id"], [])) for q in questions}
 
 
 def allowed(events, question=None):
@@ -116,9 +137,8 @@ def append(session, project_id, question_id, action):
                                   action.actor, action.kind, after=payload)
 
 
-def brief_updates(session, project_id, questions):
+def brief_updates(questions, history):
     updates = []
-    history = histories(session, project_id)
     for question in questions:
         events = history.get(question["question_id"], [])
         published = [i for i, e in enumerate(events) if e["action"] == "publish"]

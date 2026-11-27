@@ -198,9 +198,10 @@ def review_digest(tokens: Iterable[str]) -> str:
     return hashlib.sha256("".join(sorted(tokens)).encode("ascii")).hexdigest()
 
 
-def diligence_digest(project: dict, findings: list[dict], questions: list[dict]) -> str:
+def diligence_digest(project: dict, findings: list[dict], questions: list[dict], stages: dict) -> str:
     snapshot = {
         "project": {k: project.get(k) for k in ("project_id", "name", "asset_name", "indication", "phase")},
+        "stages": stages,
         "findings": sorted(findings, key=lambda f: f["finding_id"]),
         "questions": sorted(questions, key=lambda q: q["question_id"]),
     }
@@ -1279,8 +1280,11 @@ def log_review_event(
     }
 
 
-def list_review_events(session: Session, project_id: str, limit: int = 200, *, followup_question: str | None = None) -> list[dict]:
+def list_review_events(session: Session, project_id: str, limit: int = 200, *, followup_question: str | None = None,
+                       entity_type: str | None = None) -> list[dict]:
     query = select(ReviewEvent).where(ReviewEvent.project_id == project_id)
+    if entity_type is not None:
+        query = query.where(ReviewEvent.entity_type == entity_type)
     if followup_question is not None:
         query = query.where(ReviewEvent.entity_type == "bd_followup", ReviewEvent.entity_id == followup_question)
     rows = session.scalars(query.order_by(ReviewEvent.ts.desc()).limit(limit)).all()

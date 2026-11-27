@@ -982,3 +982,38 @@ def test_report_review_state_tracks_project_findings_and_seller_questions(client
     md.write_text(marker.split(":")[0] + " -->\n" + tail)
     legacy = outputs()["report_md"]
     assert legacy["diligence_review_state"] == "unknown" and legacy["evidence_review_state"] == "current"
+
+
+def test_brief_seller_queue_matches_followup_and_keeps_historical_questions(client):
+    base = "/api/projects/" + create_project(client)["project_id"]
+    rows = seed_review_data(base.rsplit("/", 1)[1])
+    qid = rows["question_id"]
+    followup = base + "/followup"
+
+    def check(stage, next_step=None):
+        assert client.get(followup).json()["stages"][qid] == stage
+        exports = client.post(base + "/exports/report").json()["downloads"]
+        md = client.get(exports["report_md"]["url"]).text
+        queue = md.split("### Top seller questions")[1].split("### Evidence still missing")[0]
+        assert qid in md.split("## 7. Seller Questions")[1]
+        assert (qid in queue) == bool(next_step)
+        if next_step:
+            assert next_step in queue
+
+    def record(kind, revision, **fields):
+        client.post(followup + "/" + qid, json=dict(kind=kind, revision=revision, actor="pilot", **fields)).raise_for_status()
+
+    check("request", "Review before sending")
+    question = "/api/questions/" + qid
+    client.patch(question, json={"status": "approved"}).raise_for_status()
+    check("request", "Ready to send")
+    record("request", 0, note="Source requested")
+    check("reply", "Awaiting seller response")
+    record("reply", 1, note="Received", locator="Table 1", document_id=rows["document_id"])
+    check("review")
+    record("review", 2, note="Clarify population", decision="clarify")
+    check("clarify", "Request clarification")
+    client.patch(question, json={"status": "closed"}).raise_for_status()
+    check("closed")
+    client.patch(question, json={"review_status": "rejected"}).raise_for_status()
+    check("rejected")

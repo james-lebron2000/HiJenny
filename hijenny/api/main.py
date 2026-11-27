@@ -1181,7 +1181,7 @@ def create_app() -> FastAPI:
             _project_or_404(session, project_id)
             history = diligence.histories(session, project_id)
             questions = store.list_questions(session, project_id)
-            return {"questions": questions, "history": history,
+            return {"questions": questions, "history": history, "stages": diligence.question_stages(questions, history),
                     "gateway_identity_required": config.REQUIRE_REVIEW_ACTOR,
                     "gateway_user": gateway_user(request) if config.REQUIRE_REVIEW_ACTOR else None,
                     "allowed": {q["question_id"]: diligence.allowed(history.get(q["question_id"], []), q)
@@ -1283,8 +1283,9 @@ def create_app() -> FastAPI:
             if not any(file["exists"] for file in outputs.values()):
                 return {"project_id": project_id, "outputs": outputs}
             digest = store.project_review_digest(session, project_id)
-            diligence_digest = store.diligence_digest(project, store.list_findings(session, project_id),
-                                                      store.list_questions(session, project_id))
+            questions = store.list_questions(session, project_id)
+            stages = diligence.question_stages(questions, diligence.histories(session, project_id))
+            diligence_digest = store.diligence_digest(project, store.list_findings(session, project_id), questions, stages)
         for file in outputs.values():
             if file["exists"]:
                 path = exports.exports_dir(project_id) / file["name"]

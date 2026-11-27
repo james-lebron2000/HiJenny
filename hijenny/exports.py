@@ -360,12 +360,15 @@ def collect_export_data(session, project_id: str) -> dict:
             ev["trial_key"] = trial_names.get(ev["trial_id"], "")
 
     from hijenny.overview import build_overview
-    from hijenny.diligence import brief_updates
+    from hijenny import diligence
+    history = diligence.histories(session, project_id)
+    stages = diligence.question_stages(questions, history)
 
     return {
         "review_digest": (store.review_digest(ev["review_token"] for ev in evidence) + ":" +
-                          store.diligence_digest(project, findings_all, questions)),
-        "bd_updates": brief_updates(session, project_id, questions),
+                          store.diligence_digest(project, findings_all, questions, stages)),
+        "bd_updates": diligence.brief_updates(questions, history),
+        "question_stages": stages,
         "project": project,
         "stats": stats,
         "overview": build_overview(session, project_id),
@@ -1388,15 +1391,30 @@ def decision_brief_data(data: dict) -> dict:
         for finding in open_risks(data)
     ]
 
-    questions = [
-        {
+    from hijenny.diligence import followup_stage
+    stages = data.get("question_stages") or {}
+    questions = []
+    for question in sort_questions(data.get("questions") or []):
+        stage = stages.get(question.get("question_id")) or followup_stage(question, [])
+        if stage not in {"request", "reply", "clarify"}:
+            continue
+        if stage == "clarify":
+            next_step = "Request clarification"
+        elif stage == "reply":
+            next_step = "Awaiting seller response"
+        elif question.get("status") == "approved":
+            next_step = "Ready to send"
+        else:
+            next_step = "Review before sending"
+        questions.append({
             "question_id": _txt(question.get("question_id")),
             "priority": _txt(question.get("priority")),
             "owner": _txt(question.get("owner")),
             "question": _txt(question.get("question")),
-        }
-        for question in (data.get("questions") or [])[:5]
-    ]
+            "next_step": next_step,
+        })
+        if len(questions) == 5:
+            break
 
     # Package-level gaps (from coverage analysis) vs finding-specific
     # clarification needs; identical strings are de-duplicated.
@@ -1651,15 +1669,15 @@ def render_markdown_report(data: dict) -> str:
     add("### Top seller questions")
     add("")
     if brief["questions"]:
-        add("| Priority | Owner | Question | Question ID |")
-        add("|---|---|---|---|")
+        add("| Priority | Owner | Question | Next step | Question ID |")
+        add("|---|---|---|---|---|")
         for question in brief["questions"]:
             add(
                 f"| {_md_escape(question['priority'])} | {_md_cell(question['owner'], 60)} | "
-                f"{_md_cell(question['question'], 300)} | {_md_cell(question['question_id'])} |"
+                f"{_md_cell(question['question'], 300)} | {_md_cell(question['next_step'])} | {_md_cell(question['question_id'])} |"
             )
     else:
-        add("_No seller questions have been generated yet._")
+        add("_No seller questions currently need preparation or a response._")
     add("")
     add("### Evidence still missing")
     add("")
@@ -2242,13 +2260,13 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
     if brief["questions"]:
         _docx_table(
             doc,
-            ["Priority", "Owner", "Question", "Question ID"],
-            [[q["priority"], q["owner"], q["question"], q["question_id"]] for q in brief["questions"]],
-            widths=(0.7, 1.0, 3.4, 1.2),
+            ["Priority", "Owner", "Question", "Next step", "Question ID"],
+            [[q["priority"], q["owner"], q["question"], q["next_step"], q["question_id"]] for q in brief["questions"]],
+            widths=(0.6, 0.8, 2.6, 1.2, 1.1),
             font_size=8,
         )
     else:
-        doc.add_paragraph("No seller questions have been generated yet.")
+        doc.add_paragraph("No seller questions currently need preparation or a response.")
     doc.add_heading("Evidence still missing", level=2)
     if brief["missing_coverage"] or brief["missing_findings"]:
         if brief["missing_coverage"]:
