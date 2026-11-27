@@ -142,18 +142,35 @@ function recentPublicWeek(params, now=new Date()) {
   params.set('discovered_to',day.format(now));
 }
 
+function publicFeedUrl(query,week) {
+  const url=new URL('/api/public-events/feed.atom',location.origin);
+  const params=new URLSearchParams(query);
+  if (params.has('event')) {
+    params.set('event_id',params.get('event')); params.delete('event');
+  }
+  if (week) {
+    for (const field of ['as_of','discovered_from','discovered_to']) params.delete(field);
+    params.set('rolling_week','true');
+  }
+  url.search=params.toString();
+  return url.href;
+}
+
 function bindSavedPublicFilters(onApply) {
   const panel=$('#public-saved-filters'), form=panel.querySelector('form');
   const list=panel.querySelector('ul'), message=panel.querySelector('[role=status]');
   const prefix='hijenny.public-filter.';
   let applied=null, generation=0;
   const refresh=panel.querySelector('[data-refresh-counts]');
+  const exportFeeds=panel.querySelector('[data-export-feeds]');
   function draw() {
-    const version=++generation, pending=[];
+    const version=++generation, pending=[], subscriptions=[];
+    exportFeeds.hidden=true;
     list.replaceChildren();
     try {
       for (const key of Object.keys(localStorage).filter(k=>k.startsWith(prefix)).sort()) {
         const entry=JSON.parse(localStorage.getItem(key));
+        subscriptions.push(entry);
         const li=document.createElement('li'), open=document.createElement('button'), remove=document.createElement('button');
         open.type=remove.type='button'; open.className=remove.className='btn';
         open.textContent=entry.name+(entry.week?' · 最近七天':'');
@@ -198,6 +215,26 @@ function bindSavedPublicFilters(onApply) {
         }
         li.append(mark,remove); list.append(li);
       }
+      exportFeeds.hidden=!subscriptions.length;
+      exportFeeds.onclick=()=>{
+        const doc=document.implementation.createDocument(null,'opml');
+        doc.documentElement.setAttribute('version','2.0');
+        const head=doc.createElement('head'), title=doc.createElement('title'), body=doc.createElement('body');
+        title.textContent='HiJenny 公开资产动态';
+        head.append(title); doc.documentElement.append(head,body);
+        for (const entry of subscriptions) {
+          const item=doc.createElement('outline');
+          item.setAttribute('type','rss');
+          item.setAttribute('text',entry.name);
+          item.setAttribute('xmlUrl',publicFeedUrl(entry.query,entry.week));
+          body.append(item);
+        }
+        const file=new Blob([new XMLSerializer().serializeToString(doc)],{type:'application/xml;charset=utf-8'});
+        const link=document.createElement('a');
+        link.href=URL.createObjectURL(file); link.download='HiJenny-subscriptions.opml'; link.click();
+        setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+        message.textContent='已导出 '+subscriptions.length+' 项订阅，可在阅读器中导入 OPML。';
+      };
       refresh.hidden=!pending.length;
       if (panel.open) showCounts();
       async function showCounts() {
@@ -474,7 +511,7 @@ function renderPublicEvents() {
     <section class="card" id="asset-evidence" aria-live="polite" hidden></section>
     <details class="card" id="public-saved-filters"><summary>我的常用筛选（本浏览器）</summary>
     <p>记录核对起点使用数据库最新采集回执的时间。查看新增沿用原筛选条件；更新核对时间后，从新起点计算。</p>
-    <button type="button" class="btn" data-refresh-counts hidden>刷新新增数量</button><ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
+    <button type="button" class="btn" data-refresh-counts hidden>刷新新增数量</button><button type="button" class="btn" data-export-feeds hidden>导出全部订阅（OPML）</button><ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
     <label><input type="checkbox" name="week"> 每次打开时查看最近七天发现，替换已选的历史截面和发现日期</label>
     <button class="btn" disabled>保存当前结果的筛选条件</button></form><p role="status"></p></details>
     <p id="public-event-feed" hidden><a>订阅当前筛选（Atom）</a> <button class="btn" type="button" data-copy-feed="a">复制当前筛选订阅地址</button>
@@ -885,11 +922,8 @@ function renderPublicEvents() {
       const reportQuery = new URLSearchParams(query);
       reportQuery.delete('offset');
       download.href = '/api/public-events/report.txt?' + reportQuery;
-      feed.querySelector('a').href='/api/public-events/feed.atom'+(reportQuery.size?'?'+reportQuery:'');
-      const rollingQuery=new URLSearchParams(reportQuery);
-      for (const field of ['as_of','discovered_from','discovered_to']) rollingQuery.delete(field);
-      rollingQuery.set('rolling_week','true');
-      feed.querySelector('[data-week]').href='/api/public-events/feed.atom?'+rollingQuery;
+      feed.querySelector('a').href=publicFeedUrl(reportQuery,false);
+      feed.querySelector('[data-week]').href=publicFeedUrl(reportQuery,true);
       feed.hidden=false;
       const savedQuery=new URLSearchParams(reportQuery);
       if (savedQuery.has('event_id')) {
