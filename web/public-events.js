@@ -438,7 +438,7 @@ function renderPublicEvents() {
     <button class="btn">对照归档终点</button></form><div aria-live="polite" data-comparison></div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="依达方、奥希替尼或 Summit"></label>
-    <input type="hidden" name="asset_label">
+    <input type="hidden" name="asset_label"><input type="hidden" name="unassigned_asset">
     <label><input type="checkbox" name="exact_asset" value="true"> 仅匹配完整归档资产标签（按卡片所列原名）</label>
     <label>国家药监局公告编号<input name="notice_id" inputmode="numeric" pattern="[0-9]+" placeholder="1073516"></label>
     <label>国家药监局栏目标题关键词<input name="notice_title" placeholder="例如 Good Clinical Practice"></label>
@@ -555,7 +555,7 @@ function renderPublicEvents() {
       query = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
       const eventId = hashParams().get('event');
       if (eventId) query.set('event_id', eventId);
-      showAssetEvidence($('#asset-evidence'),query.get('asset_label') || query.get('asset')?.trim() || '',query.get('as_of'),query.has('exact_asset') || query.has('asset_label'));
+      showAssetEvidence($('#asset-evidence'),query.has('unassigned_asset')?'':query.get('asset_label') || query.get('asset')?.trim() || '',query.get('as_of'),query.has('exact_asset') || query.has('asset_label'));
       setSavedQuery(null); offset = 0; generation++; list.replaceChildren();
     }
     $('#public-observed-after').hidden=!query.has('observed_after');
@@ -590,27 +590,31 @@ function renderPublicEvents() {
           counts.append(button);
         }
       }
-      if (query.has('asset_label') || (query.has('asset') && !query.has('exact_asset') && result.total)) {
-        const group=document.createElement('section');
-        const title=document.createElement('p');
-        title.textContent=query.has('asset_label')?'已选资产标签 · '+query.get('asset_label'):'按归档资产标签细分';
+      const hasAssetFacet=query.has('asset_label') || query.has('unassigned_asset');
+      if (hasAssetFacet || ((query.has('asset') || query.has('source')) && !query.has('exact_asset') && result.total)) {
+        const group=document.createElement('section'), title=document.createElement('p');
+        title.textContent=hasAssetFacet?'已选资产标签 · '+(query.get('asset_label') || '未标注资产'):'按归档资产标签细分';
         group.append(title);
-        for (const row of result.asset_counts) {
-          if (!row.label) {
-            group.append('未标注资产 · '+row.events+' 条 ');
-          } else if (!query.has('asset_label')) {
-            const button=document.createElement('button');
-            button.type='button'; button.className='btn';
-            button.textContent=row.label+' · '+row.events+' 条';
-            button.onclick=()=>{form.elements.asset_label.value=row.label; form.requestSubmit();};
-            group.append(button);
-          }
-        }
-        if (query.has('asset_label')) {
+        if (hasAssetFacet) {
           const clear=document.createElement('button');
           clear.type='button'; clear.className='btn'; clear.textContent='清除资产标签';
-          clear.onclick=()=>{form.elements.asset_label.value=''; form.requestSubmit();};
+          clear.onclick=()=>{
+            form.elements.asset_label.value=form.elements.unassigned_asset.value='';
+            form.requestSubmit();
+          };
           group.append(clear);
+        } else {
+          for (const row of result.asset_counts) {
+            const button=document.createElement('button');
+            button.type='button'; button.className='btn';
+            button.textContent=(row.label || '未标注资产')+' · '+row.events+' 条';
+            button.onclick=()=>{
+              form.elements.asset_label.value=row.label || '';
+              form.elements.unassigned_asset.value=row.label?'':'true';
+              form.requestSubmit();
+            };
+            group.append(button);
+          }
         }
         counts.append(group);
       }
@@ -853,6 +857,9 @@ function renderPublicEvents() {
       if (generation===request) { status.textContent='读取失败：'+err.message; more.hidden=false; }
     }
   }
+  form.elements.exact_asset.onchange=()=>{
+    form.elements.asset_label.value=form.elements.unassigned_asset.value='';
+  };
   form.onsubmit = event=>{
     event.preventDefault();
     const params = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));

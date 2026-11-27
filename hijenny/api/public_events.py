@@ -25,7 +25,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                   document_type: Literal["Label", "Letter", "Review", "Summary Review", "Medication Guide"] | None = None,
                   source_record: str = "", notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None,
-                  rolling_week: bool = False, exact_asset: bool = False, asset_label: str = ""):
+                  rolling_week: bool = False, exact_asset: bool = False, asset_label: str = "", unassigned_asset: bool = False):
     if rolling_week:
         if as_of or discovered_from or discovered_to:
             raise HTTPException(422, "滚动七天与固定历史截面或发现日期不能同时使用。")
@@ -50,6 +50,10 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     sql = " WHERE (" + " OR ".join(match) + ") AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"
     args.extend([region.strip(), since.isoformat() if since else ""])
     asset_label = asset_label.strip()
+    if unassigned_asset:
+        if asset_label or exact_asset:
+            raise HTTPException(422, "未标注资产不能与指定资产标签同时筛选。")
+        sql += " AND nullif(trim(json_extract(payload, '$.asset')), '') IS NULL"
     if asset_label:
         sql += " AND json_extract(payload, '$.asset')=?"
         args.append(asset_label)
@@ -137,7 +141,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     order = (" ORDER BY julianday(json_extract(payload, '$.observed')) DESC, date DESC, id"
              if source_record or discovered_from or discovered_to else " ORDER BY date DESC, id")
     labels = [f"{label}：{value}" for label, value in (
-        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("当前归档含 FDA 文件类型", document_type), ("来源", source), ("来源记录编号", source_record), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("完整归档资产标签" if exact_asset else "资产或公司", asset), ("选定资产标签", asset_label), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
+        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("当前归档含 FDA 文件类型", document_type), ("来源", source), ("来源记录编号", source_record), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("完整归档资产标签" if exact_asset else "资产或公司", asset), ("选定资产标签", "未标注资产" if unassigned_asset else asset_label), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("仅含首次观察晚于", observed_after.isoformat() if observed_after else None), ("记录类型", KINDS.get(kind))) if value]
     table = "events"
     if as_of:
@@ -249,7 +253,7 @@ def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
     with closing(connect()) as db:
         db.execute("BEGIN")
         counts = source_counts(db, table, sql, args)
-        assets = db.execute(f"SELECT json_extract(payload, '$.asset') AS label, count(*) AS n FROM {table}" +
+        assets = db.execute(f"SELECT nullif(trim(json_extract(payload, '$.asset')), '') AS label, count(*) AS n FROM {table}" +
                             sql + " GROUP BY label ORDER BY n DESC, label", args)
         asset_counts = [{"label": label, "events": n} for label, n in assets]
         count = sum(row["events"] for row in counts)
