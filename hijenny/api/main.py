@@ -40,6 +40,9 @@ _OCR_SLOTS = BoundedSemaphore(2)
 
 SERVICE_NAME = "HiJenny API"
 VERSION = "0.1.0"
+# git archive expands this marker when packaging a specific commit.
+_ARCHIVE_COMMIT = "$Format:%H$"
+RELEASE_COMMIT = _ARCHIVE_COMMIT if re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", _ARCHIVE_COMMIT) else None
 
 MAX_UPLOAD_BYTES = max(1, int(config.MAX_UPLOAD_MB)) * 1024 * 1024
 _WEB_DIR = Path(config.WEB_DIR)
@@ -545,6 +548,7 @@ def create_app() -> FastAPI:
             "status": "ok" if database == "ok" else "degraded",
             "service": SERVICE_NAME,
             "version": VERSION,
+            "release_commit": RELEASE_COMMIT,
             "database": database,
             "db_path": str(config.DB_PATH),
             "data_dir": str(_data_dir()),

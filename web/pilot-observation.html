@@ -20,7 +20,7 @@ input,textarea,select{width:100%;padding:.4rem}textarea{min-height:4.5rem}button
 <p id="example" hidden></p>
 <label>参与者确认的任务与完成标准<textarea required name="task" placeholder="用参与者自己的话记录业务问题、交付对象和判断完成的条件"></textarea></label>
 <label>使用场景、对标地区及当前做法<textarea name="workflow" required></textarea></label>
-<label>应用版本（部署提交号）<input name="release" required></label>
+<label>应用版本（部署提交号）<input name="release" placeholder="填写本次使用的部署提交号" required></label>
 <label>资料截止日（台北）<input name="cutoff" type="date" required></label>
 </fieldset>
 <fieldset><legend>独立操作</legend>
@@ -65,6 +65,13 @@ fields.role.onchange=()=>{
   updateWorkspace();
 };
 updateWorkspace();
+if (['http:','https:'].includes(location.protocol)) {
+  fetch('/api/health',{cache:'no-store'}).then(response=>response.ok ? response.json() : null).then(health=>{
+    if (!started && !fields.release.value && /^[a-f0-9]{40}$|^[a-f0-9]{64}$/.test(health?.release_commit || '')) {
+      fields.release.value=health.release_commit;
+    }
+  }).catch(()=>{ /* Hosts can enter the release manually while offline. */ });
+}
 fields.start.onclick=()=>{
   for (const input of form.querySelectorAll('fieldset:first-child [required]')) {
     if (!input.reportValidity()) return;
