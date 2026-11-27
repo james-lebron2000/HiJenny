@@ -374,15 +374,42 @@ def event_details(row):
     return lines
 
 
-def collection_coverage(receipt, subject="", unassigned=False):
+RECEIPT_SOURCES = {
+    "ClinicalTrials.gov": ("trials",), "PubMed": ("publications",), "jRCT": ("jrct",),
+    "Drugs@FDA": ("fda",), "EMA": ("ema",), "SEC": ("sec",), "NMPA": ("nmpa", "nmpa_index"),
+    "FDA Orange Book": ("orange_book", "orange_book_uses"),
+}
+
+
+def collection_coverage(receipt, params, unassigned=False):
     checks = receipt.get("checks", [])
     if unassigned:
         return ["当前筛选为未标注资产，无法对应具体对象的采集回执。"]
-    subject = subject.strip()
+    subject = params.get("asset_label", "").strip() or params.get("asset", "").strip()
+    source = params.get("source", "")
     scope = "全库关注名单"
+    qualifiers = []
+    if source:
+        qualifiers.append(f"来源 {source}")
+        checks = [c for c in checks if c.get("source") in RECEIPT_SOURCES.get(source, ())]
+    direct_targets = (
+        ("trial", "登记编号", ("trials", "publications", "jrct")),
+        ("application", "申请编号", ("fda", "orange_book", "orange_book_uses")),
+        ("notice_id", "公告编号", ("nmpa",)),
+    )
+    for key, label, sources in direct_targets:
+        target = params.get(key, "").strip()
+        if target:
+            qualifiers.append(f"按{label}直接监测 {target}")
+            checks = [c for c in checks if c.get("source") in sources
+                      and str(c.get("target", "")).casefold() == target.casefold()]
+    if qualifiers:
+        scope = " · ".join(qualifiers)
+        if not checks:
+            return [f"{scope} · 本批关注名单没有对应的直接监测目标。"]
     unknown_subjects = sum(not c.get("subject") for c in checks)
     if subject:
-        scope = f"监测对象 {subject}"
+        scope = " · ".join([f"监测对象 {subject}", *qualifiers])
         canonical = verified_asset(subject)
         selected = []
         for check in checks:
@@ -412,7 +439,7 @@ def collection_coverage(receipt, subject="", unassigned=False):
 
 @router.get("/api/public-events/feed.atom")
 def event_feed(request: Request, filters=Depends(event_filters), rolling_week: bool = False, as_of: date | None = None,
-               asset: str = "", asset_label: str = "", unassigned_asset: bool = False):
+               unassigned_asset: bool = False):
     table, sql, args, _, labels, _ = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
@@ -435,7 +462,7 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
         latest = json.loads(receipt[0])
         timestamps.append(latest["finished_utc"])
         coverage = [f"当前公开库最近一批采集 · {latest['finished_utc']}",
-                    *collection_coverage(latest, asset_label.strip() or asset, unassigned_asset)]
+                    *collection_coverage(latest, request.query_params, unassigned_asset)]
         run_url = collection_links(latest).get("run")
         if run_url:
             ET.SubElement(feed, "link", rel="related", title="本批公开库采集记录", href=run_url)
@@ -466,7 +493,7 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
 
 @router.get("/api/public-events/report.txt", response_class=PlainTextResponse)
 def report(request: Request, filters=Depends(event_filters), as_of: date | None = None,
-           asset: str = "", asset_label: str = "", unassigned_asset: bool = False):
+           unassigned_asset: bool = False):
     table, sql, args, order, labels, _ = filters
     lines = ["HiJenny 公开资产动态", "筛选范围（发现日期按台北时间）", *labels]
     with closing(connect()) as db:
@@ -480,7 +507,7 @@ def report(request: Request, filters=Depends(event_filters), as_of: date | None 
                 lines.append("采集记录 · " + links["run"])
             if "watchlist" in links:
                 lines.append("本次采集采用的公开监测名单 · " + links["watchlist"])
-            lines.extend(collection_coverage(receipt, asset_label.strip() or asset, unassigned_asset))
+            lines.extend(collection_coverage(receipt, request.query_params, unassigned_asset))
         else:
             lines.append("导出时数据库尚无采集回执")
         archive_page = str(request.base_url) + "#/public-events?"

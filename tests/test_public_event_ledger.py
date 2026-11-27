@@ -488,7 +488,7 @@ def test_atom_conditional_refresh_for_empty_and_changed_feed(tmp_path, monkeypat
     refreshed = client.get(url, headers={"If-None-Match": changed.headers["etag"]})
     root = ElementTree.fromstring(refreshed.content)
     assert refreshed.status_code == 200 and root.findtext("{*}updated") == receipt["finished_utc"]
-    assert "成功 1/3" in root.findtext("{*}subtitle") and "jRCT-demo" in root.findtext("{*}subtitle")
+    assert "来源 SEC · 成功 0/1" in root.findtext("{*}subtitle") and "jRCT-demo" not in root.findtext("{*}subtitle")
     assert "采集失败 · sec · demo" in root.findtext("{*}subtitle")
     assert root.find("{*}link[@rel='related']").get("href").endswith("/actions/runs/123")
     entry, = root.findall("{*}entry")
@@ -558,9 +558,9 @@ def test_exported_coverage_scopes_gaps_to_receipt_subject(tmp_path, monkeypatch)
     app = FastAPI()
     app.include_router(router)
     receipt = dict(finished_utc="2026-11-27T08:00:00Z", checks=[
-        dict(subject="Tagrisso (osimertinib)", source="fda", target="NDA1", status="ok"),
+        dict(subject="Tagrisso (osimertinib)", source="fda", target="NDA208065", status="ok"),
         dict(subject="ivonescimab", source="jrct", target="JRCT1", status="manual_review"),
-        dict(subject="tiragolumab + ivonescimab", source="trials", target="NCT1", status="ok")])
+        dict(subject="tiragolumab + ivonescimab", source="trials", target="NCT07038915", status="ok")])
     with closing(public_events.connect()) as db, db:
         db.execute("insert into collection_receipt values (1,?)", (json.dumps(receipt),))
     client = TestClient(app)
@@ -569,6 +569,12 @@ def test_exported_coverage_scopes_gaps_to_receipt_subject(tmp_path, monkeypatch)
         ({"asset": "依达方"}, "成功 0/1", True),
         ({"asset": "ivonescimab", "asset_label": "tiragolumab + ivonescimab"}, "成功 1/1", False),
         ({"asset": "ivo"}, "未匹配到此名称", False),
+        ({"source": "Drugs@FDA", "asset": "奥希替尼"}, "成功 1/1", False),
+        ({"source": "jRCT"}, "成功 0/1", True),
+        ({"application": "nda208065"}, "成功 1/1", False),
+        ({"notice_id": "123456"}, "没有对应的直接监测目标", False),
+        ({"trial": "nct07038915"}, "成功 1/1", False),
+        ({"trial": "NCT07038915", "source": "PubMed"}, "没有对应的直接监测目标", False),
         ({"asset": "依达方", "unassigned_asset": True}, "无法对应具体对象", False),
         ({}, "成功 2/3", True),
     ]:
