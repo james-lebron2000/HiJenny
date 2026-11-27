@@ -720,6 +720,13 @@ def test_decision_brief_highlights_prefer_narrative_source(env):
     assert "Clinical_Data_Listing.xlsx" not in pfs_line
     assert "page 4" in pfs_line
     assert "Median PFS was 7.1 months" in pfs_line
+    evidence_id = pfs_line.split("Evidence ID: ")[1]
+    with store.session_scope() as session:
+        source, = store.get_evidence_by_ids(session, [evidence_id])
+    assert source["document_id"] == csr["document_id"] and source["page"] == 4
+    word = Document(stats["report_docx"])
+    assert any("PFS 7.1 months" in p.text and evidence_id in p.text for p in word.paragraphs)
+    assert any(evidence_id in c.text for t in word.tables for row in t.rows for c in row.cells)
 
 
 def test_decision_brief_open_risks_ordered_by_category(env):

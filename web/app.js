@@ -1493,13 +1493,19 @@ function renderMarkdown(md) {
     paragraph = [];
   };
 
+  const evidenceLink = id => {
+    const query = new URLSearchParams({project:state.projectId, evidence:id, preview:'text'});
+    return `<a href="#/evidence?${esc(query.toString())}">查看原文 · ${esc(id)}</a>`;
+  };
+
   const inlineMd = (text) => {
-    let html = esc(text);
+    const reference = / · Evidence ID: (ev_[A-Za-z0-9_-]+)$/.exec(text);
+    let html = esc(reference ? text.slice(0, reference.index) : text);
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
     html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-    return html;
+    return reference ? html + ' · ' + evidenceLink(reference[1]) : html;
   };
 
   const splitRow = (line) => line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim());
@@ -1533,8 +1539,7 @@ function renderMarkdown(md) {
       while (i < lines.length && /^\s*\|/.test(lines[i])) { rows.push(splitRow(lines[i])); i += 1; }
       const renderCell = (cell, index) => {
         if (header[index] === 'Evidence ID' && /^ev_[A-Za-z0-9_-]+$/.test(cell)) {
-          const query = new URLSearchParams({project:state.projectId, evidence:cell, preview:'text'});
-          return `<a href="#/evidence?${esc(query.toString())}">查看原文 · ${esc(cell)}</a>`;
+          return evidenceLink(cell);
         }
         return inlineMd(cell);
       };

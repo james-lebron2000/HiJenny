@@ -1133,6 +1133,11 @@ def key_findings(data: dict, limit: int = 3) -> list[dict]:
     return [f for f in findings if str(f.get("severity")) in {"critical", "high"}][:limit] or findings[:limit]
 
 
+def evidence_reference(ev: dict) -> str:
+    evidence_id = ev.get("evidence_id")
+    return f" · Evidence ID: {evidence_id}" if evidence_id else ""
+
+
 def top_evidence_rows(data: dict, limit: int = 40) -> list[list[str]]:
     """Efficacy + safety evidence for the clinical matrix table."""
     efficacy = {"orr", "dcr", "pfs", "os", "hr", "dor", "cr", "pr"}
@@ -1152,7 +1157,7 @@ def top_evidence_rows(data: dict, limit: int = 40) -> list[list[str]]:
                 _txt(ev.get("assessment_method")) or DEFAULT_DASH,
                 _txt(ev.get("document_name") or ev.get("filename")),
                 str(int(ev.get("page") or 0)),
-                f"[{ev.get('verification_status') or 'pending'}] {truncate(ev.get('quote'), 160)}",
+                f"[{ev.get('verification_status') or 'pending'}] {truncate(ev.get('quote'), 160)}{evidence_reference(ev)}",
             ]
         )
         if len(rows) >= limit:
@@ -1362,7 +1367,7 @@ def decision_brief_data(data: dict) -> dict:
         highlights.append(
             f"**{field} {value_display(ev)}**{dimensions} — supported by "
             f"*{_txt(ev.get('document_name') or ev.get('filename'))}*, page {int(ev.get('page') or 0)} "
-            f"“{truncate(ev.get('quote'), 160)}”. Review: {ev.get('verification_status') or 'pending'}."
+            f"“{truncate(ev.get('quote'), 160)}”. Review: {ev.get('verification_status') or 'pending'}.{evidence_reference(ev)}"
         )
     if not highlights:
         highlights.append(
@@ -1858,7 +1863,7 @@ def render_markdown_report(data: dict) -> str:
                         add(
                             f"- *{_txt(ev.get('document_name') or ev.get('filename'))}*, page "
                             f"{int(ev.get('page') or 0)} — “{_txt(ev.get('quote'))}” "
-                            f"({_txt(ev.get('verification_status'))})"
+                            f"({_txt(ev.get('verification_status'))}){evidence_reference(ev)}"
                         )
                     add("")
                 recommended = finding.get("recommended_action") or (
@@ -2440,7 +2445,7 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
                         doc.add_paragraph(
                             f"{_txt(ev.get('document_name') or ev.get('filename'))}, page "
                             f"{int(ev.get('page') or 0)}: “{_txt(ev.get('quote'))}” "
-                            f"({_txt(ev.get('verification_status'))})",
+                            f"({_txt(ev.get('verification_status'))}){evidence_reference(ev)}",
                             style="List Bullet",
                         )
                 recommended = finding.get("recommended_action") or (
