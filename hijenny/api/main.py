@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, Header, HTTPException, Path as PathParam, Query, UploadFile
+from fastapi import APIRouter, Depends, Request, FastAPI, File, Header, HTTPException, Path as PathParam, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -487,6 +487,27 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - exercised by TestClient
             close_pdf_workers()
 
 
+def _check_org_scope(request: Request):
+    scope = _org(request.headers.get("X-Org-Id"))
+    if not scope:
+        return
+    params = request.path_params
+    with store.session_scope() as session:
+        project_id = params.get("project_id")
+        if project_id is None:
+            getters = {"document_id": store.get_document, "finding_id": store.get_finding,
+                       "question_id": store.get_question, "run_id": store.get_run,
+                       "evidence_id": _evidence_or_404}
+            for key, lookup in getters.items():
+                if key in params:
+                    row = lookup(session, params[key])
+                    project_id = row["project_id"] if row else None
+                    break
+        if not project_id:
+            raise HTTPException(404, "Project resource not found")
+        _project_or_404(session, project_id, scope)
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="HiJenny",
@@ -535,6 +556,8 @@ def create_app() -> FastAPI:
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon():
         return Response(status_code=204)
+
+    project_api = APIRouter(dependencies=[Depends(_check_org_scope)])
 
     # -- Health -------------------------------------------------------------
     @app.get("/api/health")
@@ -608,7 +631,7 @@ def create_app() -> FastAPI:
                 )
         return {"projects": enriched, "count": len(enriched)}
 
-    @app.get("/api/projects/{project_id}")
+    @project_api.get("/api/projects/{project_id}")
     def get_project(
         project_id: str,
         x_org_id: str | None = Header(default=None, alias="X-Org-Id"),
@@ -631,7 +654,7 @@ def create_app() -> FastAPI:
             "outputs": _outputs_info(project_id),
         }
 
-    @app.patch("/api/projects/{project_id}")
+    @project_api.patch("/api/projects/{project_id}")
     def patch_project(project_id: str, payload: ProjectPatch):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
@@ -645,7 +668,7 @@ def create_app() -> FastAPI:
         return {"project": project}
 
     # -- Documents ----------------------------------------------------------
-    @app.get("/api/projects/{project_id}/documents")
+    @project_api.get("/api/projects/{project_id}/documents")
     def list_documents(
         project_id: str,
         latest_only: bool = Query(default=False),
@@ -665,7 +688,7 @@ def create_app() -> FastAPI:
             docs.append(doc)
         return {"documents": docs, "count": len(docs)}
 
-    @app.post("/api/projects/{project_id}/documents")
+    @project_api.post("/api/projects/{project_id}/documents")
     async def upload_documents(
         project_id: str,
         files: list[UploadFile] = File(...),
@@ -781,19 +804,19 @@ def create_app() -> FastAPI:
             ingestion_payload["message"] = "parse=false: documents registered only; run analysis to parse."
         return payload
 
-    @app.get("/api/projects/{project_id}/documents/{document_id}")
+    @project_api.get("/api/projects/{project_id}/documents/{document_id}")
     def get_document(project_id: str, document_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
             return _document_detail(session, project_id, document_id)
 
-    @app.get("/api/projects/{project_id}/documents/{document_id}/pages/{page}")
+    @project_api.get("/api/projects/{project_id}/documents/{document_id}/pages/{page}")
     def get_page(project_id: str, document_id: str, page: int = PathParam(..., ge=1)):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
             return _page_payload(session, project_id, document_id, page)
 
-    @app.post("/api/projects/{project_id}/documents/{document_id}/pages/{page}/ocr")
+    @project_api.post("/api/projects/{project_id}/documents/{document_id}/pages/{page}/ocr")
     def ocr_scan_page(project_id: str, document_id: str, page: int = PathParam(..., ge=1),
                       language: Literal["eng", "chi_sim+eng", "chi_tra+eng", "jpn+eng"] = "eng", preview: bool = False):
         with store.session_scope() as session:
@@ -824,19 +847,19 @@ def create_app() -> FastAPI:
                 **json.loads(result.stdout)}
 
     # Convenience aliases (document id is globally unique).
-    @app.get("/api/documents/{document_id}")
+    @project_api.get("/api/documents/{document_id}")
     def get_document_alias(document_id: str):
         with store.session_scope() as session:
             document = _document_or_404(session, document_id)
             return _document_detail(session, document["project_id"], document_id)
 
-    @app.get("/api/documents/{document_id}/pages/{page}")
+    @project_api.get("/api/documents/{document_id}/pages/{page}")
     def get_page_alias(document_id: str, page: int = PathParam(..., ge=1)):
         with store.session_scope() as session:
             document = _document_or_404(session, document_id)
             return _page_payload(session, document["project_id"], document_id, page)
 
-    @app.post("/api/projects/{project_id}/documents/{document_id}/parse")
+    @project_api.post("/api/projects/{project_id}/documents/{document_id}/parse")
     def parse_document(project_id: str, document_id: str):
         handler = _ingest_file_handler()
         if handler is None:
@@ -854,7 +877,7 @@ def create_app() -> FastAPI:
         return {"document": _doc_json(refreshed), "ingestion": result}
 
     # -- Analysis runs ------------------------------------------------------
-    @app.post("/api/projects/{project_id}/analyze")
+    @project_api.post("/api/projects/{project_id}/analyze")
     def analyze_project(project_id: str, payload: AnalyzeRequest | None = None):
         force = bool(payload.force) if payload else False
         with store.session_scope() as session:
@@ -877,7 +900,7 @@ def create_app() -> FastAPI:
             "progress": _progress(run) if run else {"run_id": run_id, "percent": 0, "status": "running"},
         }
 
-    @app.get("/api/runs/{run_id}")
+    @project_api.get("/api/runs/{run_id}")
     def get_run(run_id: str):
         with store.session_scope() as session:
             run = store.get_run(session, run_id)
@@ -885,7 +908,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
         return _run_json(run)
 
-    @app.get("/api/projects/{project_id}/runs")
+    @project_api.get("/api/projects/{project_id}/runs")
     def list_runs(project_id: str, limit: int = Query(default=20, ge=1, le=100)):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
@@ -893,7 +916,7 @@ def create_app() -> FastAPI:
         return {"runs": [_run_json(r) for r in runs], "count": len(runs)}
 
     # -- Evidence -----------------------------------------------------------
-    @app.get("/api/projects/{project_id}/evidence")
+    @project_api.get("/api/projects/{project_id}/evidence")
     def list_evidence(
         project_id: str,
         field_name: str | None = Query(default=None),
@@ -939,7 +962,7 @@ def create_app() -> FastAPI:
             },
         }
 
-    @app.get("/api/evidence/{evidence_id}")
+    @project_api.get("/api/evidence/{evidence_id}")
     def get_evidence(evidence_id: str):
         with store.session_scope() as session:
             evidence = _evidence_or_404(session, evidence_id)
@@ -961,7 +984,7 @@ def create_app() -> FastAPI:
             "questions": questions,
         }
 
-    @app.patch("/api/evidence/{evidence_id}")
+    @project_api.patch("/api/evidence/{evidence_id}")
     def patch_evidence(evidence_id: str, payload: EvidencePatch):
         with store.session_scope() as session:
             evidence = _evidence_or_404(session, evidence_id)
@@ -987,7 +1010,7 @@ def create_app() -> FastAPI:
         return {"evidence": updated}
 
     # -- Findings -----------------------------------------------------------
-    @app.get("/api/projects/{project_id}/findings")
+    @project_api.get("/api/projects/{project_id}/findings")
     def list_findings(
         project_id: str,
         severity: SeverityLit | None = Query(default=None),
@@ -1013,7 +1036,7 @@ def create_app() -> FastAPI:
             },
         }
 
-    @app.get("/api/findings/{finding_id}")
+    @project_api.get("/api/findings/{finding_id}")
     def get_finding(finding_id: str):
         with store.session_scope() as session:
             finding = _finding_or_404(session, finding_id)
@@ -1025,7 +1048,7 @@ def create_app() -> FastAPI:
             ]
         return {"finding": finding, "evidence": evidence, "questions": questions}
 
-    @app.patch("/api/findings/{finding_id}")
+    @project_api.patch("/api/findings/{finding_id}")
     def patch_finding(finding_id: str, payload: FindingPatch):
         fields = payload.model_dump(exclude_none=True)
         actor = fields.pop("actor", "reviewer")
@@ -1035,7 +1058,7 @@ def create_app() -> FastAPI:
         return {"finding": updated}
 
     # -- Questions ----------------------------------------------------------
-    @app.get("/api/projects/{project_id}/questions")
+    @project_api.get("/api/projects/{project_id}/questions")
     def list_questions(
         project_id: str,
         status: QuestionStatusLit | None = Query(default=None),
@@ -1063,14 +1086,14 @@ def create_app() -> FastAPI:
             },
         }
 
-    @app.get("/api/questions/{question_id}")
+    @project_api.get("/api/questions/{question_id}")
     def get_question(question_id: str):
         with store.session_scope() as session:
             question = _question_or_404(session, question_id)
             evidence = store.get_evidence_by_ids(session, question.get("evidence_ids") or [])
         return {"question": question, "evidence": evidence}
 
-    @app.patch("/api/questions/{question_id}")
+    @project_api.patch("/api/questions/{question_id}")
     def patch_question(question_id: str, payload: QuestionPatch):
         fields = payload.model_dump(exclude_none=True)
         actor = fields.pop("actor", "reviewer")
@@ -1079,7 +1102,7 @@ def create_app() -> FastAPI:
             updated = store.update_question(session, question_id, actor=actor, **fields)
         return {"question": updated}
 
-    @app.delete("/api/questions/{question_id}")
+    @project_api.delete("/api/questions/{question_id}")
     def delete_question(question_id: str, actor: str = Query(default="reviewer")):
         with store.session_scope() as session:
             _question_or_404(session, question_id)
@@ -1089,7 +1112,7 @@ def create_app() -> FastAPI:
         return {"deleted": True, "question_id": question_id, "actor": actor}
 
     # -- Coverage / stats / review -----------------------------------------
-    @app.get("/api/projects/{project_id}/coverage")
+    @project_api.get("/api/projects/{project_id}/coverage")
     def get_coverage(project_id: str, status: CoverageStatusLit | None = Query(default=None)):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
@@ -1100,7 +1123,7 @@ def create_app() -> FastAPI:
             "facets": {"status": _group_counts(rows, "status"), "priority": _group_counts(rows, "priority")},
         }
 
-    @app.get("/api/projects/{project_id}/stats")
+    @project_api.get("/api/projects/{project_id}/stats")
     def get_stats(project_id: str):
         with store.session_scope() as session:
             project = _project_or_404(session, project_id)
@@ -1117,7 +1140,7 @@ def create_app() -> FastAPI:
             "outputs": _outputs_info(project_id),
         }
 
-    @app.get("/api/projects/{project_id}/overview")
+    @project_api.get("/api/projects/{project_id}/overview")
     def project_overview(project_id: str):
         """Aggregated asset-discovery + evaluation data for the interactive dashboard."""
         from hijenny.overview import build_overview
@@ -1126,14 +1149,14 @@ def create_app() -> FastAPI:
             _project_or_404(session, project_id)
             return build_overview(session, project_id)
 
-    @app.get("/api/projects/{project_id}/review-events")
+    @project_api.get("/api/projects/{project_id}/review-events")
     def list_review_events(project_id: str, limit: int = Query(default=200, ge=1, le=1000)):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
             events = store.list_review_events(session, project_id, limit=limit)
         return {"events": events, "count": len(events)}
 
-    @app.get("/api/projects/{project_id}/followup")
+    @project_api.get("/api/projects/{project_id}/followup")
     def followup(project_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
@@ -1145,7 +1168,7 @@ def create_app() -> FastAPI:
                     "documents": [_doc_json(d) for d in store.list_documents(session, project_id)],
                     "evidence": store.get_evidence(session, project_id, limit=10000)}
 
-    @app.get("/api/projects/{project_id}/followup/{question_id}/valuation-context")
+    @project_api.get("/api/projects/{project_id}/followup/{question_id}/valuation-context")
     def valuation_context(project_id: str, question_id: str):
         with store.session_scope() as session:
             session.execute(text("BEGIN"))
@@ -1159,7 +1182,7 @@ def create_app() -> FastAPI:
             return {"question_id": question_id, "question": q["question"], "status": q["status"],
                     "revision": events[-1]["after"]["revision"] if events else 0, "replies": replies}
 
-    @app.post("/api/projects/{project_id}/followup/{question_id}")
+    @project_api.post("/api/projects/{project_id}/followup/{question_id}")
     def record_followup(project_id: str, question_id: str, action: diligence.Action):
         with store.session_scope() as session:
             session.execute(text("BEGIN IMMEDIATE"))
@@ -1171,7 +1194,7 @@ def create_app() -> FastAPI:
             return event
 
     # -- Exports ------------------------------------------------------------
-    @app.get("/api/projects/{project_id}/exports/seller-reply.xlsx")
+    @project_api.get("/api/projects/{project_id}/exports/seller-reply.xlsx")
     def export_seller_reply(project_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
@@ -1184,7 +1207,7 @@ def create_app() -> FastAPI:
                         headers={"Content-Disposition": 'attachment; filename="HiJenny-Seller-Reply.xlsx"',
                                  "Cache-Control": "no-store"})
 
-    @app.post("/api/projects/{project_id}/exports/questions")
+    @project_api.post("/api/projects/{project_id}/exports/questions")
     def export_questions(project_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
@@ -1204,7 +1227,7 @@ def create_app() -> FastAPI:
             ],
         }
 
-    @app.post("/api/projects/{project_id}/exports/report")
+    @project_api.post("/api/projects/{project_id}/exports/report")
     def export_report(project_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
@@ -1230,7 +1253,7 @@ def create_app() -> FastAPI:
             },
         }
 
-    @app.get("/api/projects/{project_id}/outputs")
+    @project_api.get("/api/projects/{project_id}/outputs")
     def get_outputs(project_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
@@ -1238,7 +1261,7 @@ def create_app() -> FastAPI:
 
     # -- Safe file serving --------------------------------------------------
     @app.get("/api/files/{file_path:path}")
-    def serve_file(file_path: str):
+    def serve_file(file_path: str, x_org_id: str | None = Header(default=None, alias="X-Org-Id")):
         if not file_path or file_path.endswith("/"):
             raise HTTPException(status_code=404, detail="File not found")
         data_root = _data_dir().resolve()
@@ -1258,6 +1281,9 @@ def create_app() -> FastAPI:
         )
         if not allowed:
             raise HTTPException(status_code=404, detail="File not found")
+        if _org(x_org_id):
+            with store.session_scope() as session:
+                _project_or_404(session, parts[1], _org(x_org_id))
         if not candidate.is_file():
             raise HTTPException(status_code=404, detail="File not found")
         media_type = _media_type(candidate)
@@ -1266,6 +1292,7 @@ def create_app() -> FastAPI:
             headers["Content-Disposition"] = f'attachment; filename="{candidate.name}"'
         return FileResponse(candidate, media_type=media_type, headers=headers)
 
+    app.include_router(project_api)
     return app
 
 

@@ -52,4 +52,8 @@ def test_concurrent_handoff_reuses_project_and_retains_original_reason(tmp_path)
     assert restored["meta"]["opportunity"]["criteria"]["country"] == "Japan"
     assert restored["meta"]["opportunity"]["rationale"] == "First reason"
     assert restored["meta"]["opportunity"]["url"].endswith("/study/NCT00000001")
+    other = start_project(seed, "ORG_OTHER")
+    assert other["created"] and other["project"]["org_id"] == "ORG_OTHER"
+    assert other["project"]["project_id"] != restored["project_id"]
+    assert not start_project(seed, "ORG_OTHER")["created"]
     assert start_project(seed.model_copy(update={"asset": "Drug B"}))["created"]

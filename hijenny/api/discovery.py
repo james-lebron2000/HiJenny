@@ -1,10 +1,10 @@
 """Registry-backed opportunity screens and traceable handoff to a diligence project."""
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 
@@ -150,7 +150,8 @@ class Opportunity(BaseModel):
 
 
 @router.post("/api/discovery/projects")
-def start_project(request: Opportunity):
+def start_project(request: Opportunity, x_org_id: Annotated[str | None, Header(alias="X-Org-Id")] = None):
+    org_id = (x_org_id or "").strip() or "ORG_DEFAULT"
     record = request.model_dump(mode="json")
     record["url"] = f"https://clinicaltrials.gov/study/{request.nct}"
     # Each screened trial can contain several assets. A double submission for
@@ -158,10 +159,10 @@ def start_project(request: Opportunity):
     key = [str(request.snapshot_id), request.nct, request.asset.casefold()]
     with store.session_scope() as session:
         session.execute(text("BEGIN IMMEDIATE"))
-        for existing in store.list_projects(session, "ORG_DEFAULT"):
+        for existing in store.list_projects(session, org_id):
             if existing["meta"].get("opportunity_key") == key:
                 return {"project": existing, "created": False}
         project = store.create_project(session, name=f"{request.asset} · 机会评估"[:200],
                                        asset_name=request.asset, indication=request.criteria.condition,
-                                       phase=request.phase, meta={"opportunity_key": key, "opportunity": record})
+                                       phase=request.phase, org_id=org_id, meta={"opportunity_key": key, "opportunity": record})
     return {"project": project, "created": True}

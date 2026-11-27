@@ -273,6 +273,20 @@ def test_projects_crud_and_404(client):
     assert scoped.status_code == 404
 
 
+def test_org_scope_follows_project_resources_and_downloads(client):
+    project = create_project(client)["project_id"]
+    rows = seed_review_data(project)
+    assert client.patch(f"/api/questions/{rows['question_id']}", json={"status": "approved"}).is_success
+    uploaded = upload_pdf(client, project, "appendix.pdf").json()["documents"][0]
+    routes = [uploaded["file_url"], f"/api/projects/{project}/outputs",
+              f"/api/projects/{project}/exports/seller-reply.xlsx",
+              f"/api/documents/{rows['document_id']}", f"/api/evidence/{rows['evidence_id']}",
+              f"/api/questions/{rows['question_id']}", f"/api/findings/{rows['finding_id']}"]
+    for path in routes:
+        assert client.get(path, headers={"X-Org-Id": "ORG_DEFAULT"}).status_code == 200, path
+        assert client.get(path, headers={"X-Org-Id": "ORG_OTHER"}).status_code == 404, path
+
+
 # ---------------------------------------------------------------------------
 # Upload / documents / pages / files
 # ---------------------------------------------------------------------------
