@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
       - name: Read public sources
         id: fetch
         continue-on-error: true
@@ -39,7 +40,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Update public asset event index"
-          git push origin HEAD:main
+          base=$(git rev-parse HEAD^)
+          batch=$(git rev-parse HEAD)
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch --no-tags origin main
+            tip=$(git rev-parse FETCH_HEAD)
+            if git merge-base --is-ancestor HEAD "$tip"; then exit 0; fi
+            git merge-base --is-ancestor "$base" "$tip"
+            if ! git diff --quiet "$base" "$tip" -- data/public tools hijenny/publication.py .github/workflows/public-events.yml; then
+              echo "The public collection inputs or archive changed. Run a fresh collection from main." >&2
+              exit 1
+            fi
+            if test "$attempt" -lt 3; then
+              git switch --detach "$tip"
+              git cherry-pick "$batch"
+            fi
+          done
+          exit 1
       - name: Attach collection receipt
         if: always()
         uses: actions/upload-artifact@v4
