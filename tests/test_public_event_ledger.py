@@ -428,3 +428,22 @@ def test_fixed_dose_product_aliases_keep_single_ingredient_queries_distinct():
         assert verified_asset(term) == product
     for term in ("nivolumab", "relatlimab-rmbw", "nivolumab and ipilimumab"):
         assert verified_asset(term) is None
+
+
+def test_overlapping_watch_targets_count_shared_fact_once_per_change(tmp_path, monkeypatch):
+    targets = [{"id": key, "asset": "demo"} for key in ("first", "second")]
+    (tmp_path / "watchlist.json").write_text(json.dumps({"trials": targets}))
+    receipt = tmp_path / "receipt.json"
+    record = dict(source="ClinicalTrials.gov", record="shared", field="登记状态",
+                  value="A", source_date="2026-11-01")
+    monkeypatch.setattr(collector, "trial_records", lambda target: [record.copy()])
+    for value, expected in [("A", 1), ("A", 0), ("B", 1)]:
+        record["value"] = value
+        assert collector.collect(tmp_path, receipt) == 0
+        report = json.loads(receipt.read_text())
+        assert report["new_events"] == expected
+        assert [(c["records"], c["new_events"]) for c in report["checks"]] == [(1, expected), (1, 0)]
+    ledger, = (tmp_path / "events").glob("*.jsonl")
+    rows = [json.loads(line) for line in ledger.read_text().splitlines()]
+    assert [(row["previous"], row["value"]) for row in rows] == [(None, "A"), ("A", "B")]
+    assert len({row["id"] for row in rows}) == 2

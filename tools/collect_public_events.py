@@ -276,7 +276,8 @@ def collect(root=ROOT, receipt=None):
     previous_file = root / "events" / "collection.json"
     previous = json.loads(previous_file.read_text()) if receipt and previous_file.exists() else {}
     prior_checks = {(row["source"], row["target"]): row for row in previous.get("checks", [])}
-    events, failures, checks = [], [], []
+    prior_event_count = len(history)
+    failures, checks = [], []
     ema_dataset = cache(lambda: fetch(EMA_MEDICINES))
     orange_dataset = cache(lambda: fetch(orange_book.DOWNLOAD, orange_book.read_archive))
     use_definitions = cache(lambda: fetch(orange_book.USE_CODES, orange_book.read_definitions))
@@ -300,7 +301,7 @@ def collect(root=ROOT, receipt=None):
             try:
                 records = list(read(target))
                 additions = list(changes(records, history, now))
-                events.extend(additions)
+                history.extend(additions)
                 last_success = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 check.update(status="ok", records=len({row["record"] for row in records}), new_events=len(additions))
             except Exception as err:
@@ -308,6 +309,7 @@ def collect(root=ROOT, receipt=None):
                 failures.append(f"{group} {target.get('id') or target.get('cik')}: {err}")
             check["last_success_utc"] = last_success
             checks.append(check)
+    events = history[prior_event_count:]
     if events:
         folder = root / "events"
         folder.mkdir(exist_ok=True)
