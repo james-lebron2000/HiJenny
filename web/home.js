@@ -22,13 +22,13 @@ const homeRoutes=[['discovery','projects'],['clinical','watch'],['medical','stud
 const homeEvidence={
   zh:{heading:'查药物的公开证据',label:'药物名或商品名',search:'查询',example:'奥希替尼',
     cutoff:'归档截面（台北）',trials:'登记试验',results:'有主要终点结果的试验',guidance:'指南与技术评估',
-    more:'查看完整资产证据与比较工具',research:'带入医药检索',loading:'正在读取资产归档…',empty:'公开关注名单暂无匹配记录。',error:'暂时无法读取资产归档。'},
+    more:'查看完整资产证据与比较工具',research:'带入医药检索',loading:'正在读取资产归档…',empty:'试验、主要终点和指南暂无匹配记录。',error:'暂时无法读取资产归档。'},
   en:{heading:'Find evidence for a drug',label:'Drug or brand name',search:'Search',example:'osimertinib',
     cutoff:'Archive as of (Taipei)',trials:'Registered trials',results:'Trials with primary results',guidance:'Guidelines and appraisals',
-    more:'Open asset evidence and comparison tools',research:'Continue in research search',loading:'Loading archived evidence…',empty:'No matching records in the public watchlist.',error:'The archive is temporarily unavailable.'},
+    more:'Open asset evidence and comparison tools',research:'Continue in research search',loading:'Loading archived evidence…',empty:'No matching trials, primary results or guidance.',error:'The archive is temporarily unavailable.'},
   ja:{heading:'医薬品の公開資料を調べる',label:'一般名または製品名',search:'検索',example:'osimertinib',
     cutoff:'収録基準日（台北）',trials:'登録試験',results:'主要評価項目の結果を収録した試験',guidance:'ガイドライン・技術評価',
-    more:'資料一覧と試験比較を開く',research:'文献・試験検索へ',loading:'収録データを読み込み中…',empty:'公開ウォッチリストに該当する記録がありません。',error:'現在、収録データを読み込めません。'}
+    more:'資料一覧と試験比較を開く',research:'文献・試験検索へ',loading:'収録データを読み込み中…',empty:'該当する試験・主要評価項目・指針はありません。',error:'現在、収録データを読み込めません。'}
 };
 
 const homeReport={
@@ -36,6 +36,31 @@ const homeReport={
   en:{pilot:'Request a pilot quote for this asset',title:'Public asset evidence brief',download:'Download printable brief',scope:'Coverage includes the HiJenny public watchlist and indexed guidance. Endpoints use registry titles.',source:'Original source',date:'Registry update',version:'Source version',observed:'First indexed',none:'No records at this cutoff',phase:'Phase',status:'Registry status',sponsor:'Lead sponsor',conditions:'Conditions',sites:'Site countries or regions'},
   ja:{pilot:'この医薬品の試行導入見積もり',title:'医薬品の公開エビデンス概要',download:'印刷用の概要をダウンロード',scope:'HiJenny の公開ウォッチリストと収録済みの指針が対象です。評価項目は登録名で表示します。',source:'原資料',date:'登録更新日',version:'資料の版',observed:'初回収録日',none:'この時点の収録記録なし',phase:'試験相',status:'登録状況',sponsor:'主たる依頼者',conditions:'対象疾患',sites:'実施国・地域'}
 };
+
+const homeUpdates={
+  zh:{title:'公开动态（按来源日期）',open:'查看动态、下载简报或订阅更新',empty:'该名称暂无匹配动态。',error:'暂时无法读取公开动态。'},
+  en:{title:'Public updates by source date',open:'View updates, download a digest or subscribe',empty:'No archived updates match this name.',error:'Archived updates are temporarily unavailable.'},
+  ja:{title:'公開情報（情報源の日付順）',open:'更新一覧・レポートのダウンロード・購読',empty:'この名称に該当する更新はありません。',error:'現在、更新情報を読み込めません。'}
+};
+
+async function showHomeUpdates(panel,asset,lang) {
+  const copy=homeUpdates[lang];
+  const query=new URLSearchParams({asset});
+  const archiveLink=`<a href="#/public-events?${esc(query.toString())}">${copy.open}</a>`;
+  try {
+    query.set('limit','3');
+    const result=await api('/api/public-events?'+query);
+    if (!panel.isConnected) return;
+    const items=result.items.map(r=>{
+      const href='#/public-events?'+new URLSearchParams({event:r.id});
+      return `<li><a href="${esc(href)}">${esc(r.field)}</a> · ${esc(r.source)} · ${esc([r.date_label,r.source_date].filter(Boolean).join(' '))}</li>`;
+    });
+    panel.innerHTML=`<h3>${copy.title} (${result.total})</h3>`+
+      (items.length?'<ul>'+items.join('')+'</ul>':'<p>'+copy.empty+'</p>')+archiveLink;
+  } catch {
+    if (panel.isConnected) panel.innerHTML='<p>'+copy.error+'</p>'+archiveLink;
+  }
+}
 
 function downloadHomeEvidence(asset,result,lang) {
   const copy=homeReport[lang], headers=homeEvidence[lang];
@@ -76,7 +101,7 @@ async function renderHome() {
       `<a href="#/home?${esc(new URLSearchParams({lang:code,asset}).toString())}" lang="${code}" ${lang===code?'aria-current="page"':''}>${name}</a>`).join(' · ')}</nav></header>
     <section class="card home-evidence"><h2>${evidence.heading}</h2>
     <form id="home-asset-search"><label>${evidence.label}<input name="asset" type="search" required maxlength="400" value="${esc(asset)}"></label><button class="btn primary">${evidence.search}</button></form>
-    <div id="home-evidence-results" aria-live="polite"></div></section>
+    <div id="home-evidence-results" aria-live="polite"></div><div id="home-asset-updates" aria-live="polite"></div></section>
     <div class="task-groups">${copy.groups.map(([role,first,second],i)=>`<section class="card"><h2>${role}</h2>
       <a href="#/${homeRoutes[i][0]}">${first}</a><a href="#/${homeRoutes[i][1]}">${second}</a></section>`).join('')}</div>
     <a class="btn" href="#/pilot?lang=${lang}">${copy.sample}</a></section>`);
@@ -90,6 +115,7 @@ async function renderHome() {
     if (location.hash===hash) renderHome(); else location.hash=hash;
   };
   const researchLink=`<a href="#/research?${esc(new URLSearchParams({query:asset}).toString())}">${evidence.research}</a>`;
+  showHomeUpdates($('#home-asset-updates'),asset,lang);
   output.textContent=evidence.loading;
   try {
     const result=await api('/api/public-events/asset-evidence?'+new URLSearchParams({asset}));
