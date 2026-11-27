@@ -18,7 +18,7 @@ KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原�
 def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
                   disclosed_to: date | None = None, source: Literal["SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA", "jRCT", "FDA Orange Book"] | None = None,
-                  trial: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
+                  trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None):
     if discovered_from and discovered_to and discovered_from > discovered_to:
         raise HTTPException(422, "发现起始日期须早于或等于结束日期。")
@@ -26,6 +26,13 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                        OR instr(lower(json_extract(payload, '$.subject')), lower(?))>0)
                     AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"""
     args = [asset.strip(), asset.strip(), region.strip(), since.isoformat() if since else ""]
+    application = application.strip().upper()
+    if application:
+        if not re.fullmatch(r"(?:NDA|ANDA|BLA)[0-9]{6}", application):
+            raise HTTPException(422, "请输入 NDA、ANDA 或 BLA 加六位数字。")
+        sql += """ AND json_extract(payload, '$.source') IN ('Drugs@FDA','FDA Orange Book')
+                   AND instr(json_extract(payload, '$.record'), ?) = 1"""
+        args.append(application + "/")
     trial = trial.strip().upper()
     link_query = ""
     link_args = []
@@ -78,7 +85,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     order = (" ORDER BY julianday(json_extract(payload, '$.observed')) DESC, date DESC, id"
              if discovered_from or discovered_to else " ORDER BY date DESC, id")
     labels = [f"{label}：{value}" for label, value in (
-        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("试验登记号", trial), ("来源", source), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
+        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("试验登记号", trial), ("FDA 申请号", application), ("来源", source), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("记录类型", KINDS.get(kind))) if value]
     table = "events"
     if as_of:

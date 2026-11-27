@@ -5,6 +5,7 @@ function renderPublicEvents() {
     <details class="card" id="public-collection"><summary>最近一次公开采集</summary><div aria-live="polite">正在读取核对记录…</div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
+    <label>FDA 申请号<input name="application" placeholder="NDA208065" title="NDA、ANDA 或 BLA 加六位数字"></label>
     <label>试验登记号<input name="trial" placeholder="NCT 或 jRCT 编号" pattern="[Nn][Cc][Tt][0-9]{8}|[Jj][Rr][Cc][Tt][0-9]{10}" title="NCT 加八位数字或 jRCT 加十位数字"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
     <label>数据来源<select name="source"><option value="">全部来源</option><option>Drugs@FDA</option><option>EMA</option><option>FDA Orange Book</option><option>jRCT</option><option>ClinicalTrials.gov</option><option>PubMed</option><option>SEC</option></select></label>
@@ -89,6 +90,19 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (['FDA Orange Book','Drugs@FDA'].includes(r.source)) {
+          const application = r.record.split('/')[0];
+          if (!query.has('application') || query.has('source')) {
+            const params = new URLSearchParams({application});
+            if (query.has('as_of')) params.set('as_of', query.get('as_of'));
+            const link = document.createElement('a');
+            link.href = '#/public-events?' + params;
+            link.textContent = '查看同一 FDA 申请的全部归档';
+            const p = document.createElement('p');
+            p.append(link);
+            card.append(p);
+          }
+        }
         if (r.source==='FDA Orange Book') {
           card.querySelector('p').style.whiteSpace='pre-line';
           const note=document.createElement('p');
