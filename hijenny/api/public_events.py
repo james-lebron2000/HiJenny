@@ -369,6 +369,12 @@ def event_details(row):
     return lines
 
 
+def collection_gaps(receipt):
+    labels = {"failed": "采集失败", "manual_review": "待人工复核"}
+    return [f"本批监测目标{labels[c['status']]} · {c['source']} · {c['target']}"
+            for c in receipt.get("checks", []) if c.get("status") in labels]
+
+
 @router.get("/api/public-events/feed.atom")
 def event_feed(request: Request, filters=Depends(event_filters), rolling_week: bool = False, as_of: date | None = None):
     table, sql, args, _, labels, _ = filters
@@ -386,8 +392,20 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
         labels = ["最近七天发现（台北）", *(label for label in labels if not label.startswith(("发现起始日：", "发现结束日：")))]
     ET.SubElement(feed, "title").text = "HiJenny 公开动态" + (" · " + " · ".join(labels) if labels else "")
     ET.SubElement(ET.SubElement(feed, "author"), "name").text = "HiJenny"
-    updated = json.loads(receipt[0])["finished_utc"] if receipt else "1970-01-01T00:00:00Z"
-    ET.SubElement(feed, "updated").text = events[0]["observed"] if events else updated
+    timestamps = [events[0]["observed"]] if events else []
+    coverage = ["当前公开库尚无采集回执"]
+    if receipt:
+        latest = json.loads(receipt[0])
+        timestamps.append(latest["finished_utc"])
+        checks = latest.get("checks", [])
+        ok = sum(c.get("status") == "ok" for c in checks)
+        coverage = [f"当前公开库最近一批采集 · {latest['finished_utc']} · 成功 {ok}/{len(checks)} 个监测目标",
+                    *collection_gaps(latest)]
+        run_url = collection_links(latest).get("run")
+        if run_url:
+            ET.SubElement(feed, "link", rel="related", title="本批公开库采集记录", href=run_url)
+    ET.SubElement(feed, "subtitle").text = "\n".join(coverage)
+    ET.SubElement(feed, "updated").text = max(timestamps, key=datetime.fromisoformat) if timestamps else "1970-01-01T00:00:00Z"
     snapshot_suffix = "&as_of=" + as_of.isoformat() if as_of else ""
     for row in events:
         entry = ET.SubElement(feed, "entry")
@@ -422,10 +440,7 @@ def report(request: Request, filters=Depends(event_filters), as_of: date | None 
                 lines.append("采集记录 · " + links["run"])
             if "watchlist" in links:
                 lines.append("本次采集采用的公开监测名单 · " + links["watchlist"])
-            for check in receipt.get("checks", []):
-                if check.get("status") in ("failed", "manual_review"):
-                    status = "待人工复核" if check["status"] == "manual_review" else "采集失败"
-                    lines.append(f"本批监测目标{status} · {check['source']} · {check['target']}")
+            lines.extend(collection_gaps(receipt))
         else:
             lines.append("导出时数据库尚无采集回执")
         archive_page = str(request.base_url) + "#/public-events?"

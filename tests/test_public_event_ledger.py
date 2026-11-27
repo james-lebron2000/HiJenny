@@ -479,6 +479,23 @@ def test_atom_conditional_refresh_for_empty_and_changed_feed(tmp_path, monkeypat
     changed = client.get(url, headers={"If-None-Match": tag})
     assert changed.status_code == 200 and changed.headers["etag"] != tag and "8-K" in changed.text
 
+    from xml.etree import ElementTree
+    receipt = dict(run_id="123", finished_utc="2026-11-27T13:00:00Z", checks=[
+        dict(status="ok"), dict(status="manual_review", source="jrct", target="jRCT-demo"),
+        dict(status="failed", source="sec", target="demo")])
+    with closing(public_events.connect()) as db, db:
+        db.execute("insert into collection_receipt values (1,?)", (json.dumps(receipt),))
+    refreshed = client.get(url, headers={"If-None-Match": changed.headers["etag"]})
+    root = ElementTree.fromstring(refreshed.content)
+    assert refreshed.status_code == 200 and root.findtext("{*}updated") == receipt["finished_utc"]
+    assert "成功 1/3" in root.findtext("{*}subtitle") and "jRCT-demo" in root.findtext("{*}subtitle")
+    assert "采集失败 · sec · demo" in root.findtext("{*}subtitle")
+    assert root.find("{*}link[@rel='related']").get("href").endswith("/actions/runs/123")
+    entry, = root.findall("{*}entry")
+    assert entry.findtext("{*}updated") == row["observed"]
+    assert entry.findtext("{*}id") == ElementTree.fromstring(changed.content).findtext("{*}entry/{*}id")
+    assert client.get(url, headers={"If-None-Match": refreshed.headers["etag"]}).status_code == 304
+
 
 def test_restore_complete_public_archive_offline_and_replay(tmp_path, monkeypatch):
     """Rebuild the public index from this checkout, including its collection receipt."""
