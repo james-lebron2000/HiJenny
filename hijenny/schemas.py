@@ -160,6 +160,9 @@ class VerificationStatus(StrEnum):
     UNVERIFIABLE = "unverifiable"
 
 
+UNSUPPORTED_REVIEW_STATUSES = frozenset({VerificationStatus.FAILED, VerificationStatus.UNVERIFIABLE})
+
+
 class FindingType(StrEnum):
     DATA_INCONSISTENCY = "data_inconsistency"      # Type A direct contradiction
     VERSION_DIFFERENCE = "version_difference"      # Type B data cutoff / version

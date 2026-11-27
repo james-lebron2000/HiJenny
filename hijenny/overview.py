@@ -21,7 +21,7 @@ from statistics import mean
 from typing import Any, Iterable
 
 from hijenny import store
-from hijenny.schemas import FieldName
+from hijenny.schemas import FieldName, UNSUPPORTED_REVIEW_STATUSES
 
 # ---------------------------------------------------------------------------
 # Reference definitions
@@ -118,6 +118,7 @@ def _months_between(then: date | None, now: date) -> float | None:
 
 
 def _pick_fact(candidates: list[dict]) -> dict | None:
+    candidates = [ev for ev in candidates if ev.get("verification_status") not in UNSUPPORTED_REVIEW_STATUSES]
     if not candidates:
         return None
 

@@ -892,3 +892,30 @@ def test_report_counts_only_active_findings(env):
     assert "Resolved findings (history)" in docx_text
     assert "Resolved historical issue" in docx_text
     assert "Open inconsistency" in docx_text
+
+
+def test_source_review_exceptions_follow_evidence_into_exports(env):
+    seeded = seed_project()
+    pid = seeded["project_id"]
+    with store.session_scope() as session:
+        for ev in store.get_evidence(session, pid):
+            status = "failed" if ev["field_name"] == "orr" else "unverifiable"
+            store.update_evidence_verification(session, ev["evidence_id"], status,
+                                               note="Check original " + ev["field_name"], by="reviewer-27")
+        data = exports.collect_export_data(session, pid)
+        assert not exports.evidence_support_highlights(data)
+        assert not data["overview"]["discovery"]["key_facts"]
+        outputs = reporting.generate_project_outputs(session, pid)
+    md = Path(outputs["report_md"]).read_text()
+    supported = md.split("### What the evidence supports")[1].split("### Source review exceptions")[0]
+    assert "All extracted items have unresolved source checks." in supported and "42%" not in supported
+    assert "| ORR |" in md and "| failed | reviewer-27 | Check original orr |" in md
+    report = Document(outputs["report_docx"])
+    review_table = next(t for t in report.tables if t.cell(0, 0).text == "Field" and t.cell(0, 1).text == "Source")
+    assert len(review_table.rows) == 4
+    assert any([c.text for c in row.cells][2:] == ["failed", "reviewer-27", "Check original orr"] for row in review_table.rows)
+    sheet = load_workbook(outputs["questions_xlsx"], read_only=True)["Evidence Matrix"]
+    headers, *rows = list(sheet.values)
+    matrix = [dict(zip(headers, row)) for row in rows]
+    assert all(r["Reviewed by"] == "reviewer-27" and r["Evidence ID"] for r in matrix)
+    assert {r["Verification"] for r in matrix} == {"failed", "unverifiable"}

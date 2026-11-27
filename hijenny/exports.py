@@ -19,6 +19,7 @@ from typing import Any, Iterable, Sequence
 
 from hijenny import config, store
 from hijenny.parse_coverage import pdf_review_ranges
+from hijenny.schemas import UNSUPPORTED_REVIEW_STATUSES
 
 # ---------------------------------------------------------------------------
 # Ordering / labelling
@@ -441,6 +442,8 @@ def asset_profile_rows(data: dict) -> list[list[str]]:
     # Fallback: derive a profile from sheet-level evidence + project metadata.
     by_field: dict[str, dict] = {}
     for item in ev:
+        if item.get("verification_status") in UNSUPPORTED_REVIEW_STATUSES:
+            continue
         field = item.get("field_name") or ""
         if field and field not in by_field and item.get("category") in {
             "study_design",
@@ -519,7 +522,7 @@ ASSET_PROFILE_HEADERS = [
 EVIDENCE_HEADERS = [
     "Field", "Category", "Value", "Unit", "Population", "Arm", "Trial",
     "Data Cutoff", "Endpoint Definition", "Assessment Method", "Document", "Page",
-    "Quote", "Verification", "Confidence",
+    "Quote", "Verification", "Confidence", "Reviewed by", "Review note", "Evidence ID",
 ]
 
 FINDING_HEADERS = [
@@ -712,6 +715,7 @@ def _sheet_executive_summary(wb, data: dict) -> None:
         ("Documents (all versions)", stats.get("documents_all", len(docs))),
         ("Pages parsed", stats.get("pages", 0)),
         ("Evidence items", stats.get("evidence", len(evidence))),
+        ("Failed or unverifiable source checks", sum(e.get("verification_status") in UNSUPPORTED_REVIEW_STATUSES for e in evidence)),
         ("Active findings", counts["active"]),
         ("Resolved findings (history)", counts["history"]),
         ("Questions", stats.get("questions", len(questions))),
@@ -824,7 +828,7 @@ def _sheet_asset_profile(wb, data: dict) -> None:
 
 def _sheet_evidence_matrix(wb, data: dict) -> None:
     widths = {1: 16, 2: 16, 3: 11, 4: 9, 5: 12, 6: 16, 7: 14, 8: 12, 9: 26,
-              10: 14, 11: 26, 12: 7, 13: 60, 14: 13, 15: 10}
+              10: 14, 11: 26, 12: 7, 13: 60, 14: 13, 15: 10, 16: 22, 17: 55, 18: 28}
     rows = []
     for ev in data.get("evidence") or []:
         rows.append(
@@ -844,6 +848,9 @@ def _sheet_evidence_matrix(wb, data: dict) -> None:
                 _txt(ev.get("quote")),
                 _txt(ev.get("verification_status")),
                 _num(ev.get("confidence")),
+                _txt(ev.get("verified_by")),
+                _txt(ev.get("verification_note")),
+                _txt(ev.get("evidence_id")),
             ]
         )
     _table_sheet(
@@ -853,7 +860,7 @@ def _sheet_evidence_matrix(wb, data: dict) -> None:
         rows,
         widths,
         tab_color="548235",
-        wrap_cols=(9, 13),
+        wrap_cols=(9, 13, 17),
         fill_rules={14: "verification"},
     )
 
@@ -1142,7 +1149,7 @@ def top_evidence_rows(data: dict, limit: int = 40) -> list[list[str]]:
                 _txt(ev.get("assessment_method")) or DEFAULT_DASH,
                 _txt(ev.get("document_name") or ev.get("filename")),
                 str(int(ev.get("page") or 0)),
-                truncate(ev.get("quote"), 160),
+                f"[{ev.get('verification_status') or 'pending'}] {truncate(ev.get('quote'), 160)}",
             ]
         )
         if len(rows) >= limit:
@@ -1240,7 +1247,7 @@ def evidence_support_highlights(data: dict, limit: int = 4) -> list[dict]:
     Headline efficacy/safety fields are preferred; pure metadata fields (NCT id,
     cutoff, response criteria, ...) are skipped when anything better exists.
     """
-    evidence = list(data.get("evidence") or [])
+    evidence = [ev for ev in data.get("evidence") or [] if ev.get("verification_status") not in UNSUPPORTED_REVIEW_STATUSES]
     if not evidence:
         return []
     latest_documents = data.get("latest_documents")
@@ -1352,10 +1359,11 @@ def decision_brief_data(data: dict) -> dict:
         highlights.append(
             f"**{field} {value_display(ev)}**{dimensions} — supported by "
             f"*{_txt(ev.get('document_name') or ev.get('filename'))}*, page {int(ev.get('page') or 0)} "
-            f"“{truncate(ev.get('quote'), 160)}”."
+            f"“{truncate(ev.get('quote'), 160)}”. Review: {ev.get('verification_status') or 'pending'}."
         )
     if not highlights:
         highlights.append(
+            "All extracted items have unresolved source checks." if data.get("evidence") else
             "No extracted evidence is available yet; evidence extraction has not produced "
             "verifiable values for this package."
         )
@@ -1427,6 +1435,11 @@ def decision_brief_data(data: dict) -> dict:
         "project_id": project_id,
         "context": context,
         "highlights": highlights,
+        "review_limits": [
+            [str(ev.get("field_name") or "").upper(), f"{ev.get('filename') or ev.get('document_name')} p.{ev.get('page')}",
+             ev["verification_status"], ev.get("verified_by") or DEFAULT_DASH, ev.get("verification_note") or DEFAULT_DASH]
+            for ev in data.get("evidence") or [] if ev.get("verification_status") in UNSUPPORTED_REVIEW_STATUSES
+        ],
         "risks": risks,
         "questions": questions,
         "missing_coverage": missing_coverage,
@@ -1602,6 +1615,14 @@ def render_markdown_report(data: dict) -> str:
     for bullet in brief["highlights"]:
         add(f"- {bullet}")
     add("")
+    if brief["review_limits"]:
+        add("### Source review exceptions")
+        add("")
+        add("| Field | Source | Review | Reviewer | Note |")
+        add("|---|---|---|---|---|")
+        for row in brief["review_limits"]:
+            add("| " + " | ".join(_md_cell(v) for v in row) + " |")
+        add("")
     add("### Top open risks")
     add("")
     if brief["risks"]:
@@ -2188,6 +2209,9 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
             run.font.size = Pt(9)
     else:  # pragma: no cover - defensive
         doc.add_paragraph("No extracted evidence is available yet.")
+    if brief["review_limits"]:
+        doc.add_heading("Source review exceptions", level=2)
+        _docx_table(doc, ["Field", "Source", "Review", "Reviewer", "Note"], brief["review_limits"])
     doc.add_heading("Top open risks", level=2)
     if brief["risks"]:
         _docx_table(
