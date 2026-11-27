@@ -48,6 +48,58 @@ function publicCoverage(receipt) {
   return table;
 }
 
+function recentPublicWeek(params, now=new Date()) {
+  const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'});
+  params.delete('as_of');
+  params.set('discovered_from',day.format(now.getTime()-6*86400000));
+  params.set('discovered_to',day.format(now));
+}
+
+function bindSavedPublicFilters(onApply) {
+  const panel=$('#public-saved-filters'), form=panel.querySelector('form');
+  const list=panel.querySelector('ul'), message=panel.querySelector('[role=status]');
+  const prefix='hijenny.public-filter.';
+  let applied=null;
+  function draw() {
+    list.replaceChildren();
+    try {
+      for (const key of Object.keys(localStorage).filter(k=>k.startsWith(prefix)).sort()) {
+        const entry=JSON.parse(localStorage.getItem(key));
+        const li=document.createElement('li'), open=document.createElement('button'), remove=document.createElement('button');
+        open.type=remove.type='button'; open.className=remove.className='btn';
+        open.textContent=entry.name+(entry.week?' · 最近七天':'');
+        open.onclick=()=>{
+          const params=new URLSearchParams(entry.query);
+          if (entry.week) recentPublicWeek(params);
+          onApply(params);
+        };
+        remove.textContent='移除'; remove.setAttribute('aria-label','移除 '+entry.name);
+        remove.onclick=()=>{
+          try {localStorage.removeItem(key); draw(); message.textContent='已移除 '+entry.name;}
+          catch {message.textContent='本浏览器无法移除此筛选。';}
+        };
+        li.append(open,remove); list.append(li);
+      }
+    } catch {message.textContent='本浏览器暂时无法读取已存筛选。';}
+  }
+  form.onsubmit=event=>{
+    event.preventDefault();
+    const name=form.elements.label.value.trim();
+    if (!name || !applied) return;
+    try {
+      const key=prefix+encodeURIComponent(name);
+      if (localStorage.getItem(key)!==null) {message.textContent='此名称已使用，请更换名称。';return;}
+      localStorage.setItem(key,JSON.stringify({name,query:applied.toString(),week:form.elements.week.checked}));
+      form.reset(); draw(); message.textContent='已保存 '+name;
+    } catch {message.textContent='本浏览器无法保存筛选。';}
+  };
+  draw();
+  return params=>{
+    applied=params;
+    form.querySelector('button').disabled=!params;
+  };
+}
+
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报、中国 NMPA 公告、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、日本 jRCT 登记、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
@@ -73,6 +125,10 @@ function renderPublicEvents() {
     <label><input type="checkbox" name="publication_status" value="true"> 仅看论文出版状态</label>
     <label><input type="checkbox" name="study_interruption" value="true"> 仅看试验暂停、终止或撤回说明</label>
     <button class="btn primary">筛选</button><button class="btn" type="button" id="public-event-week">最近七天发现</button></form>
+    <details class="card" id="public-saved-filters"><summary>我的常用筛选（本浏览器）</summary>
+    <ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
+    <label><input type="checkbox" name="week"> 每次打开时查看最近七天发现，替换已选的历史截面和发现日期</label>
+    <button class="btn" disabled>保存当前结果的筛选条件</button></form><p role="status"></p></details>
     <a id="public-event-report" hidden>下载当前筛选的完整简报</a>
     <p id="public-event-status" role="status"></p><nav id="public-source-counts" aria-label="按来源查看归档"></nav><div id="public-event-list"></div>
     <button type="button" class="btn" id="public-event-more" hidden>加载更多</button></section>`);
@@ -107,6 +163,18 @@ function renderPublicEvents() {
     if (el.type==='checkbox') el.checked = initial.get(el.name)==='true';
     else el.value = initial.get(el.name);
   }
+  const setSavedQuery=bindSavedPublicFilters(params=>{
+    const hash='#/public-events'+(params.size?'?'+params:'');
+    if (location.hash!==hash) {location.hash=hash;return;}
+    form.reset();
+    for (const [key,value] of params) {
+      const el=form.elements.namedItem(key);
+      if (!el) continue;
+      if (el.type==='checkbox') el.checked=value==='true';
+      else el.value=value;
+    }
+    load(true);
+  });
   let query, offset, generation = 0;
   function trialTrail(id) {
     const params = new URLSearchParams({trial:id});
@@ -128,7 +196,7 @@ function renderPublicEvents() {
       query = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
       const eventId = hashParams().get('event');
       if (eventId) query.set('event_id', eventId);
-      offset = 0; generation++; list.replaceChildren();
+      setSavedQuery(null); offset = 0; generation++; list.replaceChildren();
     }
     const request = generation;
     query.set('offset', String(offset));
@@ -333,6 +401,11 @@ function renderPublicEvents() {
       const reportQuery = new URLSearchParams(query);
       reportQuery.delete('offset');
       download.href = '/api/public-events/report.txt?' + reportQuery;
+      const savedQuery=new URLSearchParams(reportQuery);
+      if (savedQuery.has('event_id')) {
+        savedQuery.set('event',savedQuery.get('event_id')); savedQuery.delete('event_id');
+      }
+      setSavedQuery(savedQuery);
       download.hidden = result.total === 0;
       offset += result.items.length;
       status.textContent = (query.has('as_of')?'截至 '+query.get('as_of')+' 的历史截面 · ':'')+'已显示 '+offset+' / '+result.total+' 条记录';
@@ -357,11 +430,11 @@ function renderPublicEvents() {
     load(true);
   };
   $('#public-event-week').onclick = ()=>{
-    const day = new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'});
-    const now = Date.now();
-    form.elements.as_of.value = '';
-    form.elements.discovered_from.value = day.format(now - 6 * 86400000);
-    form.elements.discovered_to.value = day.format(now);
+    const params=new URLSearchParams();
+    recentPublicWeek(params);
+    form.elements.as_of.value='';
+    form.elements.discovered_from.value=params.get('discovered_from');
+    form.elements.discovered_to.value=params.get('discovered_to');
     form.requestSubmit();
   };
   more.onclick = ()=>load(false);
