@@ -343,11 +343,11 @@ async function showAssetEvidence(panel, asset, cutoff) {
 
 function appendPublicCitation(card, event) {
   const link=document.createElement('a');
-  link.href='#/public-events?'+new URLSearchParams({event:event.id});
+  link.href=location.pathname+'#/public-events?'+new URLSearchParams({event:event.id});
   link.textContent='此条归档的固定链接';
   // Capture only the archived heading and facts, before any live lookup controls are attached.
   const facts=Array.from(card.querySelectorAll('h2,p'),node=>node.textContent);
-  const citation=[...facts,event.source+' · '+event.record,event.url,'HiJenny 归档 '+link.href].join('\n');
+  const citation=[...facts,'归档时间 '+event.observed,event.source+' · '+event.record,event.url,'HiJenny 归档 '+link.href].join('\n');
   const actions=document.createElement('p'), copy=document.createElement('button');
   const status=document.createElement('span');
   status.setAttribute('role','status');
@@ -548,6 +548,17 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.source==='FDA Orange Book') {
+          card.querySelector('p').style.whiteSpace='pre-line';
+          const note=document.createElement('p');
+          note.textContent='各行按 FDA 产品编号与用途代码列示。专利和独占期分别归档；这些日期不能单独确定仿制药上市时间。';
+          card.append(note);
+        }
+        if (r.category==='publication-mention') {
+          const note=document.createElement('p');
+          note.textContent='文献在题名或摘要中提到此登记号；是否报告该试验的结果仍需核对原文。';
+          card.append(note);
+        }
         appendPublicCitation(card,r);
         if (!query.has('source_record') || !query.has('source') ||
             [...query.keys()].some(key=>!['source_record','source','offset','disclosed_to','discovered_to'].includes(key))) {
@@ -595,17 +606,6 @@ function renderPublicEvents() {
             p.append(link);
             card.append(p);
           }
-        }
-        if (r.source==='FDA Orange Book') {
-          card.querySelector('p').style.whiteSpace='pre-line';
-          const note=document.createElement('p');
-          note.textContent='各行按 FDA 产品编号与用途代码列示。专利和独占期分别归档；这些日期不能单独确定仿制药上市时间。';
-          card.append(note);
-        }
-        if (r.category==='publication-mention') {
-          const note=document.createElement('p');
-          note.textContent='文献在题名或摘要中提到此登记号；是否报告该试验的结果仍需核对原文。';
-          card.append(note);
         }
         if (r.category==='safety-summary') {
           for (const [label,version] of [['本次归档',r.value],['上次归档',r.previous]]) {
