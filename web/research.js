@@ -86,6 +86,10 @@ function libraryBrief(question, entries) {
 }
 
 function renderResearch() {
+  const seed=hashParams().get('query')?.trim().slice(0,400);
+  if (seed && seed!==researchSession.query) Object.assign(researchSession,{
+    query:seed,response:null,source:'pubmed',articleType:'',yearFrom:'',yearTo:''
+  });
   setView(`<section class="research-home" lang="zh-CN"><h1>查文献与临床试验</h1>
     <p>输入公开药物名、适应症或检索式，查看数据库记录与原始来源。</p>
     <p>准备资产引进评审？<a href="#/pilot?lang=zh">查看单资产尽调交付物与试点报价申请</a> · <a href="#/pilot?lang=en" lang="en">Pilot quote</a> · <a href="#/pilot?lang=ja" lang="ja">見積もり依頼</a></p>
