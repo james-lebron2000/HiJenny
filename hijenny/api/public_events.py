@@ -25,7 +25,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                   document_type: Literal["Label", "Letter", "Review", "Summary Review", "Medication Guide"] | None = None,
                   source_record: str = "", notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None,
-                  rolling_week: bool = False):
+                  rolling_week: bool = False, exact_asset: bool = False):
     if rolling_week:
         if as_of or discovered_from or discovered_to:
             raise HTTPException(422, "滚动七天与固定历史截面或发现日期不能同时使用。")
@@ -39,7 +39,12 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     match = ["instr(lower(asset), lower(?))>0", "instr(lower(json_extract(payload, '$.subject')), lower(?))>0"]
     args = [asset, asset]
     mapping = verified_asset(asset)
-    if mapping:
+    if exact_asset:
+        if not asset:
+            raise HTTPException(422, "请输入要完全匹配的归档资产标签。")
+        match = ["lower(json_extract(payload, '$.asset'))=lower(?)"]
+        args = [asset]
+    elif mapping:
         match.append("instr(lower(json_extract(payload, '$.asset')), ?) > 0")
         args.append(mapping["name"])
     sql = " WHERE (" + " OR ".join(match) + ") AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"
@@ -128,7 +133,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     order = (" ORDER BY julianday(json_extract(payload, '$.observed')) DESC, date DESC, id"
              if source_record or discovered_from or discovered_to else " ORDER BY date DESC, id")
     labels = [f"{label}：{value}" for label, value in (
-        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("当前归档含 FDA 文件类型", document_type), ("来源", source), ("来源记录编号", source_record), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
+        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("当前归档含 FDA 文件类型", document_type), ("来源", source), ("来源记录编号", source_record), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("完整归档资产标签" if exact_asset else "资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("仅含首次观察晚于", observed_after.isoformat() if observed_after else None), ("记录类型", KINDS.get(kind))) if value]
     table = "events"
     if as_of:
@@ -192,12 +197,12 @@ def document_changes(row):
 
 
 @router.get("/api/public-events/asset-evidence")
-def asset_evidence(asset: str, as_of: date | None = None):
+def asset_evidence(asset: str, as_of: date | None = None, exact_asset: bool = False):
     asset = asset.strip()
     if not asset:
         raise HTTPException(422, "请输入药物名。")
     cutoff = as_of or datetime.now(timezone(timedelta(hours=8))).date()
-    table, sql, args, order, _, mapping = event_filters(as_of=cutoff, asset=asset, source="ClinicalTrials.gov")
+    table, sql, args, order, _, mapping = event_filters(as_of=cutoff, asset=asset, source="ClinicalTrials.gov", exact_asset=exact_asset)
     fields = {"登记状态": "status", "登记研究阶段": "phase", "登记研究疾病": "conditions",
               "牵头申办方": "sponsor", "试验中心所在国家或地区": "countries", "登记年龄组": "ages",
               "方案登记主要终点": "planned_endpoints"}

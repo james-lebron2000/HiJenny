@@ -307,8 +307,9 @@ function bindArchivedComparison(panel) {
 
 const archiveTrialSelection={cutoff:null,ids:new Set()};
 
-async function showAssetEvidence(panel, asset, cutoff) {
+async function showAssetEvidence(panel, asset, cutoff, exactAsset) {
   const params=new URLSearchParams({asset});
+  if (exactAsset) params.set('exact_asset','true');
   if (cutoff) params.set('as_of',cutoff);
   panel.dataset.query=params.toString();
   const current=()=>panel.isConnected && panel.dataset.query===params.toString();
@@ -437,6 +438,7 @@ function renderPublicEvents() {
     <button class="btn">对照归档终点</button></form><div aria-live="polite" data-comparison></div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="依达方、奥希替尼或 Summit"></label>
+    <label><input type="checkbox" name="exact_asset" value="true"> 仅匹配完整归档资产标签（按卡片所列原名）</label>
     <label>国家药监局公告编号<input name="notice_id" inputmode="numeric" pattern="[0-9]+" placeholder="1073516"></label>
     <label>国家药监局栏目标题关键词<input name="notice_title" placeholder="例如 Good Clinical Practice"></label>
     <label>当前归档含 FDA 文件<select name="document_type"><option value="">全部</option>${Object.entries(fdaDocumentTypes).map(([value,label])=>option(value,'',label)).join('')}</select></label>
@@ -552,7 +554,7 @@ function renderPublicEvents() {
       query = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
       const eventId = hashParams().get('event');
       if (eventId) query.set('event_id', eventId);
-      showAssetEvidence($('#asset-evidence'),query.get('asset')?.trim() || '',query.get('as_of'));
+      showAssetEvidence($('#asset-evidence'),query.get('asset')?.trim() || '',query.get('as_of'),query.has('exact_asset'));
       setSavedQuery(null); offset = 0; generation++; list.replaceChildren();
     }
     $('#public-observed-after').hidden=!query.has('observed_after');
@@ -634,11 +636,11 @@ function renderPublicEvents() {
           link.textContent='以此资产筛选候选试验'; p.append(link); card.append(p);
         }
         if (r.asset) {
-          const params=new URLSearchParams({asset:r.asset});
+          const params=new URLSearchParams({asset:r.asset,exact_asset:'true'});
           for (const field of ['as_of','since','disclosed_to','discovered_from','discovered_to','observed_after']) {
             if (query.has(field)) params.set(field,query.get(field));
           }
-          const atAsset=query.get('asset')===r.asset &&
+          const atAsset=query.get('asset')===r.asset && query.has('exact_asset') &&
             [...query.keys()].every(key=>key==='offset' || params.has(key));
           if (!atAsset) {
             const p=document.createElement('p'), link=document.createElement('a');
@@ -817,9 +819,10 @@ function renderPublicEvents() {
         link.target = '_blank'; link.rel = 'noopener noreferrer';
         link.textContent = '名称来源';
         status.append(' · 核对药名 '+result.asset_match.name+' · ', link);
-      } else if (query.get('asset')?.trim()) {
+      } else if (!query.has('exact_asset') && query.get('asset')?.trim()) {
         status.append(' · 按资产或主体名称中的关键词匹配，结果可包含组合疗法。');
       }
+      if (query.has('exact_asset')) status.append(' · 仅匹配完整归档资产标签');
       more.hidden = offset >= result.total;
     } catch (err) {
       if (generation===request) { status.textContent='读取失败：'+err.message; more.hidden=false; }
