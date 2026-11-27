@@ -250,8 +250,10 @@ def asset_evidence(asset: str, as_of: date | None = None, exact_asset: bool = Fa
                 if entry["endpoints"]:
                     outcomes.append(entry)
             else:
-                trial = trials.setdefault(row["record"], {})
-                trial[fields[row["field"]]] = row["value"]
+                trial = trials.setdefault(row["record"], {"field_events": {}})
+                field = fields[row["field"]]
+                trial[field] = row["value"]
+                trial["field_events"][field] = row["id"]
                 if row["field"] == "登记状态":
                     trial.update(entry)
     name = mapping["name"] if mapping else asset.casefold()

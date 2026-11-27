@@ -32,9 +32,9 @@ const homeEvidence={
 };
 
 const homeReport={
-  zh:{pilot:'就此资产申请试点报价',title:'公开资产证据简报',download:'下载可打印简报',scope:'范围为 HiJenny 公开关注名单和已收录指南。终点按登记名称列出。',source:'原始来源',date:'登记更新',version:'来源版本',observed:'首次收录',none:'此截面暂无记录',phase:'阶段',status:'登记状态',sponsor:'牵头申办方',conditions:'疾病',sites:'中心所在地区'},
-  en:{pilot:'Request a pilot quote for this asset',title:'Public asset evidence brief',download:'Download printable brief',scope:'Coverage includes the HiJenny public watchlist and indexed guidance. Endpoints use registry titles.',source:'Original source',date:'Registry update',version:'Source version',observed:'First indexed',none:'No records at this cutoff',phase:'Phase',status:'Registry status',sponsor:'Lead sponsor',conditions:'Conditions',sites:'Site countries or regions'},
-  ja:{pilot:'この医薬品の試行導入見積もり',title:'医薬品の公開エビデンス概要',download:'印刷用の概要をダウンロード',scope:'HiJenny の公開ウォッチリストと収録済みの指針が対象です。評価項目は登録名で表示します。',source:'原資料',date:'登録更新日',version:'資料の版',observed:'初回収録日',none:'この時点の収録記録なし',phase:'試験相',status:'登録状況',sponsor:'主たる依頼者',conditions:'対象疾患',sites:'実施国・地域'}
+  zh:{pilot:'就此资产申请试点报价',title:'公开资产证据简报',download:'下载可打印简报',scope:'范围为 HiJenny 公开关注名单和已收录指南。终点按登记名称列出。',archive:'核对当时归档',source:'原始来源',date:'登记更新',version:'来源版本',observed:'首次收录',none:'此截面暂无记录',phase:'阶段',status:'登记状态',sponsor:'牵头申办方',conditions:'疾病',sites:'中心所在地区'},
+  en:{pilot:'Request a pilot quote for this asset',title:'Public asset evidence brief',download:'Download printable brief',scope:'Coverage includes the HiJenny public watchlist and indexed guidance. Endpoints use registry titles.',archive:'View archived evidence',source:'Original source',date:'Registry update',version:'Source version',observed:'First indexed',none:'No records at this cutoff',phase:'Phase',status:'Registry status',sponsor:'Lead sponsor',conditions:'Conditions',sites:'Site countries or regions'},
+  ja:{pilot:'この医薬品の試行導入見積もり',title:'医薬品の公開エビデンス概要',download:'印刷用の概要をダウンロード',scope:'HiJenny の公開ウォッチリストと収録済みの指針が対象です。評価項目は登録名で表示します。',archive:'当時の収録記録',source:'原資料',date:'登録更新日',version:'資料の版',observed:'初回収録日',none:'この時点の収録記録なし',phase:'試験相',status:'登録状況',sponsor:'主たる依頼者',conditions:'対象疾患',sites:'実施国・地域'}
 };
 
 const homeUpdates={
@@ -65,7 +65,12 @@ async function showHomeUpdates(panel,filters,lang) {
 function downloadHomeEvidence(asset,result,lang) {
   const copy=homeReport[lang], headers=homeEvidence[lang];
   const link=url=>`<p>${copy.source} · <a href="${esc(url)}">${esc(url)}</a></p>`;
-  const details=pairs=>'<dl>'+pairs.filter(([,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')+'</dl>';
+  const archive=id=>{
+    if (!id) return '';
+    const href=location.origin+location.pathname+'#/public-events?'+new URLSearchParams({event:id,as_of:result.as_of});
+    return ` · <a href="${esc(href)}">${copy.archive}</a>`;
+  };
+  const details=pairs=>'<dl>'+pairs.filter(([,v])=>v).map(([k,v,id])=>`<dt>${esc(k)}</dt><dd>${esc(v)}${archive(id)}</dd>`).join('')+'</dl>';
   const section=(name,items,render)=>`<section><h2>${name} (${items.length})</h2>`+
     (items.length?items.map(r=>'<article>'+render(r)+'</article>').join(''):`<p>${copy.none}</p>`)+'</section>';
   const registry=r=>'https://clinicaltrials.gov/study/'+encodeURIComponent(r.record);
@@ -73,9 +78,10 @@ function downloadHomeEvidence(asset,result,lang) {
     <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}@media print{body{margin:0;font-size:10pt}h2,h3{break-after:avoid}article{break-inside:avoid}}</style>
     <main><p>HiJenny · ${copy.title}</p><h1>${esc(asset)}</h1><p>${headers.cutoff} ${esc(result.as_of)}</p><p>${copy.scope}</p>`+
     section(headers.trials,result.trials,r=>`<h3>${esc(r.record)} · ${esc(r.asset)}</h3>`+
-      details([[copy.phase,r.phase],[copy.status,r.status],[copy.sponsor,r.sponsor],[copy.conditions,r.conditions],[copy.sites,r.countries],[copy.date,r.source_date]])+link(registry(r)))+
+      details([['phase',copy.phase],['status',copy.status],['sponsor',copy.sponsor],['conditions',copy.conditions],['countries',copy.sites]]
+        .map(([key,label])=>[label,r[key],r.field_events?.[key]]).concat([[copy.date,r.source_date,r.id]]))+link(registry(r)))+
     section(headers.results,result.outcomes,r=>`<h3>${esc(r.record)}</h3><ul>${r.endpoints.map(v=>'<li>'+esc(v)+'</li>').join('')}</ul>`+
-      details([[copy.date,r.source_date]])+link(registry(r)+'?tab=results'))+
+      details([[copy.date,r.source_date,r.id]])+link(registry(r)+'?tab=results'))+
     section(headers.guidance,result.guidance,g=>`<h3>${esc(g.publisher)} · ${esc(g.reference)}</h3><p>${esc(g.type)} · ${esc(g.topic)} · ${esc(g.region)}</p>`+
       details([[copy.version,g.version_date],[copy.observed,g.observed]])+link(g.url))+'</main></html>';
   const url=URL.createObjectURL(new Blob([report],{type:'text/html;charset=utf-8'}));
