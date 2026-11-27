@@ -30,6 +30,8 @@ LLM_MAX_RETRIES = int(os.getenv("HIJENNY_LLM_RETRIES", "2"))
 EXTRACT_MODE = os.getenv("HIJENNY_EXTRACT_MODE", "rules").lower()
 
 # Capabilities / limits
+PDF_WORKERS = int(os.getenv("HIJENNY_PDF_WORKERS", "0"))
+SQLITE_BUSY_TIMEOUT_MS = int(os.getenv("HIJENNY_SQLITE_BUSY_TIMEOUT_MS", "8000"))
 MAX_UPLOAD_MB = int(os.getenv("HIJENNY_MAX_UPLOAD_MB", "200"))
 MAX_PAGES_PER_DOC = int(os.getenv("HIJENNY_MAX_PAGES", "2500"))
 PARSER_VERSION = "parser-1.0.0"

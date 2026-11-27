@@ -82,7 +82,7 @@ def get_engine():
         def _pragmas(dbapi_conn, _record):  # pragma: no cover - driver hook
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA journal_mode=WAL")
-            cur.execute("PRAGMA busy_timeout=8000")
+            cur.execute(f"PRAGMA busy_timeout={config.SQLITE_BUSY_TIMEOUT_MS}")
             cur.execute("PRAGMA foreign_keys=ON")
             cur.close()
 

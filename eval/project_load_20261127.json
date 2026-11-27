@@ -1,0 +1,526 @@
+{
+  "application_release": "cc9f78f5121be6df023ea72d15552e33c3bb7ef4",
+  "execution": "Shared Linux server, isolated temporary SQLite and file state per experiment, in-process HTTP TestClient. Runs partially overlapped. Times cover submission through terminal observation and report retrieval. 1800-second observation window.",
+  "experiments": {
+    "baseline": {
+      "mode": "rules",
+      "fixture": "first 200 pages of synthetic CSR repeated eight times",
+      "source_sha256": "0aed7bb9d6c29a447a4ff3fc2c2696fd9d54165160ca1f33c987d399e711e255",
+      "passed_projects": 0,
+      "p95_seconds": null,
+      "median_seconds": null,
+      "projects": [
+        {
+          "project": "prj_3a735fd5ef8f",
+          "run": "run_2f6f6b14bfb9",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1810.905,
+          "passed": false
+        },
+        {
+          "project": "prj_9fca69cc7c84",
+          "run": "run_a381e6fabad7",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1809.842,
+          "passed": false
+        },
+        {
+          "project": "prj_f3888df62b73",
+          "run": "run_2aa9f5a6e08a",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1812.622,
+          "passed": false
+        },
+        {
+          "project": "prj_d62e78e2d4aa",
+          "run": "run_2150305933fa",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1806.438,
+          "passed": false
+        },
+        {
+          "project": "prj_fa6cf988f25c",
+          "run": "run_8b28129c3eab",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1806.685,
+          "passed": false
+        },
+        {
+          "project": "prj_576ef3f74946",
+          "run": "run_84a7bd5fcff4",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1811.61,
+          "passed": false
+        },
+        {
+          "project": "prj_84b6b056dd63",
+          "run": "run_ce5b4e714806",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1807.962,
+          "passed": false
+        },
+        {
+          "project": "prj_f05e46f337e3",
+          "run": "run_c7ac1691882e",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1811.61,
+          "passed": false
+        },
+        {
+          "project": "prj_a4dc31b6776d",
+          "run": "run_814ac620a6a9",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1807.208,
+          "passed": false
+        },
+        {
+          "project": "prj_993308ba61a3",
+          "run": "run_819e443bd8ed",
+          "status": "running",
+          "error": null,
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 1808.715,
+          "passed": false
+        }
+      ],
+      "pdf_workers": 0,
+      "busy_timeout_ms": 8000
+    },
+    "process": {
+      "mode": "rules",
+      "fixture": "first 200 pages of synthetic CSR repeated eight times",
+      "source_sha256": "0aed7bb9d6c29a447a4ff3fc2c2696fd9d54165160ca1f33c987d399e711e255",
+      "passed_projects": 5,
+      "p95_seconds": 393.473,
+      "median_seconds": 177.739,
+      "projects": [
+        {
+          "project": "prj_b0880c98f056",
+          "run": "run_2a36184d88d4",
+          "status": "failed",
+          "error": "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: UPDATE agent_runs SET stats_json=? WHERE agent_runs.run_id = ?]\n[parameters: ('{\"started_at\": \"2026-11-27T12:29:51+00:00\", \"stage_ingest\": {\"state\": \"done\", \"documents_seen\": 1, \"documents_parsed\": 1, \"documents_failed\": 0, \"doc ... (451 characters truncated) ... enny-process-load-shoexy4g/projects/prj_b0880c98f056/documents\", \"files_found\": 1, \"documents_total\": 1, \"documents_latest\": 1, \"pages_total\": 1600}}', 'run_2a36184d88d4')]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)\nTraceback (most recent call last):\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/base.py\", line 1964, in _exec_single_context\n    self.dialect.do_execute(\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/default.py\", line 942, in do_execute\n    cursor.execute(statement, parameters)\nsqlite3.OperationalError: database is locked\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/ljm/.local/share/hijenny/releases/cc9f78f5121be6df023ea72d15552e33c3bb7ef4/hijenny/pipeline.py\", line 114, in _execute\n    store.update_run(\n  File \"/home/ljm/.local/share/hijenny/releases/cc9f78f5121be6df023ea72d15552e33c3bb7ef4/hijenny/store.py\", line 1202, in update_run\n    session.flush()\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/orm/session.py\", line 4353, in flush\n    self._flush(objects)\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/orm/session.py\", line 4488, in _flush\n    with util.safe_reraise():\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py\", line 146, in __exit__\n    raise exc_value.with_traceback(exc_tb)\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/orm/session.py\", line 4449, in _flush\n    flush_context.execute()\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py\", line 466, in execute\n    rec.execute(self)\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py\", line 642, in execute\n    util.preloaded.orm_persistence.save_obj(\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py\", line 85, in save_obj\n    _emit_update_statements(\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py\", line 912, in _emit_update_statements\n    c = connection.execute(\n        ^^^^^^^^^^^^^^^^^^^\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/base.py\", line 1416, in execute\n    return meth(\n           ^^^^^\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/sql/elements.py\", line 523, in _execute_on_connection\n    return connection._execute_clauseelement(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/base.py\", line 1638, in _execute_clauseelement\n    ret = self._execute_context(\n          ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/base.py\", line 1843, in _execute_context\n    return self._exec_single_context(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/base.py\", line 1983, in _exec_single_context\n    self._handle_dbapi_exception(\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/base.py\", line 2352, in _handle_dbapi_exception\n    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/base.py\", line 1964, in _exec_single_context\n    self.dialect.do_execute(\n  File \"/home/ljm/.local/share/hijenny/runtime-py312/lib/python3.12/site-packages/sqlalchemy/engine/default.py\", line 942, in do_execute\n    cursor.execute(statement, parameters)\nsqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: UPDATE agent_runs SET stats_json=? WHERE agent_runs.run_id = ?]\n[parameters: ('{\"started_at\": \"2026-11-27T12:29:51+00:00\", \"stage_ingest\": {\"state\": \"done\", \"documents_seen\": 1, \"documents_parsed\": 1, \"documents_failed\": 0, \"doc ... (451 characters truncated) ... enny-process-load-shoexy4g/projects/prj_b0880c98f056/documents\", \"files_found\": 1, \"documents_total\": 1, \"documents_latest\": 1, \"pages_total\": 1600}}', 'run_2a36184d88d4')]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)\n",
+          "stages_done": [],
+          "pages": 1600,
+          "evidence": 0,
+          "seconds": 269.433,
+          "passed": false
+        },
+        {
+          "project": "prj_b32cb7adc1d8",
+          "run": "run_c75ad493abe7",
+          "status": "failed",
+          "error": "stage INGEST failed: (sqlite3.OperationalError) database is locked\n[SQL: DELETE FROM evidence WHERE evidence.document_id = ?]\n[parameters: ('doc_cb6b4263283d',)]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 144.077,
+          "passed": false
+        },
+        {
+          "project": "prj_8cc9c7f4b762",
+          "run": "run_388c1e6fcc1f",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "03056d59fbb8d1665063ac585e1eb3a838182cfe2c3d617c488d592520034c72",
+          "seconds": 177.739,
+          "passed": true
+        },
+        {
+          "project": "prj_f68bf4f292b8",
+          "run": "run_291f7dc0debe",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "31a715650335c7a0bd97cd4d5395f17f81ce08ac516cba216240577d6e9bb667",
+          "seconds": 393.473,
+          "passed": true
+        },
+        {
+          "project": "prj_e3a4a4f78457",
+          "run": "run_cf993172d47b",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "7c1b99b6bf1a938464a98af1d12c6c80fee1a6d03b9ade6e1fdb34a7ae018d75",
+          "seconds": 271.826,
+          "passed": true
+        },
+        {
+          "project": "prj_ed469bf31e51",
+          "run": "run_da430d6fcceb",
+          "status": "failed",
+          "error": "stage INGEST failed: (sqlite3.OperationalError) database is locked\n[SQL: DELETE FROM evidence WHERE evidence.document_id = ?]\n[parameters: ('doc_b5f1bc8d77a0',)]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+          "stages_done": [],
+          "pages": 0,
+          "evidence": 0,
+          "seconds": 389.925,
+          "passed": false
+        },
+        {
+          "project": "prj_19c1de79498e",
+          "run": "run_a0052a117402",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "14514e50b77495f101f113c5eccf98826c0096a449f73d22f31ccf842f9adeb2",
+          "seconds": 176.835,
+          "passed": true
+        },
+        {
+          "project": "prj_7593a53c56f0",
+          "run": "run_cba00b3baa08",
+          "status": "failed",
+          "error": "stage EXTRACT failed: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO assets (asset_id, project_id, name, modality, target, mechanism, indication, phase, meta_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]\n[parameters: ('ast_4bf554dcce60', 'prj_7593a53c56f0', 'ASD-101', 'oral small molecule', 'PRMT5', 'selective inhibitor of PRMT5', 'MTAP-deleted advanced solid tumors', 'Phase 2', '{\"alias\": \"zafinostat\", \"name_source\": \"title_pages\", \"target\": \"PRMT5\", \"modality\": \"oral small molecule\", \"mechanism\": \"selective inhibitor of PRMT5\"}', '2026-11-27T12:34:05+00:00')]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+          "stages_done": [
+            "stage_ingest"
+          ],
+          "pages": 1600,
+          "evidence": 0,
+          "seconds": 268.832,
+          "passed": false
+        },
+        {
+          "project": "prj_408f3c0a4f4c",
+          "run": "run_ac1fae64e7ea",
+          "status": "failed",
+          "error": "stage EXTRACT failed: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO assets (asset_id, project_id, name, modality, target, mechanism, indication, phase, meta_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]\n[parameters: ('ast_acffec26d084', 'prj_408f3c0a4f4c', 'ASD-101', 'oral small molecule', 'PRMT5', 'selective inhibitor of PRMT5', 'MTAP-deleted advanced solid tumors', 'Phase 2', '{\"alias\": \"zafinostat\", \"name_source\": \"title_pages\", \"target\": \"PRMT5\", \"modality\": \"oral small molecule\", \"mechanism\": \"selective inhibitor of PRMT5\"}', '2026-11-27T12:34:09+00:00')]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+          "stages_done": [
+            "stage_ingest"
+          ],
+          "pages": 1600,
+          "evidence": 0,
+          "seconds": 269.759,
+          "passed": false
+        },
+        {
+          "project": "prj_994792a053eb",
+          "run": "run_05ed8896bbcd",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33620,
+          "report_sha256": "e1a197b8cacca32649c1aca9cc9b072fd463368579a57301ee2b03e88b08d63e",
+          "seconds": 171.423,
+          "passed": true
+        }
+      ],
+      "pdf_workers": 4,
+      "busy_timeout_ms": 8000
+    },
+    "candidate": {
+      "mode": "rules",
+      "fixture": "first 200 pages of synthetic CSR repeated eight times",
+      "source_sha256": "0aed7bb9d6c29a447a4ff3fc2c2696fd9d54165160ca1f33c987d399e711e255",
+      "passed_projects": 10,
+      "p95_seconds": 406.682,
+      "median_seconds": 312.8785,
+      "projects": [
+        {
+          "project": "prj_7e1ae92faf65",
+          "run": "run_73b83cc943c8",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "ee6a797679e355d9a30ee897a7c7cb3121ab1fb55141a62384880e7a479b049f",
+          "seconds": 406.682,
+          "passed": true
+        },
+        {
+          "project": "prj_c342db7f1973",
+          "run": "run_3a354bb44051",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "f5e0a0cfc413b0545fc40dee2e96d495df30dacb77a8e7a4711f7291cc7241a1",
+          "seconds": 193.147,
+          "passed": true
+        },
+        {
+          "project": "prj_fea5ac8ce2fe",
+          "run": "run_d427ad84212e",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "4737b0b73bcf98feadbb3654b64abc4622da9a974a73ea4dbd449b696cc98e1e",
+          "seconds": 406.242,
+          "passed": true
+        },
+        {
+          "project": "prj_614d4e0f890a",
+          "run": "run_70c80a99139f",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "84bca3614a6965a2f39a5b7d488c3a74ce90b15a76c315b8cebad0df6c01e4a9",
+          "seconds": 310.715,
+          "passed": true
+        },
+        {
+          "project": "prj_d42dbb36555c",
+          "run": "run_65a454539d35",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "918a27cd25366ac0ba7c5bb9967b85859a80a501bdb53382c794c00e1d6e8a9b",
+          "seconds": 192.508,
+          "passed": true
+        },
+        {
+          "project": "prj_08e170389450",
+          "run": "run_e4f083b68d2d",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "a687e1c633f779debd04e637c82cdcc5e83e004e79495940982e82a40e8e16d1",
+          "seconds": 318.128,
+          "passed": true
+        },
+        {
+          "project": "prj_03f2333f9b7e",
+          "run": "run_b21831b3dfbe",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "611c5ca2cc42021565be7a35cf1bc036561686ed179771e9e07f08376be89d2e",
+          "seconds": 315.042,
+          "passed": true
+        },
+        {
+          "project": "prj_d6adacd00f6a",
+          "run": "run_5e01fbe84177",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "5ea274c5e19f56624e8aab6333fa71c073e56603ac06461768b7283f3d5b7c69",
+          "seconds": 194.757,
+          "passed": true
+        },
+        {
+          "project": "prj_7995edeffe34",
+          "run": "run_e9834a29c4f5",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33618,
+          "report_sha256": "de03fbbb9ee5194a51991abe5a7b98f9d4ef4cdbe4c44be4fb89bf19012a7cea",
+          "seconds": 315.424,
+          "passed": true
+        },
+        {
+          "project": "prj_f314280446e1",
+          "run": "run_b01c5cf2e5cf",
+          "status": "succeeded",
+          "error": null,
+          "stages_done": [
+            "stage_ingest",
+            "stage_extract",
+            "stage_validate",
+            "stage_consistency",
+            "stage_gap",
+            "stage_questions",
+            "stage_report"
+          ],
+          "pages": 1600,
+          "evidence": 230,
+          "report_bytes": 33620,
+          "report_sha256": "7ab2b55d546736d2c4560a8d1ab6d0c098e1f5783ccfde882cddb574cfb17275",
+          "seconds": 185.321,
+          "passed": true
+        }
+      ],
+      "pdf_workers": 4,
+      "busy_timeout_ms": 120000
+    }
+  }
+}

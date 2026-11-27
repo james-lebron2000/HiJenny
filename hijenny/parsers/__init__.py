@@ -11,7 +11,11 @@ Every parser returns the frozen dataclasses from :mod:`hijenny.interfaces`.
 """
 from __future__ import annotations
 
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
+from threading import Lock
 
 from hijenny import config
 from hijenny.interfaces import ParsedDocument
@@ -47,6 +51,35 @@ PARSERS = {
 }
 
 
+_pdf_pool: ProcessPoolExecutor | None = None
+_pool_lock = Lock()
+
+
+def close_pdf_workers() -> None:
+    global _pdf_pool
+    with _pool_lock:
+        pool, _pdf_pool = _pdf_pool, None
+    if pool is not None:
+        pool.shutdown(wait=True)
+
+
+def _parse_in_worker(path: Path) -> ParsedDocument:
+    global _pdf_pool
+    with _pool_lock:
+        if _pdf_pool is None:
+            _pdf_pool = ProcessPoolExecutor(max_workers=config.PDF_WORKERS,
+                                            mp_context=multiprocessing.get_context("spawn"))
+        pool = _pdf_pool
+    try:
+        return pool.submit(parse_pdf, path).result()
+    except BrokenProcessPool:
+        with _pool_lock:
+            if pool is _pdf_pool:
+                _pdf_pool = None
+                pool.shutdown(wait=False)
+        raise
+
+
 def parse_file(path: str | Path) -> ParsedDocument:
     """Dispatch to the right parser based on real file content.
 
@@ -60,6 +93,8 @@ def parse_file(path: str | Path) -> ParsedDocument:
     if fmt is None:
         raise UnsupportedFormatError(f"unsupported document format: {p.name}")
     try:
+        if fmt == "pdf" and config.PDF_WORKERS > 0:
+            return _parse_in_worker(p)
         return PARSERS[fmt](p)
     except Exception as exc:  # noqa: BLE001 - failure isolation happens at ingestion
         try:

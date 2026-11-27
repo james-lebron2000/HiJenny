@@ -467,7 +467,12 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - exercised by TestClient
         pass
     else:
         pipeline.recover_interrupted_runs()
-    yield
+    try:
+        yield
+    finally:
+        if config.PDF_WORKERS > 0:
+            from hijenny.parsers import close_pdf_workers
+            close_pdf_workers()
 
 
 def create_app() -> FastAPI:

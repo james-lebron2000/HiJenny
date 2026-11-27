@@ -1,4 +1,5 @@
 """Run the 10-project synthetic 1,600-page benchmark in a fresh temporary database."""
+import argparse
 from contextlib import redirect_stdout
 import hashlib
 import json
@@ -84,9 +85,20 @@ def benchmark():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--pdf-workers", type=int, choices=[0, 4], default=0)
+    parser.add_argument("--busy-timeout-ms", type=int, choices=[8000, 120000])
+    parser.add_argument("--output", type=Path, help="write an uncontaminated JSON result file")
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="hijenny-project-load-") as tmp:
         os.environ.update(HIJENNY_DATA_DIR=tmp, HIJENNY_DB_PATH=str(Path(tmp)/"test.db"), HIJENNY_EXTRACT_MODE="rules")
+        os.environ.update(HIJENNY_PDF_WORKERS=str(args.pdf_workers),
+                          HIJENNY_SQLITE_BUSY_TIMEOUT_MS=str(args.busy_timeout_ms or 8000))
         with redirect_stdout(sys.stderr):
             result = benchmark()
-        print(json.dumps(result, indent=2))
+        result.update(pdf_workers=args.pdf_workers, busy_timeout_ms=args.busy_timeout_ms or 8000)
+        if args.output:
+            args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        else:
+            print(json.dumps(result, indent=2))
         raise SystemExit(0 if result["passed_projects"] == 10 else 1)
