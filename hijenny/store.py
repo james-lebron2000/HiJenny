@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
 
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import create_engine, delete, func, literal_column, select
 from sqlalchemy.event import listen
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -1186,7 +1186,8 @@ def get_run(session: Session, run_id: str) -> dict | None:
 
 def list_runs(session: Session, project_id: str, limit: int = 20) -> list[dict]:
     rows = session.scalars(
-        select(AgentRun).where(AgentRun.project_id == project_id).order_by(AgentRun.started_at.desc()).limit(limit)
+        select(AgentRun).where(AgentRun.project_id == project_id)
+        .order_by(AgentRun.started_at.desc(), literal_column("rowid").desc()).limit(limit)
     ).all()
     return [_run_dict(r) for r in rows]
 

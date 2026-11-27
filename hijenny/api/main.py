@@ -465,6 +465,8 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - exercised by TestClient
         store.init_db()
     except Exception:  # noqa: BLE001 - app must still boot to report health
         pass
+    else:
+        pipeline.recover_interrupted_runs()
     yield
 
 

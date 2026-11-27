@@ -12,6 +12,14 @@ never breaks the CLI/API import path.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # Advisory file locking is available on POSIX deployments.
+    fcntl = None
+
 import threading
 import traceback
 from typing import Any, Callable
@@ -137,26 +145,94 @@ def _fail(run_id: str, project_id: str, message: str) -> None:
             _ACTIVE.pop(run_id, None)
 
 
+def _lock_directory() -> Path:
+    return config.DB_PATH.parent / ("." + config.DB_PATH.name + ".run-locks")
+
+
+@contextmanager
+def _owned_run(project_id: str):
+    lock = None
+    try:
+        with store.session_scope() as session:
+            run = store.create_run(session, project_id, STAGES)
+            if fcntl is not None:
+                directory = _lock_directory()
+                directory.mkdir(mode=0o700, exist_ok=True)
+                lock = (directory / (run["run_id"] + ".lock")).open("xb")
+                fcntl.flock(lock, fcntl.LOCK_EX)
+        yield run
+    finally:
+        if lock is not None:
+            try:
+                with store.session_scope() as session:
+                    row = store.get_run(session, run["run_id"])
+                if row is None or row["status"] != "running":
+                    Path(lock.name).unlink(missing_ok=True)
+            finally:
+                lock.close()
+
+
+def recover_interrupted_runs() -> None:
+    """An unlocked marker for a committed running job means its owner exited."""
+    if fcntl is None:
+        return
+    for path in _lock_directory().glob("run_*.lock"):
+        try:
+            lock = path.open("rb")
+        except FileNotFoundError:
+            continue
+        with lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            with store.session_scope() as session:
+                row = store.get_run(session, path.stem)
+                if not row:
+                    continue  # The owning transaction may still be creating the run.
+                if row["status"] == "running":
+                    store.update_run(session, path.stem, state=RunState.FAILED, status="failed",
+                                     error="分析进程已中断。可重新发起分析，已提交的阶段记录保留。", finished=True)
+                    latest = store.list_runs(session, row["project_id"], limit=1)
+                    if latest and latest[0]["run_id"] == path.stem:
+                        store.update_project(session, row["project_id"], status="FAILED")
+            path.unlink(missing_ok=True)
+
+
 def run_pipeline(project_id: str, force: bool = False) -> dict:
     """Synchronous run; returns the final run row."""
-    with store.session_scope() as session:
-        run = store.create_run(session, project_id, STAGES)
-    _execute(run["run_id"], project_id, force=force)
-    with store.session_scope() as session:
-        return store.get_run(session, run["run_id"]) or run
+    with _owned_run(project_id) as run:
+        _execute(run["run_id"], project_id, force=force)
+        with store.session_scope() as session:
+            return store.get_run(session, run["run_id"]) or run
 
 
 def start_pipeline(project_id: str, force: bool = False) -> str:
     """Async run in a daemon thread; returns run_id immediately."""
-    with store.session_scope() as session:
-        run = store.create_run(session, project_id, STAGES)
-    thread = threading.Thread(
-        target=_execute, args=(run["run_id"], project_id, force), name=f"hijenny-{run['run_id']}", daemon=True
-    )
+    owner = _owned_run(project_id)
+    run = owner.__enter__()
+    run_id = run["run_id"]
+
+    def work():
+        try:
+            _execute(run_id, project_id, force=force)
+        finally:
+            owner.__exit__(None, None, None)
+            with _LOCK:
+                _ACTIVE.pop(run_id, None)
+
+    thread = threading.Thread(target=work, name=f"hijenny-{run_id}", daemon=True)
     with _LOCK:
-        _ACTIVE[run["run_id"]] = thread
-    thread.start()
-    return run["run_id"]
+        _ACTIVE[run_id] = thread
+    try:
+        thread.start()
+    except Exception as exc:
+        try:
+            _fail(run_id, project_id, str(exc))
+        finally:
+            owner.__exit__(None, None, None)
+        raise
+    return run_id
 
 
 def wait_for_run(run_id: str, timeout: float = 600.0) -> dict | None:

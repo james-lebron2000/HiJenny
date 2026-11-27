@@ -697,3 +697,37 @@ def test_seller_reply_export_is_project_scoped_and_limited_to_approved_requests(
     assert row[0] == question and row[3:] == (None, None, None)
     client.patch(f"/api/questions/{question}", json={"review_status": "rejected", "actor": "reviewer"}).raise_for_status()
     assert client.get(route).status_code == 409
+
+
+@pytest.mark.skipif(pipeline.fcntl is None, reason="POSIX run ownership locks required")
+def test_restart_recovers_abrupt_worker_exit_but_preserves_live_run(env):
+    import os
+    import subprocess
+
+    store.init_db()
+    with store.session_scope() as session:
+        interrupted = store.create_project(session, name="interrupted")["project_id"]
+        active = store.create_project(session, name="live")["project_id"]
+    script = """
+import os, sys
+from hijenny import pipeline
+def interrupt(stage):
+    if stage == 'EXTRACT':
+        os._exit(17)
+    return lambda *a, **kw: {}
+pipeline._load_handler = interrupt
+pipeline.run_pipeline(sys.argv[1])
+"""
+    result = subprocess.run([sys.executable, "-c", script, interrupted], timeout=30,
+                            env={**os.environ, "HIJENNY_DATA_DIR": str(env["data_dir"]),
+                                 "HIJENNY_DB_PATH": str(env["db_path"])})
+    assert result.returncode == 17
+    with pipeline._owned_run(active) as live, TestClient(app) as client:
+        run = client.get(f"/api/projects/{interrupted}/runs").json()["runs"][0]
+        assert run["run"]["status"] == "failed" and run["run"]["finished_at"]
+        assert run["progress"]["stages_done"] == 1
+        assert client.get(f"/api/runs/{live['run_id']}").json()["run"]["status"] == "running"
+        retry = client.post(f"/api/projects/{interrupted}/analyze").json()
+        assert not retry["already_running"] and retry["run_id"] != run["run"]["run_id"]
+        final = pipeline.wait_for_run(retry["run_id"], timeout=30)
+        assert final["status"] == "succeeded", final["error"]
