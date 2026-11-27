@@ -416,3 +416,15 @@ def test_rolling_week_feed_recalculates_at_taipei_midnight(tmp_path, monkeypatch
     Clock.instant = datetime(2026, 11, 27, 16, 0, tzinfo=timezone.utc)
     assert keys() == ["next", "recent"]
     assert client.get(path + "&as_of=2026-11-21").status_code == 422
+
+
+
+def test_fixed_dose_product_aliases_keep_single_ingredient_queries_distinct():
+    from hijenny.asset_names import verified_asset
+
+    product = verified_asset("Opdualag®")
+    assert product["name"] == "opdualag" and product["source"].endswith("761234s011lbl.pdf")
+    for term in ("NIVOLUMAB AND RELATLIMAB-RMBW", "Opdualag (nivolumab + relatlimab-rmbw)"):
+        assert verified_asset(term) == product
+    for term in ("nivolumab", "relatlimab-rmbw", "nivolumab and ipilimumab"):
+        assert verified_asset(term) is None

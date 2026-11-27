@@ -817,6 +817,8 @@ function renderPublicEvents() {
         link.target = '_blank'; link.rel = 'noopener noreferrer';
         link.textContent = '名称来源';
         status.append(' · 核对药名 '+result.asset_match.name+' · ', link);
+      } else if (query.get('asset')?.trim()) {
+        status.append(' · 按资产或主体名称中的关键词匹配，结果可包含组合疗法。');
       }
       more.hidden = offset >= result.total;
     } catch (err) {

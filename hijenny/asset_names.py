@@ -5,6 +5,11 @@ ASSET_NAMES = {
         ("依沃西单抗", "依沃西单抗注射液", "依达方"),
         "https://akesobio.com/cn/rd-and-science/products-center/ivonescimab/",
     ),
+    "opdualag": (
+        ("nivolumab and relatlimab-rmbw", "nivolumab + relatlimab-rmbw",
+         "Opdualag (nivolumab + relatlimab-rmbw)", "Opdualag (nivolumab and relatlimab-rmbw)"),
+        "https://www.accessdata.fda.gov/drugsatfda_docs/label/2026/761234s011lbl.pdf",
+    ),
     "osimertinib": (
         ("奥希替尼", "甲磺酸奥希替尼片", "泰瑞沙", "Tagrisso", "Tagrisso (osimertinib)"),
         "https://www.astrazeneca.com.cn/zh/media/press-releases/2025/01-02-01.html",
