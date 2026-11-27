@@ -1,5 +1,27 @@
 const fdaDocumentTypes = {Label:'药品标签',Letter:'批准函',Review:'审评资料','Summary Review':'审评摘要','Medication Guide':'用药指南'};
 
+function publicScheduleStatus(schedule) {
+  const p=document.createElement('p');
+  p.id='public-schedule';
+  const history=document.createElement('a');
+  history.href='https://github.com/james-lebron2000/HiJenny/actions/workflows/public-events.yml?query=event%3Aschedule';
+  history.target='_blank';history.rel='noopener noreferrer';history.textContent='定时运行历史';
+  const prefix='GitHub 每日计划采集 · 台北 08:17 · ';
+  if (!schedule) p.textContent=prefix+'等候服务器核对。';
+  else if (schedule.state==='found') {
+    const labels={success:'成功',failure:'失败',cancelled:'已取消',in_progress:'运行中',queued:'排队中',timed_out:'超时'};
+    const link=document.createElement('a');
+    const state=schedule.conclusion || schedule.status;
+    link.textContent='最近定时运行 '+fmtDate(schedule.created_utc)+' · '+(labels[state] || state);
+    link.href='https://github.com/james-lebron2000/HiJenny/actions/runs/'+encodeURIComponent(schedule.run_id);
+    link.target='_blank';link.rel='noopener noreferrer';
+    p.append(prefix,link);
+  } else p.textContent=prefix+(schedule.state==='no_runs'?'运行历史中尚无定时触发记录。':'暂时无法读取定时运行历史。');
+  if (schedule) p.append(' · 核对 '+fmtDate(schedule.checked_utc));
+  p.append(' · ',history);
+  return p;
+}
+
 function publicCoverage(receipt) {
   // Region refers to the source institution, independent of study sites and patient location.
   const sources = {
@@ -330,7 +352,7 @@ function renderPublicEvents() {
       syncStatus.textContent='服务器尚无生产 API 对账记录。';
     }
     if (!receipt) {
-      body.textContent=coverage.textContent='服务器尚未同步采集回执。';body.prepend(syncStatus);return;
+      body.textContent=coverage.textContent='服务器尚未同步采集回执。';body.prepend(syncStatus,publicScheduleStatus(verification?.scheduled_collection));return;
     }
     coverage.replaceChildren(publicCoverage(receipt));
     const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
@@ -343,7 +365,7 @@ function renderPublicEvents() {
       registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],checks.map(r=>[
         names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':'待更新 · '+r.error,
         r.last_success_utc?fmtDate(r.last_success_utc):r.status==='ok'?fmtDate(receipt.finished_utc):'未记录',r.records ?? '待核',r.new_events ?? '待核']));
-    body.prepend(syncStatus);
+    body.prepend(syncStatus,publicScheduleStatus(verification?.scheduled_collection));
     if (/^[0-9]+$/.test(receipt.run_id)) {
       const link=document.createElement('a');
       link.href='https://github.com/james-lebron2000/HiJenny/actions/runs/'+receipt.run_id;

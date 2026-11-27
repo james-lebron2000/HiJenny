@@ -14,6 +14,24 @@ from hijenny.public_events import REPO, connect, get, import_month
 from tools.verify_public_archive import verify
 
 
+def scheduled_collection():
+    """Check GitHub's schedule-only history even when a collection failed before publishing."""
+    checked = datetime.now(timezone.utc).isoformat()
+    url = REPO + "/actions/workflows/public-events.yml/runs?event=schedule&branch=main&per_page=1"
+    try:
+        history = json.loads(get(url))
+        runs = history["workflow_runs"]
+        if not runs and history["total_count"] == 0:
+            return {"checked_utc": checked, "state": "no_runs"}
+        run = runs[0]
+        if run["event"] != "schedule" or run["head_branch"] != "main" or not str(run["id"]).isdigit():
+            raise ValueError("Unexpected scheduled run")
+        return {"checked_utc": checked, "state": "found", "run_id": str(run["id"]),
+                "status": run["status"], "conclusion": run["conclusion"], "created_utc": run["created_at"]}
+    except Exception as error:
+        return {"checked_utc": checked, "state": "unavailable", "error_type": type(error).__name__}
+
+
 def sync_verified(socket_path):
     attempt = uuid4().hex
     status = {"status": "running", "started_utc": datetime.now(timezone.utc).isoformat()}
@@ -27,6 +45,7 @@ def sync_verified(socket_path):
         status.update(status="failed", error_type=type(error).__name__)
         raise
     finally:
+        status["scheduled_collection"] = scheduled_collection()
         status["finished_utc"] = datetime.now(timezone.utc).isoformat()
         with closing(connect()) as db, db:
             db.execute("UPDATE verification SET payload=? WHERE id=1 AND attempt=?", (json.dumps(status), attempt))

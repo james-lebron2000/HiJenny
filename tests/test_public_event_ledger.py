@@ -311,3 +311,20 @@ def test_fda_document_diff_compares_type_and_url_and_requires_previous_snapshot(
     assert document_changes(dict(row, previous_documents=[a, letter])) == {"added": [b], "removed": [a]}
     assert document_changes(dict(row, previous_documents=[b, letter])) == {}
     assert document_changes(dict(row, documents=[], previous_documents=[a])) == {"removed": [a]}
+
+
+def test_schedule_history_distinguishes_missing_failed_and_unavailable(monkeypatch):
+    from tools import sync_verified_archive as sync
+    def run(history):
+        def get(url):
+            assert "event=schedule&branch=main" in url
+            return json.dumps(history)
+        monkeypatch.setattr(sync, "get", get)
+        return sync.scheduled_collection()
+    assert run({"total_count": 0, "workflow_runs": []})["state"] == "no_runs"
+    row = dict(id=42, event="schedule", head_branch="main", status="completed",
+               conclusion="failure", created_at="2026-11-27T00:17:00Z")
+    receipt = run({"total_count": 1, "workflow_runs": [row]})
+    assert (receipt["state"], receipt["run_id"], receipt["conclusion"]) == ("found", "42", "failure")
+    assert run({"workflow_runs": [dict(row,event="workflow_dispatch")]})["state"] == "unavailable"
+    assert run({"message": "rate limited"})["state"] == "unavailable"
