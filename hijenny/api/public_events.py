@@ -262,11 +262,12 @@ def asset_evidence(asset: str, as_of: date | None = None, exact_asset: bool = Fa
     placeholders = ",".join("?" for _ in fields)
     sql += f" AND (json_extract(payload, '$.field') IN ({placeholders}) OR json_extract(payload, '$.category')='primary-outcomes')"
     args.extend(fields)
-    trials, outcomes = {}, []
+    trials, outcomes, reference_dates = {}, [], {}
     with closing(connect()) as db:
         for (payload,) in db.execute("SELECT payload FROM " + table + sql + order, args):
             row = json.loads(payload)
             entry = {key: row[key] for key in ("id", "record", "asset", "source_date")}
+            reference_dates[row["id"]] = {"source_date": row["source_date"], "observed": row.get("observed")}
             if row.get("category") == "primary-outcomes":
                 measures = (row["value"] or {}).get("primary_outcomes", [])
                 entry["endpoints"] = [m["title"] for m in measures]
@@ -284,7 +285,8 @@ def asset_evidence(asset: str, as_of: date | None = None, exact_asset: bool = Fa
     catalog = json.loads((REPO_ROOT / "data/public/guidance.json").read_text(encoding="utf-8"))
     guidance = [g for g in catalog if g["asset"] == name and
                 max(g["published"], g["version_date"], g["observed"]) <= cutoff.isoformat()]
-    return {"as_of": cutoff.isoformat(), "trials": [r for r in trials.values() if "id" in r], "outcomes": outcomes, "guidance": guidance}
+    return {"as_of": cutoff.isoformat(), "trials": [r for r in trials.values() if "id" in r], "outcomes": outcomes, "guidance": guidance,
+            "reference_dates": reference_dates}
 
 
 @router.get("/api/public-events/count")

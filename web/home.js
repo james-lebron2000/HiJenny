@@ -118,8 +118,14 @@ function downloadHomeEvidence(asset,result,lang) {
     if (!citations.size) return '';
     const title={zh:'归档编号索引',en:'Archive reference index',ja:'収録記録番号一覧'}[lang];
     const hint={zh:'在「公开资产动态」按归档编号和本简报截止日查找原记录。',en:'In Public updates, search by archive ID and the cutoff date of this brief.',ja:'公開情報画面で収録記録番号とこの資料の基準日を指定して検索できます。'}[lang];
+    const labels={zh:['来源日期','归档收录时间'],en:['Source date','Indexed at'],ja:['情報源の日付','収録日時']}[lang];
+    const reference=([id,{href}])=>{
+      const dates=result.reference_dates?.[id];
+      const timing=dates ? [dates.source_date,dates.observed].map((v,i)=>v ? labels[i]+' '+esc(v) : '').filter(Boolean).join(' · ') : '';
+      return `<li><a href="${esc(href)}"><code>${esc(id)}</code></a>${timing?'<br>'+timing:''}</li>`;
+    };
     return `<section><h2>${title}</h2><p>${hint}</p><ol>`+
-      [...citations].map(([id,{href}])=>`<li><a href="${esc(href)}"><code>${esc(id)}</code></a></li>`).join('')+'</ol></section>';
+      [...citations].map(reference).join('')+'</ol></section>';
   };
   const report=`<!doctype html><html lang="${lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(asset)} · ${copy.title}</title>
     <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}.comparison-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.85em}th,td{padding:.25rem;text-align:left;vertical-align:top;border:1px solid #aab8be;overflow-wrap:anywhere}
@@ -137,7 +143,7 @@ function downloadHomeEvidence(asset,result,lang) {
     <main><p>HiJenny · ${copy.title}</p><h1>${esc(asset)}</h1><p>${headers.cutoff} ${esc(result.as_of)}</p><p>${copy.scope}</p>`+
     section(headers.trials,result.trials,r=>`<h3>${esc(r.record)} · ${esc(r.asset)}</h3>`+
       details([['phase',copy.phase],['status',copy.status],['sponsor',copy.sponsor],['conditions',copy.conditions],['countries',copy.sites]]
-        .map(([key,label])=>[label,r[key],r.field_events?.[key]]).concat([[copy.date,r.source_date,r.id]]))+protocol(r)+link(registry(r)))+
+        .map(([key,label])=>[label,r[key],r.field_events?.[key]]).concat([[{zh:'登记状态的来源日期',en:'Source date for registry status',ja:'登録状況の情報源の日付'}[lang],r.source_date,r.id]]))+protocol(r)+link(registry(r)))+
     section(headers.results,result.outcomes,r=>`<h3 id="outcome-${esc(r.record)}">${esc(r.record)}</h3><ul>${outcomeMeasures(r)}</ul>`+
       details([[copy.date,r.source_date,r.id]])+link(registry(r)+'?tab=results'))+
     section(headers.guidance,result.guidance,g=>`<h3>${esc(g.publisher)} · ${esc(g.reference)}</h3><p>${esc(g.type)} · ${esc(g.topic)} · ${esc(g.region)}</p>`+
