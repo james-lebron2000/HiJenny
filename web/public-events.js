@@ -144,6 +144,28 @@ function bindArchivedComparison(panel) {
   };
 }
 
+async function showAssetEvidence(panel, asset, cutoff) {
+  const params=new URLSearchParams({asset});
+  if (cutoff) params.set('as_of',cutoff);
+  panel.dataset.query=params.toString();
+  const current=()=>panel.isConnected && panel.dataset.query===params.toString();
+  panel.hidden=!asset;
+  if (!asset) return;
+  panel.textContent='正在核对资产证据…';
+  try {
+    const data=await api('/api/public-events/asset-evidence?'+params);
+    if (!current()) return;
+    const trialLink=r=>`<a href="#/public-events?event=${encodeURIComponent(r.id)}">${esc(r.record)}</a>`;
+    const section=(label,rows)=>`<h3>${label}（${rows.length}）</h3>`+
+      (rows.length?'<ul>'+rows.map(row=>'<li>'+row+'</li>').join('')+'</ul>':'<p>此范围内暂无归档。</p>');
+    panel.innerHTML=`<h2>${esc(asset)} · 资产证据</h2><p>按药名及台北截止日 ${esc(data.as_of)} 汇总。试验范围为公开关注名单。</p>`+
+      section('管线试验',data.trials.map(r=>trialLink(r)+' · '+esc(r.asset)+' · '+esc(r.status)+' · '+esc(r.phase || '阶段未收录')+' · '+esc(r.conditions || '疾病未收录')))+
+      section('已公布主要终点的试验',data.outcomes.map(r=>trialLink(r)+' · '+esc(r.endpoints.join('、'))))+
+      section('指南与技术评估',data.guidance.map(g=>`<a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.publisher)} ${esc(g.reference)}</a> · ${esc(g.type)} · ${esc(g.topic)}
+        <br>${esc(g.region)} · 来源页面标注版本日期 ${esc(g.version_date)} · 人工收录 ${esc(g.observed)}`));
+  } catch (err) {if (current()) panel.textContent='资产证据暂时无法读取，请重新筛选。'+err.message;}
+}
+
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报、中国 NMPA 公告、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、日本 jRCT 登记、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
@@ -178,6 +200,8 @@ function renderPublicEvents() {
     <label><input type="checkbox" name="publication_status" value="true"> 仅看论文出版状态</label>
     <label><input type="checkbox" name="study_interruption" value="true"> 仅看试验暂停、终止或撤回说明</label>
     <button class="btn primary">筛选</button><button class="btn" type="button" id="public-event-week">最近七天发现</button></form>
+    <p><a href="#/public-events?asset=奥希替尼">查看奥希替尼的管线、结果和指南</a></p>
+    <section class="card" id="asset-evidence" aria-live="polite" hidden></section>
     <details class="card" id="public-saved-filters"><summary>我的常用筛选（本浏览器）</summary>
     <ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
     <label><input type="checkbox" name="week"> 每次打开时查看最近七天发现，替换已选的历史截面和发现日期</label>
@@ -270,6 +294,7 @@ function renderPublicEvents() {
       query = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
       const eventId = hashParams().get('event');
       if (eventId) query.set('event_id', eventId);
+      showAssetEvidence($('#asset-evidence'),query.get('asset')?.trim() || '',query.get('as_of'));
       setSavedQuery(null); offset = 0; generation++; list.replaceChildren();
     }
     const request = generation;

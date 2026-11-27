@@ -6,7 +6,7 @@ ASSET_NAMES = {
         "https://akesobio.com/cn/rd-and-science/products-center/ivonescimab/",
     ),
     "osimertinib": (
-        ("奥希替尼", "甲磺酸奥希替尼片", "泰瑞沙", "Tagrisso"),
+        ("奥希替尼", "甲磺酸奥希替尼片", "泰瑞沙", "Tagrisso", "Tagrisso (osimertinib)"),
         "https://www.astrazeneca.com.cn/zh/media/press-releases/2025/01-02-01.html",
     ),
 }

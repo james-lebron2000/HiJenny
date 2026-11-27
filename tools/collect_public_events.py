@@ -135,6 +135,8 @@ def trial_records(trial):
     status = protocol["statusModule"]
     fields = {"登记状态": status["overallStatus"], "主要完成日期": status.get("primaryCompletionDateStruct"),
               "研究完成日期": status.get("completionDateStruct"), "结果首次公布": status.get("resultsFirstPostDateStruct")}
+    fields["登记研究阶段"] = " / ".join(protocol.get("designModule", {}).get("phases", [])) or None
+    fields["登记研究疾病"] = " / ".join(protocol.get("conditionsModule", {}).get("conditions", [])) or None
     stop = STOP_STATUS.get(status["overallStatus"])
     reason = (status.get("whyStopped") or "").strip()
     fields[STOP_FIELD] = f"{stop} · {reason or '登记记录未提供原因'}" if stop else None

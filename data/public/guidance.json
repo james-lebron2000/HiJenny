@@ -1,0 +1,26 @@
+[
+  {
+    "asset": "osimertinib",
+    "publisher": "NICE",
+    "region": "英格兰 NHS",
+    "reference": "NG122",
+    "type": "临床指南",
+    "topic": "肺癌管理章节，含奥希替尼相关条目",
+    "published": "2019-03-28",
+    "version_date": "2024-03-08",
+    "observed": "2026-11-27",
+    "url": "https://www.nice.org.uk/guidance/ng122/chapter/Management"
+  },
+  {
+    "asset": "osimertinib",
+    "publisher": "NICE",
+    "region": "英格兰 NHS",
+    "reference": "TA654",
+    "type": "卫生技术评估指导",
+    "topic": "未经治疗的 EGFR 突变阳性非小细胞肺癌",
+    "published": "2020-10-14",
+    "version_date": "2020-10-14",
+    "observed": "2026-11-27",
+    "url": "https://www.nice.org.uk/guidance/TA654"
+  }
+]

@@ -1,13 +1,14 @@
 import json
 import re
 from contextlib import closing
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
 from hijenny.asset_names import verified_asset
+from hijenny.config import REPO_ROOT
 from hijenny.public_events import connect
 from hijenny.registry_report import outcome_text, safety_text
 
@@ -158,6 +159,36 @@ def document_changes(row):
     previous = {(d["type"], d["url"]) for d in row["previous_documents"]}
     return {key: [{"type": kind, "url": url} for kind, url in sorted(diff)]
             for key, diff in (("added", current - previous), ("removed", previous - current)) if diff}
+
+
+@router.get("/api/public-events/asset-evidence")
+def asset_evidence(asset: str, as_of: date | None = None):
+    asset = asset.strip()
+    if not asset:
+        raise HTTPException(422, "请输入药物名。")
+    cutoff = as_of or datetime.now(timezone(timedelta(hours=8))).date()
+    table, sql, args, order, _, mapping = event_filters(as_of=cutoff, asset=asset, source="ClinicalTrials.gov")
+    sql += " AND (json_extract(payload, '$.field') IN ('登记状态','登记研究阶段','登记研究疾病') OR json_extract(payload, '$.category')='primary-outcomes')"
+    trials, outcomes = {}, []
+    fields = {"登记状态": "status", "登记研究阶段": "phase", "登记研究疾病": "conditions"}
+    with closing(connect()) as db:
+        for (payload,) in db.execute("SELECT payload FROM " + table + sql + order, args):
+            row = json.loads(payload)
+            entry = {key: row[key] for key in ("id", "record", "asset", "source_date")}
+            if row.get("category") == "primary-outcomes":
+                entry["endpoints"] = [m["title"] for m in (row["value"] or {}).get("primary_outcomes", [])]
+                if entry["endpoints"]:
+                    outcomes.append(entry)
+            else:
+                trial = trials.setdefault(row["record"], {})
+                trial[fields[row["field"]]] = row["value"]
+                if row["field"] == "登记状态":
+                    trial.update(entry)
+    name = mapping["name"] if mapping else asset.casefold()
+    catalog = json.loads((REPO_ROOT / "data/public/guidance.json").read_text(encoding="utf-8"))
+    guidance = [g for g in catalog if g["asset"] == name and
+                max(g["published"], g["version_date"], g["observed"]) <= cutoff.isoformat()]
+    return {"as_of": cutoff.isoformat(), "trials": [r for r in trials.values() if "id" in r], "outcomes": outcomes, "guidance": guidance}
 
 
 @router.get("/api/public-events")
