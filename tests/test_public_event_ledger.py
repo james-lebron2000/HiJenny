@@ -299,3 +299,15 @@ def test_receipt_retains_last_success_only_for_same_target_configuration(tmp_pat
     watchfile.write_text(json.dumps(watch))
     assert collector.collect(tmp_path, receipt) == 1
     assert json.loads(receipt.read_text())["checks"][0]["last_success_utc"] is None
+
+
+def test_fda_document_diff_compares_type_and_url_and_requires_previous_snapshot():
+    from hijenny.api.public_events import document_changes
+    a = {"type": "Label", "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/old.pdf"}
+    b = dict(a, url=a["url"].replace("old", "new"))
+    letter = dict(a, type="Letter")
+    row = {"source": "Drugs@FDA", "documents": [letter, b]}
+    assert document_changes(row) == {}
+    assert document_changes(dict(row, previous_documents=[a, letter])) == {"added": [b], "removed": [a]}
+    assert document_changes(dict(row, previous_documents=[b, letter])) == {}
+    assert document_changes(dict(row, documents=[], previous_documents=[a])) == {"removed": [a]}

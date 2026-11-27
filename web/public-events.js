@@ -323,15 +323,22 @@ function renderPublicEvents() {
             }
           }
         }
-        if (r.documents?.length) {
+        const fileChanges=result.document_changes?.[r.id] || {};
+        if (r.documents?.length || fileChanges.removed?.length) {
           const types = {Label:'药品标签',Letter:'批准函',Review:'审评资料','Medication Guide':'用药指南'};
           const links = document.createElement('ul');
-          for (const doc of r.documents) {
+          const current=(r.documents || []).map(doc=>{
+            const added=fileChanges.added?.some(d=>d.type===doc.type && d.url===doc.url);
+            return {doc, label:added?'本次新增归档链接 · ':''};
+          });
+          const removed=(fileChanges.removed || []).map(doc=>({doc,label:'仅上次归档列出 · '}));
+          for (const {doc,label} of [...current,...removed]) {
+            if (!doc.url.startsWith('https://www.accessdata.fda.gov/drugsatfda_docs/')) continue;
             const item = document.createElement('li');
             const link = document.createElement('a');
             link.href=doc.url; link.target='_blank'; link.rel='noopener noreferrer';
             link.textContent=types[doc.type] || doc.type;
-            item.append(link); links.append(item);
+            item.append(label,link); links.append(item);
           }
           card.append(links);
         }

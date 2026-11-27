@@ -142,6 +142,15 @@ def source_counts(db, table, sql, args):
     return [{"source": source, "events": events, "records": records} for source, events, records in rows]
 
 
+def document_changes(row):
+    if row["source"] != "Drugs@FDA" or "previous_documents" not in row or "documents" not in row:
+        return {}
+    current = {(d["type"], d["url"]) for d in row["documents"]}
+    previous = {(d["type"], d["url"]) for d in row["previous_documents"]}
+    return {key: [{"type": kind, "url": url} for kind, url in sorted(diff)]
+            for key, diff in (("added", current - previous), ("removed", previous - current)) if diff}
+
+
 @router.get("/api/public-events")
 def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
                   limit: int = Query(50, ge=1, le=100)):
@@ -151,7 +160,10 @@ def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
         counts = source_counts(db, table, sql, args)
         count = sum(row["events"] for row in counts)
         rows = db.execute(f"SELECT payload FROM {table}" + sql + order + " LIMIT ? OFFSET ?", (*args, limit, offset))
-        return {"total": count, "source_counts": counts, "asset_match": mapping, "items": [json.loads(row[0]) for row in rows]}
+        items = [json.loads(row[0]) for row in rows]
+        differences = {row["id"]: diff for row in items if (diff := document_changes(row))}
+        return {"total": count, "source_counts": counts, "asset_match": mapping,
+                "document_changes": differences, "items": items}
 
 
 def display(value):
@@ -201,7 +213,11 @@ def report(filters=Depends(event_filters)):
             for trial in row.get("label_trials", []):
                 lines.extend([f'标签所列试验 · {trial["name"]} · https://clinicaltrials.gov/study/{trial["id"]}',
                               f'{trial["section"]} · 第 {trial["page"]} 页 · {trial["label"]}#page={trial["page"]}'])
+            diff = document_changes(row)
             for doc in row.get("documents", []):
-                lines.append(f'{doc["type"]} · {doc["url"]}')
+                prefix = "本次新增归档链接 · " if doc in diff.get("added", []) else ""
+                lines.append(f'{prefix}{doc["type"]} · {doc["url"]}')
+            for doc in diff.get("removed", []):
+                lines.append(f'仅上次归档列出 · {doc["type"]} · {doc["url"]}')
     lines.append(f"\n共 {count} 条")
     return PlainTextResponse("\n".join(lines), headers={"Content-Disposition": 'attachment; filename="HiJenny-public-events.txt"'})

@@ -47,7 +47,7 @@ def import_month(db, name, sha, content):
                                       "https://www.ema.europa.eu/en/medicines/human/EPAR/", "https://jrct.mhlw.go.jp/en-latest-detail/",
                                       "https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=")):
             raise ValueError("Unexpected public source")
-        for doc in row.get("documents", []):
+        for doc in [*row.get("documents", []), *row.get("previous_documents", [])]:
             if row["source"] != "Drugs@FDA" or not doc["url"].startswith("https://www.accessdata.fda.gov/drugsatfda_docs/"):
                 raise ValueError("Unexpected regulatory document source")
         payload = json.dumps(row, sort_keys=True, ensure_ascii=False)
