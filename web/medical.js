@@ -95,6 +95,7 @@ async function renderMedical() {
   let revisionBase=null;
   let dirty = false;
   let answerQuery='', includeEarlier=false;
+  let actionFilter="open";
   function draw() {
     dirty = false;
     window.history.replaceState(null,'','#/medical'+(version?'?version='+encodeURIComponent(version.id):''));
@@ -104,6 +105,9 @@ async function renderMedical() {
     const conflictPool = version ? version.conflictPool || [] : run?.conflicts || [];
     const relevantConflicts = ids => conflictPool.filter(c=>ids.has(c.left) || ids.has(c.right));
     const selected = new Map((version?.refs || []).map(ref=>[ref.id,ref]));
+    const superseded=confirmedMeetingHistory(saved);
+    const actions=saved.filter(v=>v.confirmed && v.action && !superseded.has(v.id))
+      .sort((a,b)=>(a.due || "9999").localeCompare(b.due || "9999"));
     const affected=saved.filter(v=>v.confirmed).map(v=>({version:v,
       alerts:meetingPublicationAlerts(v,checks,briefDates.get(v.briefId))})).filter(row=>row.alerts.length);
     const savedBriefIds = new Set(saved.map(v=>v.briefId));
@@ -130,6 +134,9 @@ async function renderMedical() {
         <label>问题、答复、复核人、待办或来源编号<input id="meeting-answer-query" type="search" value="${esc(answerQuery)}"></label>
         <label><input id="meeting-answer-earlier" type="checkbox" ${includeEarlier?'checked':''}> 包含已有后续确认版的历史答复</label>
         <div id="meeting-answer-hits" aria-live="polite"></div></details>`:''}
+      ${actions.length?`<details id="meeting-actions" class="card"><summary>会后行动台账（${actions.length}）</summary>
+        <label>显示<select data-action-filter>${[['open','待跟进'],['closed','已完成'],['all','全部']].map(([id,title])=>option(id,actionFilter,title)).join('')}</select></label>
+        <div data-actions-list></div><p role="status"></p></details>`:''}
       ${affected.length ? `<section class="card"><h2>引文需要复查的已确认简报（${affected.length}）</h2>
       ${affected.map(row=>`<p><button type="button" class="btn" data-affected="${esc(row.version.id)}">${esc(row.version.question)} · ${esc(fmtDate(row.version.created))}</button> · 涉及 ${row.alerts.map(a=>esc(a.id)).join('、')}</p>`).join('')}</section>` : ''}
       ${alerts.length ? `<section class="card"><h3>本版引文的后续复查</h3>
@@ -192,9 +199,45 @@ async function renderMedical() {
       $('#meeting-history',body).focus();
     }
     for (const button of $$('[data-affected]',body)) button.onclick=()=>openSaved(button.dataset.affected);
+    const agenda=$('#meeting-actions',body);
+    if (agenda) {
+      const list=agenda.querySelector('[data-actions-list]');
+      const key=id=>'hijenny.medical-action.completed.'+id;
+      function refreshActions() {
+        const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei'}).format(new Date());
+        const items=[];
+        for (const v of actions) {
+          const closed=JSON.parse(localStorage.getItem(key(v.id)) || 'null');
+          if ((actionFilter==='open' && closed) || (actionFilter==='closed' && !closed)) continue;
+          const timing=!v.due?'未设期限':v.due<today?'已过计划日期':v.due===today?'今日到期':'计划日期';
+          items.push(`<article><h3>${esc(v.action)}</h3><p>${esc(v.owner || '负责人未填')} · ${closed?'计划日期':timing} ${esc(v.due || '')}</p>
+            <button type="button" class="btn" data-open-action="${esc(v.id)}">${esc(v.question)} · 查看确认版</button>
+            ${closed?`<p>完成记录 · ${esc(closed.actor)} · ${esc(fmtDate(closed.at))} · ${esc(closed.note)}</p>`:
+              `<details><summary>登记完成情况</summary><form data-close-action="${esc(v.id)}">
+              <label>登记人<input required name="actor" maxlength="120"></label>
+              <label>完成结果或交付物位置<textarea required name="note" maxlength="2000"></textarea></label>
+              <button class="btn">保存完成记录</button></form></details>`}</article>`);
+        }
+        list.innerHTML=items.join('') || '<p>当前条件下没有行动记录。</p>';
+      }
+      agenda.querySelector('select').onchange=e=>{actionFilter=e.target.value;refreshActions();};
+      list.onclick=e=>{const button=e.target.closest('[data-open-action]');if(button) openSaved(button.dataset.openAction);};
+      list.onsubmit=e=>{
+        e.preventDefault();
+        const form=e.target, actor=form.elements.actor.value.trim(), note=form.elements.note.value.trim();
+        const status=agenda.querySelector('[role=status]');
+        if (!actor || !note) {status.textContent='请填写登记人和完成结果。';return;}
+        try {
+          const storageKey=key(form.dataset.closeAction);
+          if (!localStorage.getItem(storageKey)) localStorage.setItem(storageKey,JSON.stringify({actor,note,at:new Date().toISOString()}));
+          refreshActions();status.textContent='本机已记录完成情况，可在「已完成」中查看。';
+        } catch {status.textContent='无法保存本机完成记录，请检查浏览器存储空间。';}
+      };
+      refreshActions();
+    }
     const library=$('#meeting-answer-library',body);
     if (library) {
-      const hits=$('#meeting-answer-hits',library), superseded=confirmedMeetingHistory(saved);
+      const hits=$('#meeting-answer-hits',library);
       const affectedIds=new Set(affected.map(row=>row.version.id));
       function findAnswers() {
         answerQuery=$('#meeting-answer-query',library).value;
