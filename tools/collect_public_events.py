@@ -45,16 +45,22 @@ def sec_records(company):
     data = fetch(f"https://data.sec.gov/submissions/CIK{cik}.json")
     if int(data["cik"]) != int(cik):
         raise ValueError("Unexpected SEC filer")
+    tracked = company.get("filings", {})
+    pending = set(tracked)
+    oldest = min([company["since"], *tracked.values()])
     filings = data["filings"]
     batches = [filings["recent"]]
     for archive in filings["files"]:
-        if archive["filingTo"] >= company["since"]:
+        if archive["filingTo"] >= oldest:
             batches.append(fetch("https://data.sec.gov/submissions/" + quote(archive["name"], safe="")))
     for batch in batches:
         for i, accession in enumerate(batch["accessionNumber"]):
             form, date = batch["form"][i], batch["filingDate"][i]
-            if date < company["since"] or form.split("/")[0] not in FORMS:
+            if accession in tracked and date != tracked[accession]:
+                raise ValueError("Tracked SEC filing date differs from official index: " + accession)
+            if (date < company["since"] and accession not in tracked) or form.split("/")[0] not in FORMS:
                 continue
+            pending.discard(accession)
             doc = quote(batch["primaryDocument"][i], safe="")
             url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}/{doc}"
             row = dict(source="SEC", record=accession, subject=company["company"], field="公司申报",
@@ -64,6 +70,9 @@ def sec_records(company):
             for code, label in (("1.01", "签订重大最终协议"), ("1.02", "终止重大最终协议")):
                 if code in items:
                     yield dict(row, field="重大协议申报项目 " + code, value=label + "（具体交易和资产待核实）")
+
+    if pending:
+        raise ValueError("Tracked SEC filings missing from submission index: " + ", ".join(sorted(pending)))
 
 
 def fda_records(target):
