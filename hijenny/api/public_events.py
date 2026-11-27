@@ -4,9 +4,10 @@ from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from urllib.parse import urlencode
+from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 
 from hijenny.asset_names import verified_asset
 from hijenny.config import REPO_ROOT
@@ -249,6 +250,37 @@ def display(value):
     if isinstance(value, dict):
         return " · ".join(str(v) for v in (value.get("date"), value.get("type")) if v)
     return "未披露" if value is None else str(value)
+
+
+@router.get("/api/public-events/feed.atom")
+def event_feed(request: Request, filters=Depends(event_filters)):
+    table, sql, args, _, labels, _ = filters
+    with closing(connect()) as db:
+        db.execute("BEGIN")
+        rows = db.execute(f"SELECT payload FROM {table}" + sql +
+                          " ORDER BY julianday(json_extract(payload, '$.observed')) DESC, id LIMIT 100", args)
+        events = [json.loads(row[0]) for row in rows]
+        receipt = db.execute("SELECT payload FROM collection_receipt WHERE id=1").fetchone()
+    feed = ET.Element("feed", xmlns="http://www.w3.org/2005/Atom")
+    feed_url = str(request.url)
+    ET.SubElement(feed, "id").text = feed_url
+    ET.SubElement(feed, "link", rel="self", href=feed_url)
+    ET.SubElement(feed, "title").text = "HiJenny 公开动态" + (" · " + " · ".join(labels) if labels else "")
+    ET.SubElement(ET.SubElement(feed, "author"), "name").text = "HiJenny"
+    updated = json.loads(receipt[0])["finished_utc"] if receipt else datetime.now(timezone.utc).isoformat()
+    ET.SubElement(feed, "updated").text = events[0]["observed"] if events else updated
+    for row in events:
+        entry = ET.SubElement(feed, "entry")
+        archive = str(request.base_url) + "#/public-events?" + urlencode({"event": row["id"]})
+        ET.SubElement(entry, "id").text = archive
+        ET.SubElement(entry, "link", rel="alternate", href=archive)
+        ET.SubElement(entry, "link", rel="related", title=row["source"], href=row["url"])
+        ET.SubElement(entry, "updated").text = row["observed"]
+        ET.SubElement(entry, "title").text = f'{row["asset"] or row["subject"]} · {row["field"]}'
+        ET.SubElement(entry, "summary").text = (
+            f'{KINDS[row["kind"]]} · {row["source"]} · {row["record"]} · '
+            f'{row.get("date_label", "来源披露")} {row["source_date"]}\n{display(row["value"])}')
+    return Response(ET.tostring(feed, encoding="utf-8", xml_declaration=True), media_type="application/atom+xml")
 
 
 @router.get("/api/public-events/report.txt", response_class=PlainTextResponse)

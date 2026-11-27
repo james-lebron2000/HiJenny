@@ -63,6 +63,16 @@ def test_review_digest_uses_taipei_discovery_day_and_exports_all_matches(tmp_pat
     assert [r["id"] for r in client.get("/api/public-events", params=cutoff).json()["items"]] == ["2"]
     assert client.get("/api/public-events/count", params=cutoff).json() == {"total": 1}
     assert client.get("/api/public-events/count", params=dict(cutoff, event_id="1")).json() == {"total": 0}
+    from xml.etree import ElementTree
+    atom = "{http://www.w3.org/2005/Atom}"
+    response = client.get("/api/public-events/feed.atom", params=cutoff)
+    assert response.headers["content-type"] == "application/atom+xml"
+    entry, = ElementTree.fromstring(response.content).findall(atom + "entry")
+    assert entry.findtext(atom + "id") == "http://testserver/#/public-events?event=2"
+    assert entry.findtext(atom + "updated") == "2026-11-27T15:59:59Z"
+    assert entry.find(atom + "link[@rel='related']").get("href") == row["url"]
+    empty = client.get("/api/public-events/feed.atom", params=dict(cutoff, asset="missing"))
+    assert not ElementTree.fromstring(empty.content).findall(atom + "entry")
     filtered_report = client.get("/api/public-events/report.txt", params=cutoff).text
     assert "仅含首次观察晚于" in filtered_report and "共 1 条" in filtered_report
     assert client.get("/api/public-events", params={"observed_after": "2026-11-27T00:00:00"}).status_code == 422
