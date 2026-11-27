@@ -95,7 +95,7 @@ async function renderMedical() {
   let revisionBase=null;
   let dirty = false;
   let answerQuery='', includeEarlier=false;
-  let actionFilter="open";
+  let actionFilter="open", actionOwner="";
   function draw() {
     dirty = false;
     window.history.replaceState(null,'','#/medical'+(version?'?version='+encodeURIComponent(version.id):''));
@@ -136,6 +136,8 @@ async function renderMedical() {
         <div id="meeting-answer-hits" aria-live="polite"></div></details>`:''}
       ${actions.length?`<details id="meeting-actions" class="card"><summary>会后行动台账</summary>
         <label>显示<select data-action-filter>${[['open','待跟进'],['closed','已完成'],['all','全部当前行动'],['history','历史确认版']].map(([id,title])=>option(id,actionFilter,title)).join('')}</select></label>
+        <label>负责人<select data-action-owner><option value="">全部负责人</option>${[...new Set(actions.map(v=>v.owner).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh')).map(owner=>option(owner,actionOwner,owner)).join('')}</select></label>
+        <button class="btn" type="button" data-action-export>下载当前行动清单（文本）</button>
         <div data-actions-list></div><p role="status"></p></details>`:''}
       ${affected.length ? `<section class="card"><h2>引文需要复查的已确认简报（${affected.length}）</h2>
       ${affected.map(row=>`<p><button type="button" class="btn" data-affected="${esc(row.version.id)}">${esc(row.version.question)} · ${esc(fmtDate(row.version.created))}</button> · 涉及 ${row.alerts.map(a=>esc(a.id)).join('、')}</p>`).join('')}</section>` : ''}
@@ -204,16 +206,22 @@ async function renderMedical() {
     if (agenda) {
       const list=agenda.querySelector('[data-actions-list]');
       const key=id=>'hijenny.medical-action.completed.'+id;
+      const filter=agenda.querySelector('[data-action-filter]'), download=agenda.querySelector('[data-action-export]');
       function refreshActions() {
         const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei'}).format(new Date());
-        const items=[];
+        const items=[], entries=[];
         for (const v of actions) {
           const historical=superseded.has(v.id);
-          if (historical!==(actionFilter==='history')) continue;
+          if (historical!==(actionFilter==='history') || (actionOwner && actionOwner!==v.owner)) continue;
           const closed=JSON.parse(localStorage.getItem(key(v.id)) || 'null');
           if ((actionFilter==='open' && closed) || (actionFilter==='closed' && !closed)) continue;
           const dated=/^\d{4}-\d{2}-\d{2}$/.test(v.due || '');
           const timing=!v.due?'未设期限':!dated?'原记录期限':v.due<today?'已过计划日期':v.due===today?'今日到期':'计划日期';
+          entries.push([
+            v.action, '负责人 '+(v.owner || '未填')+' · '+(closed?'计划日期':timing)+' '+(v.due || ''),
+            '会议问题 '+v.question,'确认版本 '+v.id+' · '+v.created+' · 医学复核人 '+(v.reviewer || '未填'),
+            closed ? '已完成 · '+closed.actor+' · '+closed.at+'\n'+closed.note : historical?'历史版未登记完成情况':'待跟进'
+          ].join('\n'));
           items.push(`<article><h3>${esc(v.action)}</h3><p>${esc(v.owner || '负责人未填')} · ${closed?'计划日期':timing} ${esc(v.due || '')}</p>
             <button type="button" class="btn" data-open-action="${esc(v.id)}">${esc(v.question)} · 查看确认版</button>
             ${closed?`<p>完成记录 · ${esc(closed.actor)} · ${esc(fmtDate(closed.at))} · ${esc(closed.note)}</p>`:
@@ -222,9 +230,18 @@ async function renderMedical() {
               <label>完成结果或交付物位置<textarea required name="note" maxlength="2000"></textarea></label>
               <button class="btn">保存完成记录</button></form></details>`}</article>`);
         }
+        download.disabled=!entries.length;
+        download.onclick=()=>{
+          const text=['HiJenny 医学交流 · 会后行动清单',today+'（台北） · '+filter.selectedOptions[0].textContent+
+            ' · '+(actionOwner || '全部负责人')+' · '+entries.length+' 项',...entries].join('\n\n');
+          const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
+          const link=document.createElement('a');link.href=url;link.download='HiJenny-会后行动-'+today+'.txt';link.click();
+          setTimeout(()=>URL.revokeObjectURL(url),1000);
+        };
         list.innerHTML=items.join('') || '<p>当前条件下没有行动记录。</p>';
       }
-      agenda.querySelector('select').onchange=e=>{actionFilter=e.target.value;refreshActions();};
+      agenda.querySelector('[data-action-owner]').onchange=e=>{actionOwner=e.target.value;refreshActions();};
+      filter.onchange=e=>{actionFilter=e.target.value;refreshActions();};
       list.onclick=e=>{const button=e.target.closest('[data-open-action]');if(button) openSaved(button.dataset.openAction);};
       list.onsubmit=e=>{
         e.preventDefault();
