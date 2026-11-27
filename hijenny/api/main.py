@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hijenny import config, exports, pipeline, reporting, store
 from sqlalchemy import text
+from hijenny.parse_coverage import pdf_review_ranges
 from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
 
@@ -149,6 +150,7 @@ def _doc_json(document: dict) -> dict:
     out = dict(document)
     url = _stored_path_url(document)
     name = str(document.get("filename") or "")
+    out["pdf_review_ranges"] = pdf_review_ranges(document)
     out["file_url"] = url
     out["pdf_url"] = url if name.lower().endswith(".pdf") else ""
     out["is_pdf"] = name.lower().endswith(".pdf")

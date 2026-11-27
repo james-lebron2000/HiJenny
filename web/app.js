@@ -875,8 +875,17 @@ async function renderUpload(seq) {
 
     const docRows = state.documents.map((doc) => {
       const fileUrl = doc.file_url || '';
+      const labels = {scan:'疑似扫描或图像页',empty:'未提取到内容',error:'单页解析失败',unparsed:'超过解析上限'};
+      const pageNotes = Object.entries(doc.pdf_review_ranges || {}).map(([reason,ranges])=>{
+        const links = ranges.map(([first,last])=>{
+          const label = first === last ? first : first + '–' + last;
+          return fileUrl ? `<a href="${esc(fileUrl)}#page=${first}" target="_blank" rel="noopener">${label}</a>` : label;
+        });
+        return `<div>${esc(labels[reason] || reason)} · 第 ${links.join('、')} 页</div>`;
+      });
+
       return `<tr>
-        <td class="title-cell">${esc(doc.filename)}</td>
+        <td class="title-cell">${esc(doc.filename)}${pageNotes.length ? `<details><summary>需核对 PDF 原页</summary>${pageNotes.join('')}</details>` : ''}</td>
         <td>${chip(doc.doc_type || 'OTHER', 'blue')}</td>
         <td>${esc(doc.version || '—')}</td>
         <td class="num">${Number(doc.page_count || 0)}</td>

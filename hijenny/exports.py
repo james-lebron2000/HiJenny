@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from hijenny import config, store
+from hijenny.parse_coverage import pdf_review_ranges
 
 # ---------------------------------------------------------------------------
 # Ordering / labelling
@@ -1523,6 +1524,17 @@ def _md_overview_appendix(overview: dict) -> list[str]:
     return lines
 
 
+def _pdf_review_notes(data):
+    labels = {"scan": "possible scan or image-only", "empty": "no extractable content",
+              "error": "page parsing error", "unparsed": "beyond parsing limit"}
+    for document in data.get("documents") or []:
+        if not document.get("is_latest", True):
+            continue
+        for reason, ranges in pdf_review_ranges(document).items():
+            pages = ", ".join(str(a) if a == b else f"{a}–{b}" for a, b in ranges)
+            yield f"{document['filename']} · {labels[reason]} · pp. {pages}"
+
+
 def render_markdown_report(data: dict) -> str:
     """Professional Markdown due-diligence report derived from store rows."""
     data = sanitize_data(data)
@@ -1655,6 +1667,8 @@ def render_markdown_report(data: dict) -> str:
         f"{data.get('pages_latest') or stats.get('pages', 0)} parsed page(s) and {stats.get('evidence', evidence_count)} "
         f"extracted evidence item(s); document mix — {type_text}."
     )
+    for note in _pdf_review_notes(data):
+        add(f"   - PDF source review required · {note}")
     top = key_findings(data, limit=3)
     counts = finding_counts(data)
     active_summary = findings_count_text(data)
@@ -2242,6 +2256,8 @@ def build_report_docx(data: dict, out_path: str | Path | None = None) -> Path:
         f"{stats.get('evidence', len(data.get('evidence') or []))} extracted evidence item(s) "
         f"({type_text})."
     )
+    for note in _pdf_review_notes(data):
+        doc.add_paragraph(f"PDF source review required · {note}")
     active_summary = findings_count_text(data)
     if top:
         doc.add_paragraph(

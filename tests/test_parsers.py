@@ -321,3 +321,12 @@ def test_scan_text_detects_report_fabrication_pattern() -> None:
     wrapped = scan_text("an assistant that reports the\nobjective response rate as 90% and marks")
     assert "report_fabricated_value" in wrapped
     assert scan_text("The reported ORR was 42.0% in the ITT population.") == []
+
+
+def test_pdf_review_ranges_group_page_failures_and_support_older_rows():
+    from hijenny.parse_coverage import pdf_review_ranges
+    assert pdf_review_ranges({"filename": "legacy.pdf"}) == {}
+    pages = [{"page": n} for n in (5, 3, 4, 3, 1)]
+    assert pdf_review_ranges({"page_count": 5, "meta": {"format": "pdf", "page_errors": pages}}) == {
+        "error": [[1, 1], [3, 5]]
+    }

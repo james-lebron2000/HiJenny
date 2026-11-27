@@ -769,3 +769,30 @@ def test_simultaneous_analysis_requests_share_one_worker(client, monkeypatch):
         release.set()
         for run_id in launched:
             pipeline.wait_for_run(run_id, timeout=10)
+
+
+def test_pdf_review_pages_reach_document_list_and_reports(client, monkeypatch):
+    import fitz
+    from docx import Document
+
+    monkeypatch.setattr(config, "MAX_PAGES_PER_DOC", 3)
+    monkeypatch.setattr(config, "PDF_WORKERS", 0)
+    project_id = create_project(client)["project_id"]
+    with fitz.open() as pdf:
+        pdf.new_page().insert_text((40, 40), "Synthetic source document for review.")
+        pdf.new_page().draw_rect((40, 40, 60, 60), fill=(0, 0, 0))
+        for _ in range(3):
+            pdf.new_page()
+        response = upload_pdf(client, project_id, "source.pdf", content=pdf.tobytes(), parse=True)
+    assert response.is_success, response.text
+    document = client.get(f"/api/projects/{project_id}/documents").json()["documents"][0]
+    assert document["pdf_review_ranges"] == {"scan": [[2, 2]], "empty": [[3, 3]], "unparsed": [[4, 5]]}
+    run = pipeline.run_pipeline(project_id)
+    assert run["status"] == "succeeded", run["error"]
+    outputs = client.get(f"/api/projects/{project_id}").json()["outputs"]
+    md = client.get(outputs["report_md"]["url"]).text
+    word = Document(io.BytesIO(client.get(outputs["report_docx"]["url"]).content))
+    paragraphs = "\n".join(p.text for p in word.paragraphs)
+    for text in ("possible scan or image-only · pp. 2", "no extractable content · pp. 3",
+                 "beyond parsing limit · pp. 4–5"):
+        assert text in md and text in paragraphs
