@@ -44,6 +44,8 @@ const state = {
   runFull: null,
   runId: null,
   pollTimer: null,
+  pollController: null,
+  pollNotice: '',
   renderSeq: 0,
   uploadQueue: [],
   selectedEvidenceId: null,
@@ -353,7 +355,10 @@ async function renderView() {
 async function ensureProjectLoaded() {
   if (!state.projectId) return null;
   if (state.project && state.project.project_id === state.projectId && state.stats) return state.project;
-  const data = await api(`/api/projects/${state.projectId}`);
+  const projectId = state.projectId;
+  const data = await api(`/api/projects/${projectId}`);
+  if (projectId !== state.projectId) return null;
+  restoreRun(data.latest_run);
   state.project = data.project;
   state.stats = data.stats;
   state.outputs = data.outputs || null;
@@ -371,7 +376,7 @@ async function renderProjects(seq) {
     if (seq !== state.renderSeq) return;
     state.projects = data.projects || [];
     if (!state.projects.some((p) => p.project_id === state.projectId)) {
-      state.projectId = state.projects.length ? state.projects[0].project_id : null;
+      selectProject(state.projects.length ? state.projects[0].project_id : null);
       if (state.projectId) localStorage.setItem('hijenny.project', state.projectId);
     }
     updateTopbar();
@@ -837,6 +842,7 @@ function runProgressHtml() {
       </div>
       <div class="progress-track"><div class="progress-fill" style="width:${clamp(Number(run.percent || 0), 0, 100)}%"></div></div>
       <div class="stage-row">${stagePillsHtml(state.runFull || run)}</div>
+      ${state.pollNotice ? `<p role="status">${esc(state.pollNotice)}</p>` : ''}
       ${err ? `<div class="run-error">${esc(err)}</div>` : ''}
     </div>
   </div>`;
@@ -863,14 +869,7 @@ async function renderUpload(seq) {
     state.documents = (docsRes.documents || data.documents || []);
     state.runs = data.runs || [];
     state.outputs = data.outputs || null;
-    const latest = data.latest_run;
-    if (latest && latest.run && latest.run.status === 'running') {
-      startPolling(latest.run.run_id);
-    } else if (latest && latest.run) {
-      state.run = latest.progress;
-      state.runFull = latest.run;
-      state.runId = latest.run.run_id;
-    }
+    restoreRun(data.latest_run);
     updateTopbar();
     updateSidebarBadges();
 
@@ -1559,7 +1558,7 @@ async function handleAction(action, el) {
     }
     if (action === 'toggle-create-project') { state.showCreateForm = !state.showCreateForm; renderView(); return; }
     if (action === 'open-project') {
-      state.projectId = el.dataset.id;
+      selectProject(el.dataset.id);
       localStorage.setItem('hijenny.project', state.projectId);
       state.project = null; state.documents = []; state.evidenceAll = []; state.findings = []; state.questions = [];
       state.previewDocId = null; state.selectedEvidenceId = null; state.outputs = null;
@@ -1708,7 +1707,7 @@ async function handleSubmit(form, formEl) {
     };
     if (!payload.name) { toast('Project name is required', 'warn'); return; }
     const res = await api('/api/projects', jsonOptions('POST', payload));
-    state.projectId = res.project.project_id;
+    selectProject(res.project.project_id);
     localStorage.setItem('hijenny.project', state.projectId);
     state.project = res.project;
     state.showCreateForm = false;
@@ -1755,9 +1754,10 @@ async function uploadFiles(files) {
 
 async function runAnalysis(force) {
   if (!state.projectId) { toast('Select a project first', 'warn'); return; }
+  const projectId = state.projectId;
   try {
-    const res = await api(`/api/projects/${state.projectId}/analyze`, jsonOptions('POST', { force: Boolean(force) }));
-    state.runId = res.run_id;
+    const res = await api(`/api/projects/${projectId}/analyze`, jsonOptions('POST', { force: Boolean(force) }));
+    if (projectId !== state.projectId) return;
     state.run = res.progress;
     state.runFull = null;
     if (res.already_running) toast('A pipeline run is already in progress', 'warn');
@@ -1769,25 +1769,52 @@ async function runAnalysis(force) {
   }
 }
 
+function selectProject(projectId) {
+  if (projectId === state.projectId) return;
+  stopPolling();
+  state.projectId = projectId;
+  state.runId = state.run = state.runFull = null;
+  state.renderSeq++;
+}
+
+function restoreRun(latest) {
+  const run = latest?.run;
+  if (run?.status === 'running' && state.pollController && state.runId === run.run_id) return;
+  stopPolling();
+  state.run = latest?.progress || null;
+  state.runFull = run || null;
+  state.runId = run?.run_id || null;
+  if (run?.status === 'running') startPolling(run.run_id);
+}
+
 function stopPolling() {
   if (state.pollTimer) clearTimeout(state.pollTimer);
   state.pollTimer = null;
+  state.pollController?.abort();
+  state.pollController = null;
+  state.pollNotice = '';
 }
 
 function startPolling(runId) {
   stopPolling();
   state.runId = runId;
+  const controller = new AbortController();
+  state.pollController = controller;
+  let retryDelay = 1500;
   const tick = async () => {
-    if (state.runId !== runId) return;
+    if (controller.signal.aborted) return;
     try {
-      const data = await api(`/api/runs/${runId}`);
+      const data = await api(`/api/runs/${runId}`, {signal: controller.signal});
+      if (controller.signal.aborted) return;
+      retryDelay = 1500;
+      state.pollNotice = '';
       state.run = data.progress;
       state.runFull = data.run;
       updateRunPanels();
       if (data.run.status === 'running') {
         state.pollTimer = setTimeout(tick, 1500);
       } else {
-        state.pollTimer = null;
+        stopPolling();
         const ok = data.run.status === 'succeeded';
         toast(ok ? 'Analysis complete — evidence, findings and questions are ready' : `Analysis failed: ${String(data.run.error || '').slice(0, 260)}`, ok ? 'ok' : 'err');
         state.project = null;
@@ -1795,7 +1822,16 @@ function startPolling(runId) {
         if (['projects', 'upload', 'findings', 'report', 'evidence'].includes(currentView())) renderView();
       }
     } catch (error) {
-      state.pollTimer = null;
+      if (controller.signal.aborted) return;
+      if (error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status)) {
+        stopPolling();
+        state.pollNotice = '无法读取本次分析状态，请刷新页面核对项目与访问权限。';
+      } else {
+        state.pollNotice = '暂时无法读取分析进度，正在自动重连。';
+        state.pollTimer = setTimeout(tick, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
+      }
+      updateRunPanels();
     }
   };
   tick();
@@ -1870,7 +1906,7 @@ function bindGlobalEvents() {
   if (projectSelect) {
     projectSelect.addEventListener('change', async () => {
       const value = projectSelect.value;
-      state.projectId = value || null;
+      selectProject(value || null);
       if (value) localStorage.setItem('hijenny.project', value);
       state.project = null; state.documents = []; state.evidenceAll = []; state.findings = []; state.questions = [];
       state.previewDocId = null; state.selectedEvidenceId = null; state.outputs = null;
@@ -1905,13 +1941,7 @@ async function init() {
       state.stats = detail.stats;
       state.outputs = detail.outputs || null;
       state.documents = detail.documents || [];
-      const latest = detail.latest_run;
-      if (latest && latest.run) {
-        state.run = latest.progress;
-        state.runFull = latest.run;
-        state.runId = latest.run.run_id;
-        if (latest.run.status === 'running') startPolling(latest.run.run_id);
-      }
+      restoreRun(detail.latest_run);
     } catch (error) { /* non-fatal */ }
   }
   updateTopbar();
