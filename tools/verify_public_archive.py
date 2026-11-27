@@ -9,13 +9,14 @@ from urllib.request import urlopen
 ARCHIVE = Path(__file__).resolve().parents[1] / "data/public/events"
 
 
-def verify(base_url, archive=ARCHIVE):
+def verify(base_url, archive=ARCHIVE, *, read_json=None):
     endpoint = base_url.rstrip("/") + "/api/public-events"
 
     def get(suffix):
         with urlopen(endpoint + suffix, timeout=30) as response:
             return json.load(response)
 
+    read = read_json or get
     expected = {}
     counts = Counter()
     records = defaultdict(set)
@@ -28,11 +29,11 @@ def verify(base_url, archive=ARCHIVE):
             counts[row["source"]] += 1
             records[row["source"]].add(row["record"])
     receipt = json.loads((archive / "collection.json").read_text(encoding="utf-8"))
-    if get("/collection")["receipt"] != receipt:
+    if read("/collection")["receipt"] != receipt:
         raise ValueError("Deployed collection receipt differs from this checkout")
     visited = set()
     while True:
-        page = get("?" + urlencode({"limit": 100, "offset": len(visited)}))
+        page = read("?" + urlencode({"limit": 100, "offset": len(visited)}))
         summary = {r["source"]: (r["events"], r["records"]) for r in page["source_counts"]}
         if page["total"] != len(expected) or summary != {s: (n, len(records[s])) for s, n in counts.items()}:
             raise ValueError("Deployed total or per-source counts differ from the ledger")
@@ -45,7 +46,7 @@ def verify(base_url, archive=ARCHIVE):
             break
         if not page["items"]:
             raise ValueError("Deployed pagination ended before all events were read")
-    if get("/collection")["receipt"] != receipt:
+    if read("/collection")["receipt"] != receipt:
         raise ValueError("Collection receipt changed during verification; refresh checkout and rerun")
     return {"events_verified": len(visited), "sources_verified": len(counts),
             "collection_finished_utc": receipt["finished_utc"], "collection_run": receipt.get("run_id")}

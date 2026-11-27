@@ -1,10 +1,11 @@
 [Unit]
 Description=Import public HiJenny events from GitHub
-After=network-online.target
+After=network-online.target hijenny.service
+Requires=hijenny.service
 
 [Service]
 Type=oneshot
 WorkingDirectory=%h/.local/share/hijenny/current
 Environment=HIJENNY_DATA_DIR=%h/.local/share/hijenny/state
-ExecStart=%h/.local/share/hijenny/runtime-py312/bin/python -m hijenny.public_events
+ExecStart=%h/.local/share/hijenny/runtime-py312/bin/python -m tools.sync_verified_archive %t/hijenny/agent.sock
 UMask=0077
