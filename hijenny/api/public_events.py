@@ -248,8 +248,7 @@ def asset_evidence(asset: str, as_of: date | None = None, exact_asset: bool = Fa
             if row.get("category") == "primary-outcomes":
                 measures = (row["value"] or {}).get("primary_outcomes", [])
                 entry["endpoints"] = [m["title"] for m in measures]
-                entry["measures"] = [{key: m.get(key) for key in ("title", "timeFrame", "populationDescription")}
-                                     for m in measures]
+                entry["measures"] = measures
                 if entry["endpoints"]:
                     outcomes.append(entry)
             else:

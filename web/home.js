@@ -83,11 +83,20 @@ function downloadHomeEvidence(asset,result,lang) {
     return `<h4>${copy.planned}</h4>`+(items?'<ul>'+items+'</ul>'+archive(r.field_events?.planned_endpoints):'<p>'+copy.unavailable+'</p>')+
       '<p>'+posted+'</p>';
   };
-  const outcomeMeasures=r=>(r.measures || r.endpoints.map(title=>({title}))).map(m=>
-    `<li><strong>${esc(m.title)}</strong>${details([[copy.timeFrame,m.timeFrame || copy.missing],
-      [copy.population,m.populationDescription || copy.missing]])}</li>`).join('');
+  const tableLabels={
+    zh:{denoms:denomHeaders,values:outcomeHeaders,scopes:['整个终点','分层','总体'],stat:'统计量',spread:'离散量类型'},
+    en:{denoms:['Scope','Group','Denominator','Denominator unit'],values:['Category','Group','Reported value','Unit','Dispersion','Lower limit','Upper limit','Comment'],scopes:['Entire endpoint','Stratum','Overall'],stat:'Statistic',spread:'Dispersion type'},
+    ja:{denoms:['適用範囲','群','解析分母','分母の単位'],values:['区分','群','報告値','単位','ばらつき','下限','上限','注記'],scopes:['評価項目全体','層','全体'],stat:'統計量',spread:'ばらつきの種類'}
+  }[lang];
+  const outcomeMeasures=r=>(r.measures || r.endpoints.map(title=>({title}))).map(m=>{
+    const {denoms,rows}=measureRows(m,tableLabels.scopes);
+    return `<li><strong>${esc(m.title)}</strong>`+details([[copy.timeFrame,m.timeFrame || copy.missing],
+      [copy.population,m.populationDescription || copy.missing],[tableLabels.stat,m.paramType],[tableLabels.spread,m.dispersionType]])+
+      registryTable(tableLabels.denoms,denoms,copy.missing,copy.missing)+
+      registryTable(tableLabels.values,rows,copy.missing,copy.missing)+'</li>';
+  }).join('');
   const report=`<!doctype html><html lang="${lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(asset)} · ${copy.title}</title>
-    <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}@media print{body{margin:0;font-size:10pt}h2,h3{break-after:avoid}article{break-inside:avoid}}</style>
+    <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}.comparison-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.85em}th,td{padding:.25rem;text-align:left;vertical-align:top;border:1px solid #aab8be;overflow-wrap:anywhere}@media print{.comparison-scroll{overflow:visible}li:has(table){break-inside:auto}body{margin:0;font-size:10pt}h2,h3{break-after:avoid}article{break-inside:avoid}}</style>
     <main><p>HiJenny · ${copy.title}</p><h1>${esc(asset)}</h1><p>${headers.cutoff} ${esc(result.as_of)}</p><p>${copy.scope}</p>`+
     section(headers.trials,result.trials,r=>`<h3>${esc(r.record)} · ${esc(r.asset)}</h3>`+
       details([['phase',copy.phase],['status',copy.status],['sponsor',copy.sponsor],['conditions',copy.conditions],['countries',copy.sites]]

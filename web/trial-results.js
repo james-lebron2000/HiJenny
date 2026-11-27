@@ -7,13 +7,13 @@ function registryTableText(headers,values) {
   return [headers,...values].map(row=>row.map(registryValue).join(' | ')).join('\n');
 }
 
-function registryTable(headers, rows) {
-  if (!rows.length) return '<p>登记未提供此表的数据行。</p>';
+function registryTable(headers, rows, empty='登记未提供此表的数据行。', missing='未提供') {
+  if (!rows.length) return '<p>'+esc(empty)+'</p>';
   return `<div class="comparison-scroll" tabindex="0"><table><thead><tr>${headers.map(h=>'<th scope="col">'+esc(h)+'</th>').join('')}</tr></thead>
-    <tbody>${rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(registryValue(value))+'</td>').join('')+'</tr>').join('')}</tbody></table></div>`;
+    <tbody>${rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value == null || value === '' ? missing : String(value))+'</td>').join('')+'</tr>').join('')}</tbody></table></div>`;
 }
 
-function measureRows(measure) {
+function measureRows(measure, scopes=['整个终点','分层','总体']) {
   const groups = new Map((measure.groups || []).map(g=>[g.id,g.title]));
   const name = id => [id,groups.get(id)].filter(Boolean).join(' · ');
   const rows = [], denoms = [];
@@ -22,12 +22,12 @@ function measureRows(measure) {
       denoms.push([category, name(count.groupId), count.value, denom.units]);
     }
   }
-  collectDenoms(measure,'整个终点');
+  collectDenoms(measure,scopes[0]);
   for (const section of measure.classes || []) {
     const cls=section.title || '';
-    collectDenoms(section,cls || '分层');
+    collectDenoms(section,cls || scopes[1]);
     for (const category of section.categories || []) {
-      const label=[cls,category.title].filter(Boolean).join(' / ') || '总体';
+      const label=[cls,category.title].filter(Boolean).join(' / ') || scopes[2];
       collectDenoms(category,label);
       for (const obs of category.measurements || []) rows.push([
         label,name(obs.groupId),obs.value,measure.unitOfMeasure,obs.spread,obs.lowerLimit,obs.upperLimit,obs.comment
