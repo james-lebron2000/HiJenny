@@ -20,13 +20,13 @@ const homeTasks = {
 const homeRoutes=[['discovery','projects'],['clinical','watch'],['medical','study'],['research','brief']];
 
 const homeEvidence={
-  zh:{heading:'查药物的公开证据',label:'药物名或商品名',search:'查询',example:'奥希替尼',
+  zh:{heading:'查药物的公开证据',label:'药物名、商品名或公司名',search:'查询',example:'奥希替尼',
     cutoff:'归档截面（台北）',trials:'登记试验',results:'有主要终点结果的试验',guidance:'指南与技术评估',
     more:'查看完整资产证据与比较工具',research:'带入医药检索',loading:'正在读取资产归档…',empty:'试验、主要终点和指南暂无匹配记录。',error:'暂时无法读取资产归档。'},
-  en:{heading:'Find evidence for a drug',label:'Drug or brand name',search:'Search',example:'osimertinib',
+  en:{heading:'Find evidence for a drug',label:'Drug, brand or company name',search:'Search',example:'osimertinib',
     cutoff:'Archive as of (Taipei)',trials:'Registered trials',results:'Trials with primary results',guidance:'Guidelines and appraisals',
     more:'Open asset evidence and comparison tools',research:'Continue in research search',loading:'Loading archived evidence…',empty:'No matching trials, primary results or guidance.',error:'The archive is temporarily unavailable.'},
-  ja:{heading:'医薬品の公開資料を調べる',label:'一般名または製品名',search:'検索',example:'osimertinib',
+  ja:{heading:'医薬品の公開資料を調べる',label:'一般名・製品名・企業名',search:'検索',example:'osimertinib',
     cutoff:'収録基準日（台北）',trials:'登録試験',results:'主要評価項目の結果を収録した試験',guidance:'ガイドライン・技術評価',
     more:'資料一覧と試験比較を開く',research:'文献・試験検索へ',loading:'収録データを読み込み中…',empty:'該当する試験・主要評価項目・指針はありません。',error:'現在、収録データを読み込めません。'}
 };
