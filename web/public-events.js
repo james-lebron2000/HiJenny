@@ -119,11 +119,16 @@ function bindArchivedComparison(panel) {
     try {
       const results=await Promise.all(queries.map(q=>api('/api/public-events?limit=100&'+q)));
       if (request!==generation || !panel.isConnected) return;
-      const measures=results.map(result=>result.items.find(r=>r.category==='primary-outcomes')?.value.primary_outcomes || []);
+      const measures=results.map(result=>result.items.find(r=>r.category==='primary-outcomes')?.value?.primary_outcomes || []);
+      const fields=['登记状态','登记研究阶段','登记研究疾病','登记年龄组','牵头申办方','试验中心所在国家或地区','方案登记主要终点'];
+      const design=fields.map(field=>{
+        const values=results.map(result=>result.items.find(r=>r.field===field)?.value);
+        return [field,...values,values.some(v=>!v)?'资料不足':values[0]===values[1]?'原报文字相同':'原报文字不同'];
+      });
       output.innerHTML='<p>归档截至 '+esc(cutoff)+'（台北）。逐项核对原报口径后，再判断结果能否比较。</p>'+
         ids.map((id,i)=>`<p><a href="#/public-events?${esc(queries[i].toString())}">${esc(id)} · ${esc(results[i].items[0]?.asset || '无归档')} · 查看当时记录</a></p>`+
           (measures[i].length?`<label>${esc(id)} 的主要终点<select data-side="${i}">${measures[i].map((m,n)=>`<option value="${n}">${esc(m.title)}</option>`).join('')}</select></label>`:
-          '<p>截至所选日期，尚无该试验的主要终点结果归档。</p>')).join('')+'<div data-dimensions></div>';
+          '<p>截至所选日期，尚无该试验的主要终点结果归档。</p>')).join('')+'<h3>登记方案对照</h3>'+registryTable(['登记字段',...ids,'口径核对'],design)+'<h3>已公布主要终点对照</h3><div data-dimensions></div>';
       function draw() {
         const selected=measures.map((all,i)=>all[Number(output.querySelector(`[data-side="${i}"]`)?.value || 0)]);
         const dimensions=[['终点名称',m=>m.title],['分析人群',m=>m.populationDescription],
@@ -144,6 +149,8 @@ function bindArchivedComparison(panel) {
   };
 }
 
+const archiveTrialSelection={cutoff:null,ids:new Set()};
+
 async function showAssetEvidence(panel, asset, cutoff) {
   const params=new URLSearchParams({asset});
   if (cutoff) params.set('as_of',cutoff);
@@ -155,11 +162,16 @@ async function showAssetEvidence(panel, asset, cutoff) {
   try {
     const data=await api('/api/public-events/asset-evidence?'+params);
     if (!current()) return;
+    if (archiveTrialSelection.cutoff!==data.as_of) {
+      archiveTrialSelection.cutoff=data.as_of;
+      archiveTrialSelection.ids.clear();
+    }
+    const picked=archiveTrialSelection.ids;
     const trialLink=r=>`<a href="#/public-events?event=${encodeURIComponent(r.id)}&amp;as_of=${esc(data.as_of)}">${esc(r.record)}</a>`;
     const section=(label,rows)=>`<h3>${label}（${rows.length}）</h3>`+
       (rows.length?'<ul>'+rows.map(row=>'<li>'+row+'</li>').join('')+'</ul>':'<p>此范围内暂无归档。</p>');
     panel.innerHTML=`<h2>${esc(asset)} · 资产证据</h2><p>按药名及台北截止日 ${esc(data.as_of)} 汇总。试验范围为公开关注名单。</p>`+
-      '<form data-trial-filters><fieldset><legend>筛选试验与结果</legend></fieldset></form><div data-trial-matches></div>'+
+      '<form data-trial-filters><fieldset><legend>筛选试验与结果</legend></fieldset></form><div data-trial-matches></div><div data-picked-trials></div>'+
       section('指南与技术评估',data.guidance.map(g=>`<a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.publisher)} ${esc(g.reference)}</a> · ${esc(g.type)} · ${esc(g.topic)}
         <br>${esc(g.region)} · 来源页面标注版本日期 ${esc(g.version_date)} · 人工收录 ${esc(g.observed)}`));
     const filters=panel.querySelector('fieldset'), matches=panel.querySelector('[data-trial-matches]');
@@ -181,12 +193,41 @@ async function showAssetEvidence(panel, asset, cutoff) {
       const outcomes=data.outcomes.filter(r=>ids.has(r.record));
       matches.innerHTML=section('管线试验',trials.map(r=>{
         const params=new URLSearchParams({source:'ClinicalTrials.gov',source_record:r.record,as_of:data.as_of});
-        return trialLink(r)+' · '+esc(r.asset)+' · '+esc(r.status)+' · '+esc(r.phase || '阶段未收录')+' · '+esc(r.conditions || '疾病未收录')+
+        return `<label><input type="checkbox" data-compare-id="${esc(r.record)}" aria-label="选择比较 ${esc(r.record)}">选择比较</label>`+trialLink(r)+' · '+esc(r.asset)+' · '+esc(r.status)+' · '+esc(r.phase || '阶段未收录')+' · '+esc(r.conditions || '疾病未收录')+
           '<br>牵头申办方 · '+esc(r.sponsor || '未收录')+' · 年龄组 · '+esc(r.ages || '未收录')+
           `<details><summary>中心地区及方案登记终点</summary><p>${esc(r.countries || '地区未收录')}</p><p style="white-space:pre-line">${esc(r.planned_endpoints || '终点未收录')}</p>
           <a href="#/public-events?${esc(params.toString())}">核对这项试验当日的登记字段</a></details>`;
       }))+section('已公布主要终点的试验',outcomes.map(r=>trialLink(r)+' · '+esc(r.endpoints.join('、'))));
+      showSelection();
     }
+    const selection=panel.querySelector('[data-picked-trials]');
+    function showSelection() {
+      for (const box of matches.querySelectorAll('[data-compare-id]')) {
+        box.checked=picked.has(box.dataset.compareId);
+        box.disabled=!box.checked && picked.size===2;
+      }
+      selection.innerHTML='<p>已选 '+picked.size+' / 2 项 · '+esc(data.as_of)+'</p>'+
+        [...picked].map(id=>`<button class="btn" type="button" data-remove="${esc(id)}">移除 ${esc(id)}</button>`).join('')+
+        `<button type="button" class="btn" data-open-comparison ${picked.size===2?'':'disabled'}>比较所选试验</button>`;
+    }
+    matches.onchange=e=>{
+      const id=e.target.dataset.compareId;
+      if (!id) return;
+      if (e.target.checked && picked.size<2) picked.add(id);
+      else picked.delete(id);
+      showSelection();
+    };
+    selection.onclick=e=>{
+      if (e.target.dataset.remove) {picked.delete(e.target.dataset.remove);showSelection();return;}
+      if (!e.target.hasAttribute('data-open-comparison') || picked.size!==2) return;
+      const comparison=$('#archived-comparison'), form=comparison.querySelector('form');
+      [form.elements.first.value,form.elements.second.value]=[...picked];
+      form.elements.cutoff.value=data.as_of;
+      comparison.open=true;
+      comparison.querySelector('summary').focus();
+      comparison.scrollIntoView({block:'start'});
+      form.requestSubmit();
+    };
     filters.form.oninput=draw;
     filters.form.onreset=()=>setTimeout(draw,0);
     filters.form.onsubmit=e=>e.preventDefault();
@@ -202,7 +243,7 @@ function renderPublicEvents() {
     <details class="card" id="public-coverage"><summary>四地区数据覆盖与缺口</summary>
     <p>按来源机构所在地区列出本轮核对的目标。跨国试验和文献可涉及多个地区。成功数按关注目标计算；最近成功时间取该格内最近一次成功核对。</p>
     <div style="overflow-x:auto" aria-live="polite">正在读取覆盖范围…</div></details>
-    <details class="card" id="archived-comparison"><summary>比较两项试验的已归档主要终点</summary>
+    <details class="card" id="archived-comparison"><summary>比较两项试验的登记方案和已归档主要终点</summary>
     <form><datalist id="archive-trial-ids"></datalist>
     <label>第一项试验<input name="first" required list="archive-trial-ids" pattern="[Nn][Cc][Tt][0-9]{8}" placeholder="NCT 编号"></label>
     <label>第二项试验<input name="second" required list="archive-trial-ids" pattern="[Nn][Cc][Tt][0-9]{8}" placeholder="NCT 编号"></label>
