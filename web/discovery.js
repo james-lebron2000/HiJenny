@@ -51,6 +51,9 @@ function opportunityChanges(before, after) {
     if (old.has_results!=null && row.has_results!=null && old.has_results!==row.has_results) {
       fields.push({label:'登记结果',previous:registryResultLabel(old.has_results),current:registryResultLabel(row.has_results)});
     }
+    if (Object.hasOwn(old,'results_posted') && Object.hasOwn(row,'results_posted') && old.results_posted!==row.results_posted) {
+      fields.push({label:'结果首次公布日期',previous:old.results_posted,current:row.results_posted});
+    }
     if (Object.hasOwn(old,'intervention_aliases') && Object.hasOwn(row,'intervention_aliases')) {
       const previous=registryAliasLines(old.intervention_aliases), current=registryAliasLines(row.intervention_aliases);
       if (JSON.stringify(previous)!==JSON.stringify(current)) {
@@ -67,6 +70,49 @@ function opportunityChanges(before, after) {
 
 function opportunityTopic(criteria) {
   return [criteria.condition, criteria.intervention].filter(Boolean).join(' · ');
+}
+
+function downloadOpportunityReport(snapshot, baseline, changes) {
+  const criteria=snapshot.criteria;
+  const lines=['HiJenny 候选试验筛选报告', opportunityTopic(criteria), '',
+    '来源 ClinicalTrials.gov', '快照编号 '+snapshot.id, '检索时间 '+snapshot.created,
+    '数据库命中 '+(snapshot.total ?? '未记录')+' 条，本快照取回 '+snapshot.items.length+' 条'];
+  if (snapshot.pages) lines.push('已取页数 '+snapshot.pages);
+  for (const [key,label] of Object.entries({condition:'适应症',intervention:'输入的干预名称',phase:'阶段',
+    sponsor:'主要申办方',country:'研究中心所在地',results:'登记结果'})) {
+    if (criteria[key]) lines.push(label+' · '+(key==='results'?registryResultLabel(criteria.results==='Yes'):criteria[key]));
+  }
+  if (criteria.intervention) lines.push('登记库实际干预检索词 · '+(snapshot.registry_intervention ?? criteria.intervention));
+  if (snapshot.recheckedFrom) {
+    lines.push('', '候选集复查', '对照快照 '+snapshot.recheckedFrom);
+    if (!baseline) lines.push('本浏览器缺少对照快照，无法计算差异。');
+    else {
+      lines.push('上次检索 '+baseline.created+'，取回 '+baseline.items.length+' 条。按试验编号对照已取回的记录。');
+      if (!changes.length) lines.push('两次取回的候选记录和已核对字段一致。');
+      for (const change of changes) {
+        lines.push('', change.kind+' · '+change.id+' · '+change.title, sourceLink({id:change.id}));
+        for (const field of change.fields || []) lines.push(field.label+' · '+(field.previous || '未披露')+' → '+(field.current || '未披露'));
+      }
+      if (changes.some(change=>change.kind==='本次未见')) lines.push('排序或本次取回范围可能影响可见记录，撤回状态须核对原登记。');
+    }
+  }
+  lines.push('', '候选试验（'+snapshot.items.length+' 条）');
+  for (const row of snapshot.items) {
+    lines.push('', row.id+' · '+row.title, sourceLink(row));
+    for (const [key,label] of Object.entries(opportunityFields)) {
+      if (key==='title') continue;
+      const value=row[key];
+      lines.push(label+' · '+(value===undefined?'此版未采集':(Array.isArray(value)?value.join(' / '):value) || '未披露'));
+    }
+    if (row.intervention_aliases) lines.push('登记干预别名 · '+(registryAliasLines(row.intervention_aliases).join('；') || '未披露'));
+    lines.push(registryResultLabel(row.has_results));
+    if (row.results_posted) lines.push('结果首次公布日期 '+row.results_posted);
+    if (row.retrieved) lines.push('本条取回时间 '+row.retrieved);
+  }
+  const url=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain;charset=utf-8'}));
+  const link=document.createElement('a');
+  link.href=url; link.download='HiJenny-候选试验-'+snapshot.id+'.txt'; link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 function renderDiscovery() {
@@ -111,6 +157,7 @@ function renderDiscovery() {
       <p>筛选时数据库命中 ${esc(snapshot.total)} 条；本快照保存 ${snapshot.items.length} 条。检索时间 ${esc(fmtDate(snapshot.created))}。</p>
       ${registrySearchTerm(snapshot.criteria.intervention,snapshot.registry_intervention)}
       ${parent?`<p><a href="#/discovery?snapshot=${encodeURIComponent(parent.id)}">打开上一版候选快照</a></p>`:''}
+      <button type="button" class="btn" id="screen-export">下载候选集报告</button>
       <button type="button" class="btn" id="screen-recheck">按原条件重新检索并比较</button>
       ${baseline ? `<section class="card"><h3>与上次候选集比较</h3><p>上次检索 ${esc(fmtDate(baseline.created))}，取回 ${baseline.items.length} 条；本次取回 ${snapshot.items.length} 条。按试验编号匹配。排序和检索范围会影响出现的记录，“本次未见”不能证明登记撤回。</p>
       ${changes.length ? changes.map(change=>`<details><summary>${esc(change.kind)} · ${esc(change.id)} · ${esc(change.title)}</summary>
@@ -134,6 +181,7 @@ function renderDiscovery() {
       '<p>没有匹配记录。可放宽阶段或申办方筛选。</p>'}
       ${snapshot.cursor?'<button type="button" class="btn" id="screen-next">继续取下一页并保存新版</button>':''}`;
     bindTrialResultButtons(results);
+    $('#screen-export',root).onclick=()=>downloadOpportunityReport(snapshot,baseline,changes);
     $('#screen-recheck',root).onclick=()=>retrieve(snapshot, true);
     const more=$('#screen-next',root);
     if (more) more.onclick=()=>retrieve(snapshot);
