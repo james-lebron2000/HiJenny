@@ -401,7 +401,7 @@ function bindArchivedComparison(panel) {
 
 const archiveTrialSelection={cutoff:null,ids:new Set()};
 
-async function showAssetEvidence(panel, asset, cutoff, exactAsset) {
+async function showAssetEvidence(panel, asset, cutoff, exactAsset, showLatestChecks) {
   const params=new URLSearchParams({asset});
   if (exactAsset) params.set('exact_asset','true');
   if (cutoff) params.set('as_of',cutoff);
@@ -421,10 +421,11 @@ async function showAssetEvidence(panel, asset, cutoff, exactAsset) {
     const trialLink=r=>`<a href="#/public-events?event=${encodeURIComponent(r.id)}&amp;as_of=${esc(data.as_of)}">${esc(r.record)}</a>`;
     const section=(label,rows)=>`<h3>${label}（${rows.length}）</h3>`+
       (rows.length?'<ul>'+rows.map(row=>'<li>'+row+'</li>').join('')+'</ul>':'<p>此范围内暂无归档。</p>');
-    panel.innerHTML=`<h2>${esc(asset)} · 资产证据</h2><p>按药名及台北截止日 ${esc(data.as_of)} 汇总。试验范围为公开关注名单。</p>`+
+    panel.innerHTML=`<h2>${esc(asset)} · 资产证据</h2><p>按药名及台北截止日 ${esc(data.as_of)} 汇总。试验范围为公开关注名单。</p><div data-latest-checks aria-live="polite"></div>`+
       '<form data-trial-filters><fieldset><legend>筛选试验与结果</legend></fieldset></form><div data-trial-matches></div><div data-picked-trials></div>'+
       section('指南与技术评估',data.guidance.map(g=>`<a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.publisher)} ${esc(g.reference)}</a> · ${esc(g.type)} · ${esc(g.topic)}
         <br>${esc(g.region)} · 来源页面标注版本日期 ${esc(g.version_date)} · 人工收录 ${esc(g.observed)}`));
+    showLatestChecks(panel.querySelector('[data-latest-checks]'),asset);
     const filters=panel.querySelector('fieldset'), matches=panel.querySelector('[data-trial-matches]');
     const facets={phase:'研究阶段',sponsor:'牵头申办方',countries:'中心所在国家或地区',ages:'登记年龄组'};
     const values=(r,key)=>key==='sponsor'?[r.sponsor].filter(Boolean):(r[key] || '').split(' / ').filter(Boolean);
@@ -597,7 +598,8 @@ function renderPublicEvents() {
   };
   bindArchivedComparison($('#archived-comparison'));
   const collection=$('#public-collection');
-  api('/api/public-events/collection').then(({receipt,verification,source_timing,collection_links,subject_aliases={}})=>{
+  const latestCollection=api('/api/public-events/collection');
+  latestCollection.then(({receipt,verification,source_timing,collection_links,subject_aliases={}})=>{
     if (!collection.isConnected) return;
     const body=collection.querySelector('div');
     const coverage=$('#public-coverage div');
@@ -644,7 +646,8 @@ function renderPublicEvents() {
     for (const subject of subjects.slice(1)) {
       const alias=subject_aliases[subject]?.find(name=>/[\u3400-\u9fff]/.test(name));
       // Select by the receipt label so combination regimens retain their own counts.
-      subjectPicker.add(new Option(alias ? alias+' · '+subject : subject || '旧回执未记录对象', String(subjectPicker.options.length)));
+      const entry=new Option(alias ? alias+' · '+subject : subject || '旧回执未记录对象', String(subjectPicker.options.length));
+      entry.dataset.subject=subject;subjectPicker.add(entry);
     }
     const manual=document.createElement('div');
     const manualTargets=new Map();
@@ -693,6 +696,36 @@ function renderPublicEvents() {
   }).catch(()=>{
     if (collection.isConnected) collection.querySelector('div').textContent=$('#public-coverage div').textContent='暂时无法读取采集回执。';
   });
+  async function showLatestChecks(host, asset) {
+    host.textContent='正在读取最近一次采集范围…';
+    try {
+      const {receipt,subject_aliases={}}=await latestCollection;
+      if (!host.isConnected) return;
+      if (!receipt) {host.textContent='尚无采集回执。';return;}
+      const normalize=name=>name.trim().replace(/®$/, '').trim().toLowerCase();
+      const query=normalize(asset);
+      const subjects=[...new Set(receipt.checks.map(check=>check.subject).filter(Boolean))];
+      const matches=subjects.filter(subject=>[subject,...(subject_aliases[subject] || [])].some(name=>normalize(name)===query));
+      host.textContent='最近一次采集 · '+fmtDate(receipt.finished_utc)+' · ';
+      if (!matches.length) {host.append('本批关注名单未匹配到此名称。');return;}
+      for (const subject of matches) {
+        const checks=receipt.checks.filter(check=>check.subject===subject);
+        const ok=checks.filter(check=>check.status==='ok').length;
+        const button=document.createElement('button');
+        button.type='button';button.className='btn sm';
+        button.textContent=subject+' · 成功 '+ok+' / '+checks.length+' · 查看核对明细';
+        button.onclick=()=>{
+          const picker=collection.querySelector('#public-check-subject');
+          const entry=Array.from(picker.options).find(item=>item.dataset.subject===subject);
+          picker.value=entry.value;picker.dispatchEvent(new Event('change'));
+          collection.open=true;picker.focus();collection.scrollIntoView({block:'start'});
+        };
+        host.append(button);
+      }
+    } catch {
+      if (host.isConnected) host.textContent='最近一次采集范围暂时无法核对。';
+    }
+  }
   const initial = hashParams();
   for (const el of form.elements) {
     if (!el.name || !initial.has(el.name)) continue;
@@ -732,7 +765,7 @@ function renderPublicEvents() {
       const eventId = query.get('event')?.trim();
       query.delete('event');
       if (eventId) query.set('event_id', eventId);
-      showAssetEvidence($('#asset-evidence'),query.has('unassigned_asset')?'':query.get('asset_label') || query.get('asset')?.trim() || '',query.get('as_of'),query.has('exact_asset') || query.has('asset_label'));
+      showAssetEvidence($('#asset-evidence'),query.has('unassigned_asset')?'':query.get('asset_label') || query.get('asset')?.trim() || '',query.get('as_of'),query.has('exact_asset') || query.has('asset_label'),showLatestChecks);
       setSavedQuery(null); offset = 0; generation++; list.replaceChildren();
     }
     $('#public-observed-after').hidden=!query.has('observed_after');

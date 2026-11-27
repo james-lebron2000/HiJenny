@@ -219,7 +219,7 @@ def latest_collection():
     for target in (receipt or {}).get("checks", []):
         subject = target.get("subject")
         if subject and (match := verified_asset(subject)):
-            subject_aliases[subject] = list(ASSET_NAMES[match["name"]][0])
+            subject_aliases[subject] = [match["name"], *ASSET_NAMES[match["name"]][0]]
     return {"receipt": receipt, "subject_aliases": subject_aliases, "collection_links": collection_links(receipt or {}),
             "verification": json.loads(check[0]) if check else None, "source_timing": timing}
 
