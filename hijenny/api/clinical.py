@@ -7,9 +7,9 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from docx import Document
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from .brief import clean
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 router = APIRouter()
 Text = Annotated[str, Field(max_length=6000)]
@@ -137,6 +137,56 @@ class Synopsis(BaseModel):
         if any(review.version != self.id for review in self.reviews):
             raise ValueError("复核记录与方案版本不符")
         return self
+
+
+class HandoffExcerpt(BaseModel):
+    label: str
+    text: str
+    event: str | None = None
+
+
+class HandoffReference(TrialReference):
+    archive_cutoff: date | None = None
+    excerpts: list[HandoffExcerpt] = Field(default_factory=list)
+
+
+class HandoffVersion(Synopsis):
+    created: datetime
+    references: list[HandoffReference] = Field(max_length=4)
+    changes: list[Text] = Field(max_length=64)
+
+
+class ClinicalHandoff(BaseModel):
+    format: Literal["hijenny-clinical-v1"]
+    versions: list[HandoffVersion] = Field(min_length=1)
+    reviews: list[ReviewedComment]
+
+    @model_validator(mode="after")
+    def verify_lineage(self):
+        expected_parent = None
+        seen = set()
+        reviews = {r.id: r for r in self.reviews}
+        if len(reviews) != len(self.reviews):
+            raise ValueError("重复的复核意见编号")
+        for version in self.versions:
+            if version.id in seen or version.parent != expected_parent:
+                raise ValueError("设计版本链不完整")
+            if any(reviews.get(item.review.id) != item.review for item in version.responses):
+                raise ValueError("修订回应缺少匹配的原始复核意见")
+            seen.add(version.id)
+            expected_parent = version.id
+        if any(r.version not in seen for r in self.reviews):
+            raise ValueError("复核意见所属版本不在交接包内")
+        return self
+
+
+@router.post("/api/clinical/handoff/validate", status_code=204)
+async def validate_handoff(request: Request):
+    try:
+        ClinicalHandoff.model_validate_json(await request.body(), strict=True)
+    except ValidationError as exc:
+        raise HTTPException(422, "交接包的版本、字段或复核意见不匹配") from exc
+    return Response(status_code=204)
 
 
 @router.post("/api/clinical/synopsis.docx")

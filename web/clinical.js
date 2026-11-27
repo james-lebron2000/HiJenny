@@ -93,6 +93,10 @@ function renderClinical() {
       <label>已保存版本 <select id="design-history"><option value="">当前新草稿</option>
       ${versions().map(v=>option(v.id,version.id,fmtDate(v.created)+' · '+v.question)).join('')}</select></label>
       <button type="button" id="design-new" class="btn">新建空白设计</button>
+      <details id="design-handoff"><summary>交接设计版本与复核记录</summary>
+      <p>下载当前版本及其历次修订、来源快照和复核意见。导入时文件会提交给当前 HiJenny 服务校验，通过后保存到本浏览器。</p>
+      <button class="btn" type="button" data-download>下载交接包</button>
+      <label>导入交接包<input type="file" accept=".json,application/json" data-upload></label><p role="status"></p></details>
       <details><summary>关联登记试验（${refs.length}）</summary>
       ${refs.map(r=>`<article><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.id)} · ${esc(r.title)}</a>
         <p>登记更新 ${esc(r.date)}${r.archive_cutoff?' · <a href="#/public-events?'+esc(new URLSearchParams({source:'ClinicalTrials.gov',source_record:r.id,as_of:r.archive_cutoff}).toString())+'">回查 '+esc(r.archive_cutoff)+' 的归档</a>':''}</p><pre class="source-snapshot">${esc(r.snapshot)}</pre></article>`).join('') ||
@@ -325,6 +329,49 @@ function renderClinical() {
         setTimeout(()=>URL.revokeObjectURL(url),1000);
       } catch (err) { toast(err.message,'err'); }
     }
+    const handoff=$('#design-handoff'), message=handoff.querySelector('[role="status"]');
+    handoff.querySelector('[data-download]').onclick=()=>{
+      if (!save()) return;
+      try {
+        const lineage=[], reviews=[], seen=new Set();
+        for (let item=version;item;item=parentOf(item)) {
+          if (seen.has(item.id)) throw new Error('版本链包含重复编号。');
+          seen.add(item.id);lineage.unshift(item);reviews.push(...reviewsFor(item.id));
+        }
+        if (lineage[0].parent) throw new Error('缺少较早版本，无法导出完整交接包。');
+        const url=URL.createObjectURL(new Blob([JSON.stringify({format:'hijenny-clinical-v1',versions:lineage,reviews})],{type:'application/json'}));
+        const a=document.createElement('a');a.href=url;a.download='HiJenny-design-'+version.id+'.json';a.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      } catch(err) {toast(err.message,'err');}
+    };
+    handoff.querySelector('[data-upload]').onchange=async event=>{
+      const input=event.target,file=input.files[0];
+      if (!file) return;
+      try {
+        const payload=JSON.parse(await file.text());
+        const check=await fetch('/api/clinical/handoff/validate',jsonOptions('POST',payload));
+        if (!check.ok) throw new Error('交接包未通过版本与复核记录校验。');
+        if (!input.isConnected || input.files[0]!==file) return;
+        if ((dirty || reviewDirty) && !confirm('放弃未保存的修改并打开交接版本？')) return;
+        const entries=payload.versions.map(v=>[prefix+v.id,v]);
+        for (const {id,...review} of payload.reviews) entries.push(['hijenny.design-review.'+review.version+'.'+id,review]);
+        const canonical=value=>JSON.stringify(value,(key,item)=>item && typeof item==='object' && !Array.isArray(item)
+          ? Object.fromEntries(Object.keys(item).sort().map(k=>[k,item[k]])):item);
+        const additions=[];
+        for (const [key,value] of entries) {
+          const stored=localStorage.getItem(key), data=JSON.stringify(value);
+          if (stored===null) additions.push([key,data]);
+          else if (canonical(JSON.parse(stored))!==canonical(value)) throw new Error('相同编号的内容与本机不同，请核对文件来源。');
+        }
+        const added=[];
+        try {
+          for (const [key,data] of additions) {localStorage.setItem(key,data);added.push(key);}
+        } catch(err) {for (const key of added) localStorage.removeItem(key);throw err;}
+        version=payload.versions.at(-1);draw();
+        $('#design-status').textContent='交接包已核对 · '+payload.versions.length+' 个版本 · '+payload.reviews.length+' 条复核意见';
+      } catch(err) {message.textContent=err.message;}
+      finally {input.value='';}
+    };
     $('#design-export').onclick=()=>exportDocument('synopsis','方案摘要');
     $('#protocol-export').onclick=()=>exportDocument('protocol','Protocol');
     $('#ib-export').onclick=()=>exportDocument('ib','IB');

@@ -148,3 +148,22 @@ def test_parent_review_response_is_separate_from_current_review_decisions():
     data["responses"].pop()
     review["version"] = version
     assert client.post("/api/clinical/synopsis.docx", json=data).status_code == 422
+
+
+def test_handoff_rejects_broken_lineage_and_unmatched_review_responses():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    first = dict(id=str(uuid4()), created="2026-11-27T01:00:00Z", question="测试", references=[],
+                 changes=[], options=[{}, {}])
+    review = dict(id=str(uuid4()), version=first["id"], reviewer="甲", role="临床", note="补充解释",
+                  decision="需修改", created="2026-11-27T01:01:00Z")
+    child = dict(first, id=str(uuid4()), parent=first["id"], responses=[dict(review=review, reply="已修订")])
+    packet = dict(format="hijenny-clinical-v1", versions=[first, child], reviews=[review])
+    check = lambda: client.post("/api/clinical/handoff/validate", json=packet).status_code
+    assert check() == 204
+    packet["reviews"] = []
+    assert check() == 422
+    packet["reviews"] = [review]
+    packet["versions"].reverse()
+    assert check() == 422
