@@ -94,7 +94,14 @@ class InvestigatorBrochure(BaseModel):
     sections: dict[IBSection, SourcedSection] = Field(default_factory=dict)
 
 
+class PreviousDesign(BaseModel):
+    id: UUID
+    options: list[DesignOption] = Field(min_length=2, max_length=2)
+
+
 class Synopsis(BaseModel):
+    parent: UUID | None = None
+    previous_design: PreviousDesign | None = None
     id: UUID
     question: str = Field(min_length=1, max_length=400)
     options: list[DesignOption] = Field(min_length=2, max_length=2)
@@ -111,6 +118,8 @@ class Synopsis(BaseModel):
 
     @model_validator(mode="after")
     def reviews_belong_to_this_version(self):
+        if self.previous_design and (self.previous_design.id != self.parent or self.parent == self.id):
+            raise ValueError("对照设计与上一版编号不符")
         if any(review.version != self.id for review in self.reviews):
             raise ValueError("复核记录与方案版本不符")
         return self
@@ -146,6 +155,27 @@ def append_review_and_sources(document, plan):
     def paragraph(value):
         document.add_paragraph(clean(value) or "待填写")
 
+    if plan.parent:
+        document.add_heading("候选设计修订前后原文", 1)
+        paragraph(f"上一版 {plan.parent} · 本版 {plan.id}")
+        if plan.previous_design:
+            differences = 0
+            for name, previous, current in zip(("A", "B"), plan.previous_design.options, plan.options):
+                if isinstance(plan, SelectedDesign) and plan.choice != name:
+                    continue
+                for field, label in FIELDS.items():
+                    before, after = getattr(previous, field), getattr(current, field)
+                    if before != after:
+                        differences += 1
+                        document.add_heading(f"设计 {name} · {label}", 2)
+                        paragraph("修订前")
+                        paragraph(before or "（空白）")
+                        paragraph("修订后")
+                        paragraph(after or "（空白）")
+            if not differences:
+                paragraph("本文件所列候选设计字段均与上一版相同。")
+        else:
+            paragraph("本次导出缺少上一版，无法核对原文。")
     document.add_heading("本版专业复核记录", 1)
     for role in ("临床", "统计"):
         reviews = [r for r in plan.reviews if r.role == role]

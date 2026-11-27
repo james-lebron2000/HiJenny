@@ -107,3 +107,23 @@ def test_ib_requires_sources_for_authored_sections_and_keeps_evidence_gaps():
     assert any(data["id"] in p and "2025-01-31" in p for p in paragraphs)
     section["source"] = " "
     assert client.post("/api/clinical/ib.docx", json=data).status_code == 422
+
+
+def test_revision_export_uses_direct_parent_and_selected_candidate():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    parent = str(uuid4())
+    data = dict(id=str(uuid4()), parent=parent, choice="B", question="复核", references=[],
+                options=[{}, {"population": "新版人群"}], previous_design={
+                    "id": parent, "options": [{"exclude": "甲原排除条款"}, {"include": "乙原入选条款"}]})
+    for endpoint in ("synopsis", "sap"):
+        response = client.post(f"/api/clinical/{endpoint}.docx", json=data)
+        assert response.status_code == 200
+        text = "\n".join(p.text for p in Document(BytesIO(response.content)).paragraphs)
+        assert "修订前\n乙原入选条款\n修订后\n（空白）" in text
+        assert "修订前\n（空白）\n修订后\n新版人群" in text
+        assert ("甲原排除条款" in text) == (endpoint == "synopsis")
+        assert parent in text
+    data["previous_design"]["id"] = str(uuid4())
+    assert client.post("/api/clinical/synopsis.docx", json=data).status_code == 422

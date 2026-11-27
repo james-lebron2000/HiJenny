@@ -24,20 +24,22 @@ const csrFields={conduct:'实际实施与偏离方案',cutoff:'数据截止日�
   table:'结果表（CSV 文本）',interpretation:'结果解释与限制'};
 const csrHeader='类别,分析集,组别,指标,评价时间,报告值,单位,分母,出处';
 
+function designDifferences(previous, current) {
+  if (!previous) return [];
+  return current.options.flatMap((opt,index)=>Object.entries(designFields).flatMap(([key,label])=>{
+    const before=previous.options[index][key] || '', after=opt[key] || '';
+    if (before===after) return [];
+    const impact=['population','include','exclude'].includes(key)
+      ? '复核招募可行性、分析集与亚组定义'
+      : key==='endpoint'?'复核访视安排、估计目标与统计分析计划'
+      : key==='control'?'复核分配流程、对照假设与统计比较':'复核实施计划';
+    return [{label:'设计 '+(index?'B':'A')+' · '+label,before,after,impact}];
+  }));
+}
+
 function changedSections(before, after) {
   if (!before) return [];
-  const changes = [];
-  after.options.forEach((opt, i) => {
-    const label = i === 0 ? 'A' : 'B';
-    for (const key of Object.keys(designFields)) {
-      if (opt[key] === before.options[i][key]) continue;
-      const impact = ['population','include','exclude'].includes(key)
-        ? '复核招募可行性、分析集与亚组定义'
-        : key === 'endpoint' ? '复核访视安排、估计目标与统计分析计划'
-        : key === 'control' ? '复核分配流程、对照假设与统计比较' : '复核实施计划';
-      changes.push('设计 ' + label + ' · ' + designFields[key] + '已更改，' + impact);
-    }
-  });
+  const changes=designDifferences(before,after).map(row=>row.label+'已更改，'+row.impact);
   for (const [key,label] of Object.entries({question:'研究问题',choice:'倾向方案',rationale:'选择依据',pending:'待复核事项'})) {
     if (before[key] !== after[key]) changes.push(label + '已更改');
   }
@@ -79,7 +81,12 @@ function renderClinical() {
     return Object.keys(localStorage).filter(key=>key.startsWith(reviewPrefix))
       .map(key=>JSON.parse(localStorage.getItem(key))).sort((a,b)=>a.created.localeCompare(b.created));
   }
+  function parentOf(item) {
+    return item.parent?JSON.parse(localStorage.getItem(prefix+item.parent)):null;
+  }
   function draw() {
+    const previous=parentOf(version);
+    const differences=designDifferences(previous,version);
     const refs = version.references;
     setView(`<section class="research-home" lang="zh-CN"><h1>比较两种临床研究设计</h1>
       <p>用同一研究问题比较人群、对照与主要终点，记录选择依据，导出供团队评审的 Word 摘要。</p>
@@ -131,6 +138,11 @@ function renderClinical() {
       <button type="button" class="btn" id="design-export">保存并导出 Word 草稿</button></form>
       ${version.id?`<section class="card"><h2>本版专业复核</h2>
       <p>意见保存在本浏览器，按设计版本归档。修改设计后，临床和统计人员可分别复核新版。</p>
+      ${version.parent?`<details id="design-revision"><summary>与直接上一版逐项核对候选设计（${differences.length}）</summary>
+        <p>上一版 ${esc(version.parent)} · 本版 ${esc(version.id)}</p>
+        ${previous?(differences.map(row=>`<article><h3>${esc(row.label)}</h3><p>${esc(row.impact)}</p>
+        <strong>修订前</strong><pre class="source-snapshot">${esc(row.before || '（空白）')}</pre>
+        <strong>修订后</strong><pre class="source-snapshot">${esc(row.after || '（空白）')}</pre></article>`).join('') || '<p>两种候选设计的字段均与上一版相同。</p>'):'<p>本浏览器缺少上一版，无法核对原文。</p>'}</details>`:''}
       <div id="design-reviews"></div><form id="design-review-form">
       <label>专业角色<select name="role"><option>临床</option><option>统计</option></select></label>
       <label>复核人<input name="reviewer" required maxlength="120"></label>
@@ -283,7 +295,9 @@ function renderClinical() {
       if (!save()) return;
       const id = version.id;
       try {
-        const res = await fetch('/api/clinical/'+kind+'.docx',jsonOptions('POST',{...version,reviews:reviewsFor(id)}));
+        const parent=parentOf(version);
+        const previous_design=parent?{id:parent.id,options:parent.options}:null;
+        const res = await fetch('/api/clinical/'+kind+'.docx',jsonOptions('POST',{...version,previous_design,reviews:reviewsFor(id)}));
         if (!res.ok) {
           const failure=await res.json().catch(()=>({}));
           throw new Error(typeof failure.detail==='string'?failure.detail:'导出失败，已保存的版本可重新导出。');
