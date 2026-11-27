@@ -22,11 +22,19 @@ jobs:
         run: python3 tools/collect_public_events.py --receipt "$RUNNER_TEMP/collection.json"
       - name: Publish monthly files and latest receipt
         run: |
-          if test -f "$RUNNER_TEMP/collection.json"; then
-            mkdir -p data/public/events
-            cp "$RUNNER_TEMP/collection.json" data/public/events/collection.json
-          fi
-          git add -- data/public/events
+          receipt="$RUNNER_TEMP/collection.json"
+          month=$(jq -er --arg run "$GITHUB_RUN_ID" '
+            select(.run_id == $run and (.checks | type == "array") and
+                   (.new_events == ([.checks[].new_events // 0] | add // 0)))
+            | .started_utc | capture("^(?<month>[0-9]{4}-[0-9]{2})-").month
+          ' "$receipt")
+          ledger="data/public/events/$month.jsonl"
+          if test -f "$ledger"; then git add -- "$ledger"; fi
+          read -r added removed _ < <(git diff --cached --numstat -- "$ledger") || true
+          test "${added:-0}" = "$(jq -r .new_events "$receipt")"
+          test "${removed:-0}" = 0
+          cp "$receipt" data/public/events/collection.json
+          git add -- data/public/events/collection.json
           if git diff --cached --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
