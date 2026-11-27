@@ -42,6 +42,8 @@
 
 **首次定时采集已完成生产对账。** GitHub 记录运行 `45967376059` 的触发类型为 `schedule`，创建于台北时间 16:39:35，采集回执于 16:40:19 完成。23 项监测目标中 22 项成功、1 项 jRCT 待人工复核，本次新增 0 条。人工复验前，生产 API 已返回该运行编号及同批对账回执；再次同步后逐页核对 410 条记录、8 个来源和完整回执相符。工作流配置为每日台北时间 08:17，本次创建时间明显晚于该时刻。持续准点率和新增披露从入库到阅读器的实际延迟仍待观察。[定时运行](https://github.com/james-lebron2000/HiJenny/actions/runs/45967376059) · [冻结回执](https://github.com/james-lebron2000/HiJenny/blob/55df7de/data/public/events/collection.json)
 
+在「公开资产动态 → 最近一次公开采集」可切换待处理、成功和全部监测目标。有待处理目标时默认列出这些记录；jRCT 待人工复核项可直接打开原登记并对照历史归档。下载的 JSON 是整批采集回执，包含成功和待处理项，便于复核监测覆盖。
+
 ### 早间部署记录与试用样本
 
 11 月 27 日首轮核验时，服务器运行版本为 `1dd038d`。以 12:19（台北时间）采集回执为准，生产 API 的 410 条事件与 GitHub 归档逐条一致，覆盖 8 个来源。23 项监测目标中 22 项成功，1 项 jRCT 登记待人工复核。服务器每小时同步定时器已启动。该批由手动触发，12:19 时尚待首条定时运行记录。[应用版本](https://github.com/james-lebron2000/HiJenny/commit/1dd038d) · [冻结归档](https://github.com/james-lebron2000/HiJenny/tree/26cae86/data/public/events) · [采集运行](https://github.com/james-lebron2000/HiJenny/actions/runs/45939218803)

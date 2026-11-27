@@ -40,6 +40,15 @@ const publicUsePolicies = {
   jRCT:['https://jrct.mhlw.go.jp/agreement','采用 PDL 1.0 并设例外；全面收集须申请许可。站方要求避免自动巡回采集，HiJenny 仅保留历史归档供人工核对。']
 };
 
+function manualRegistryControls(check, receipt) {
+  if (check.source!=='jrct' || !/^jRCT[0-9]{10}$/.test(check.target)) return null;
+  const section=document.createElement('div'), link=document.createElement('a');
+  link.href='https://jrct.mhlw.go.jp/en-latest-detail/'+check.target;
+  link.textContent='打开 '+check.target+' 原登记';link.target='_blank';link.rel='noopener noreferrer';
+  section.append(link,manualRegistryReview(check,receipt,link.href));
+  return section;
+}
+
 function manualRegistryReview(check,receipt,sourceUrl) {
   const section=document.createElement('div'), open=document.createElement('button');
   open.type='button';open.className='btn sm';open.textContent='对照历史归档并记录人工复核';section.append(open);
@@ -149,12 +158,8 @@ function publicCoverage(receipt, timing) {
         if (check.status==='ok') item.append(' · 命中 '+check.records+' 条来源记录');
         else if (check.status==='manual_review') {
           item.append(' · 待人工复核');
-          if (check.source==='jrct' && /^jRCT[0-9]{10}$/.test(check.target)) {
-            const link=document.createElement('a');
-            link.href='https://jrct.mhlw.go.jp/en-latest-detail/'+check.target;
-            link.textContent='打开 jRCT 原登记'; link.target='_blank'; link.rel='noopener noreferrer';
-            item.append(' · ',link,manualRegistryReview(check,receipt,link.href));
-          }
+          const controls=manualRegistryControls(check,receipt);
+          if (controls) item.append(controls);
         }
         else item.append(' · 核对失败'+(check.error?' · '+check.error:''));
         const last=check.last_success_utc || (check.status==='ok'?receipt.finished_utc:null);
@@ -618,12 +623,41 @@ function renderPublicEvents() {
     for (const check of checks.filter(r=>r.source==='trials')) {
       $('#archive-trial-ids').append(new Option(check.subject || check.target,check.target));
     }
-    collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
+    const pending = checks.filter(r => r.status !== 'ok');
+    collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length+
+      (pending.length ? ' · 待处理 '+pending.length : '');
     const names={nmpa_index:'NMPA 药品栏目目录',nmpa:'国家药监局 NMPA',orange_book_uses:'FDA 专利用途代码释义',orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
-    body.innerHTML='<p>公开关注名单全量核对 · 新增 '+esc(receipt.new_events)+' 条归档事件</p>'+
-      registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],checks.map(r=>[
-        names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':r.status==='manual_review'?'待人工复核':'待更新 · '+r.error,
-        r.last_success_utc?fmtDate(r.last_success_utc):r.status==='ok'?fmtDate(receipt.finished_utc):'未记录',r.records ?? '待核',r.new_events ?? '待核']));
+    body.innerHTML=`<p>公开关注名单全量核对 · 新增 ${esc(receipt.new_events)} 条归档事件</p>
+      <label>查看采集目标 <select id="public-check-filter">
+        <option value="all">全部（${checks.length}）</option>
+        <option value="pending">待处理（${pending.length}）</option>
+        <option value="ok">成功（${ok}）</option>
+      </select></label>
+      <button type="button" class="btn sm" id="download-collection-receipt">下载本批完整回执</button>
+      <div id="public-check-rows" aria-live="polite"></div>`;
+    const filter=body.querySelector('#public-check-filter');
+    filter.value=pending.length?'pending':'all';
+    const manual=document.createElement('div');
+    for (const r of pending.filter(check=>check.status==='manual_review')) {
+      const controls=manualRegistryControls(r,receipt);
+      if (controls) manual.append(controls);
+    }
+    body.append(manual);
+    const updateChecks=()=>{
+      manual.hidden=filter.value==='ok';
+      const rows=filter.value==='pending'?pending:filter.value==='ok'?checks.filter(r=>r.status==='ok'):checks;
+      const host=body.querySelector('#public-check-rows');
+      host.innerHTML=rows.length?registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],rows.map(r=>[
+        names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':r.status==='manual_review'?'待人工复核':'核对失败'+(r.error?' · '+r.error:''),
+        r.last_success_utc?fmtDate(r.last_success_utc):r.status==='ok'?fmtDate(receipt.finished_utc):'未记录',r.records ?? '待核',r.new_events ?? '待核'])):'<p>本批没有符合该筛选的目标。</p>';
+    };
+    filter.onchange=updateChecks;
+    updateChecks();
+    body.querySelector('#download-collection-receipt').onclick=()=>{
+      const url=URL.createObjectURL(new Blob([JSON.stringify(receipt,null,2)+'\n'],{type:'application/json'}));
+      const link=document.createElement('a');link.href=url;link.download='HiJenny-collection-'+(receipt.run_id || receipt.finished_utc.slice(0,10))+'.json';
+      link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    };
     body.prepend(syncStatus,publicScheduleStatus(verification?.scheduled_collection));
     if (collection_links?.run) {
       const link=document.createElement('a');
