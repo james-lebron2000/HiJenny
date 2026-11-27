@@ -65,16 +65,28 @@ function manualRegistryReview(check,receipt,sourceUrl) {
         ${result.items.map((r,i)=>`<label>${esc(r.field)} · ${esc(r.value)}（来源日期 ${esc(r.source_date)}）
         <select name="field${i}" required><option value="">选择核对结果</option>
         <option value="matches">与登记一致</option><option value="differs">发现差异</option>
-        <option value="unverified">无法核实</option></select></label>`).join('')}
+        <option value="unverified">无法核实</option></select></label>
+        <label hidden>原登记当前内容（若原文已移除该字段，请注明）<textarea name="current${i}"></textarea></label>`).join('')}
         <label>复核人姓名或代号<input name="reviewer" required maxlength="120"></label>
         <label>差异、无法核实的原因或后续事项<textarea name="note"></textarea></label>
         <button type="submit" class="btn">下载人工复核记录</button><p role="status"></p>`;
+      for (const [i,select] of Array.from(form.querySelectorAll('select')).entries()) {
+        const current=form.elements['current'+i];
+        select.onchange=()=>{
+          current.required=select.value==='differs';
+          current.parentElement.hidden=!current.required;
+        };
+      }
       form.onsubmit=event=>{
         event.preventDefault();
         const reviewer=form.elements.reviewer.value.trim(), note=form.elements.note.value.trim();
         const fields=result.items.map((r,i)=>({event_id:r.id,field:r.field,archived_value:r.value,
-          source_date:r.source_date,outcome:form.elements['field'+i].value}));
+          source_date:r.source_date,outcome:form.elements['field'+i].value,
+          ...(form.elements['field'+i].value==='differs' ? {current_value:form.elements['current'+i].value.trim()} : {})}));
         const status=form.querySelector('[role=status]');
+        if (fields.some(f=>f.outcome==='differs' && !f.current_value)) {
+          status.textContent='请填写出现差异的字段在原登记中的当前内容。';return;
+        }
         if (!reviewer || (!note && fields.some(f=>f.outcome!=='matches'))) {
           status.textContent='请填写复核人，并说明差异或无法核实的原因。';return;
         }
@@ -598,7 +610,9 @@ function renderPublicEvents() {
     }
   };
   bindArchivedComparison($('#archived-comparison'));
+  const initial=hashParams();
   const collection=$('#public-collection');
+  if (initial.has('check_target')) collection.open=true;
   const latestCollection=api('/api/public-events/collection');
   latestCollection.then(({receipt,verification,source_timing,collection_links,subject_aliases={}})=>{
     if (!collection.isConnected) return;
@@ -677,6 +691,22 @@ function renderPublicEvents() {
     subjectPicker.onchange=()=>{filter.value='all';updateChecks();};
     filter.onchange=updateChecks;
     updateChecks();
+    if (initial.has('check_target')) {
+      const requested=checks.find(c=>c.source===initial.get('check_source') && String(c.target)===initial.get('check_target'));
+      if (requested) {
+        subjectPicker.selectedIndex=subjects.indexOf(requested.subject || '');
+        filter.value=requested.status==='ok'?'ok':'pending';
+        updateChecks();
+      }
+      const note=document.createElement('p');
+      note.setAttribute('role','status');
+      const changed=initial.get('check_batch')!==receipt.finished_utc;
+      note.textContent=(changed?'采集回执已更新。':'')+(requested
+        ? '所选目标 '+requested.target+' · '+(requested.status==='ok'?'本批成功':requested.status==='manual_review'?'本批待人工复核':'本批采集失败')
+        : '当前回执未列出所选目标。');
+      body.prepend(note);
+      collection.scrollIntoView({block:'start'});
+    }
     body.querySelector('#download-collection-receipt').onclick=()=>{
       const url=URL.createObjectURL(new Blob([JSON.stringify(receipt,null,2)+'\n'],{type:'application/json'}));
       const link=document.createElement('a');link.href=url;link.download='HiJenny-collection-'+(receipt.run_id || receipt.finished_utc.slice(0,10))+'.json';
@@ -727,7 +757,6 @@ function renderPublicEvents() {
       if (host.isConnected) host.textContent='最近一次采集范围暂时无法核对。';
     }
   }
-  const initial = hashParams();
   for (const el of form.elements) {
     if (!el.name || !initial.has(el.name)) continue;
     if (el.type==='checkbox') el.checked = initial.get(el.name)==='true';

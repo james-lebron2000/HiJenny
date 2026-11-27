@@ -67,7 +67,11 @@ function homeMonitoring(receipt,lang) {
     ja:{title:'直近の収集状況',success:'収集成功',none:'この範囲に一致する名称付き監視対象はありません',unknown:'対象名が未登録の監視項目',noReceipt:'収集記録はまだありません',manual_review:'手動確認待ち',failed:'収集失敗',pending:'要確認'}
   }[lang];
   if (!receipt) return `<p>${copy.noReceipt}</p>`;
-  const gaps=receipt.pending.map(c=>`<li>${esc(copy[c.status] || copy.pending)} · ${esc(c.source)} · ${esc(c.target)}</li>`).join('');
+  const reviewLabel={zh:'查看采集明细',en:'Review collection details',ja:'収集の詳細を確認'}[lang];
+  const gaps=receipt.pending.map(c=>{
+    const params=new URLSearchParams({check_source:c.source,check_target:c.target,check_batch:receipt.finished_utc});
+    return `<li>${esc(copy[c.status] || copy.pending)} · ${esc(c.source)} · ${esc(c.target)} · <a data-home-check href="#/public-events?${esc(params.toString())}">${reviewLabel}</a></li>`;
+  }).join('');
   const count=receipt.total ? `${copy.success} ${receipt.ok}/${receipt.total}` : copy.none;
   const unknown=receipt.unlabeled ? ` · ${copy.unknown} ${receipt.unlabeled}` : '';
   return `<div data-home-monitoring><p>${copy.title} · ${esc(receipt.finished_utc)} · ${count}${unknown}</p>${gaps ? '<ul>'+gaps+'</ul>' : ''}</div>`;
