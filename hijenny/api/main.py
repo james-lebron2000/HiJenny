@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import json
 import mimetypes
 import os
 import subprocess
@@ -790,7 +791,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/projects/{project_id}/documents/{document_id}/pages/{page}/ocr")
     def ocr_scan_page(project_id: str, document_id: str, page: int = PathParam(..., ge=1),
-                      language: Literal["eng", "chi_sim+eng", "chi_tra+eng", "jpn+eng"] = "eng"):
+                      language: Literal["eng", "chi_sim+eng", "chi_tra+eng", "jpn+eng"] = "eng", preview: bool = False):
         with store.session_scope() as session:
             document = _document_or_404(session, document_id, project_id)
         if page not in (document.get("meta") or {}).get("scanned_pages", []):
@@ -807,7 +808,7 @@ def create_app() -> FastAPI:
             raise HTTPException(429, "已有页面正在识别，请稍后重试。")
         try:
             result = subprocess.run([sys.executable, "-m", "hijenny.page_ocr", str(path), str(page),
-                                     language, directory], capture_output=True, timeout=60)
+                                     language, directory] + (["--preview"] if preview else []), capture_output=True, timeout=60)
         except subprocess.TimeoutExpired:
             raise HTTPException(504, "单页识别超时，请核对原页。") from None
         finally:
@@ -815,7 +816,7 @@ def create_app() -> FastAPI:
         if result.returncode:
             raise HTTPException(422, "该页识别失败，请核对原页。")
         return {"document_id": document_id, "page": page, "language": language,
-                "text": result.stdout.decode("utf-8").strip()}
+                **json.loads(result.stdout)}
 
     # Convenience aliases (document id is globally unique).
     @app.get("/api/documents/{document_id}")

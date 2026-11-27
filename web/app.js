@@ -885,7 +885,7 @@ async function renderUpload(seq) {
       });
 
       const scans = doc.pdf_review_ranges?.scan;
-      const ocr = scans?.length ? `<div data-ocr-document="${esc(doc.document_id)}">
+      const ocr = scans?.length ? `<div data-ocr-document="${esc(doc.document_id)}" data-original="${esc(fileUrl)}">
         <label>扫描原页页码 <input type="number" min="1" max="${Number(doc.page_count)}" value="${scans[0][0]}"></label>
         <label>识别语言 <select><option value="eng">英文</option><option value="chi_sim+eng">简体中文及英文</option><option value="chi_tra+eng">繁體中文及英文</option><option value="jpn+eng">日文及英文</option></select></label>
         <button type="button" class="btn sm" data-action="page-ocr">读取本页文字</button>
@@ -1586,14 +1586,27 @@ async function handleAction(action, el) {
     if (action === 'page-ocr') {
       const panel=el.closest('[data-ocr-document]'), page=panel.querySelector('input').valueAsNumber;
       const status=panel.querySelector('[role=status]');
+      const input=panel.querySelector('input'), language=panel.querySelector('select');
       if (!Number.isInteger(page) || page < 1) {status.textContent='请输入扫描原页页码。';return;}
-      el.disabled=true; status.textContent='正在本地识别…';
+      el.disabled=input.disabled=language.disabled=true; status.textContent='正在本地识别…';
       try {
-        const query=new URLSearchParams({language:panel.querySelector('select').value});
+        const query=new URLSearchParams({language:language.value,preview:'true'});
         const result=await api(`/api/projects/${state.projectId}/documents/${panel.dataset.ocrDocument}/pages/${page}/ocr?${query}`,{method:'POST'});
-        status.textContent=result.text ? '第 '+result.page+' 页 OCR 草稿，请对照原文核实数字、单位和符号。\n'+result.text : '本页未识别出文字，请查看原件。';
+        if (!panel.isConnected) return;
+        const dialog=document.createElement('dialog');
+        dialog.className='ocr-review'; dialog.setAttribute('aria-label','扫描原页与 OCR 草稿对照');
+        dialog.innerHTML=`<form method="dialog"><strong>第 ${result.page} 页 · 原页核对</strong><button class="btn" autofocus>关闭</button></form>
+          <div class="ocr-columns"><div><a target="_blank" rel="noopener">打开原始 PDF 第 ${result.page} 页</a><img alt="第 ${result.page} 页原图"></div>
+          <section><h3>OCR 草稿</h3><p>请对照原图核实数字、单位和符号。</p><pre></pre></section></div>`;
+        dialog.querySelector('a').href=panel.dataset.original+'#page='+result.page;
+        dialog.querySelector('img').src='data:image/jpeg;base64,'+result.preview_jpeg;
+        dialog.querySelector('pre').textContent=result.text || '本页未识别出文字。';
+        panel.append(dialog);
+        dialog.onclose=()=>dialog.remove();
+        dialog.showModal();
+        status.textContent='';
       } catch (error) {status.textContent=error.message;}
-      finally {el.disabled=false;}
+      finally {el.disabled=input.disabled=language.disabled=false;}
       return;
     }
     if (action === 'run-analysis') { await runAnalysis(el.dataset.force === '1'); return; }

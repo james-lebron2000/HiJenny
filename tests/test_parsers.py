@@ -330,3 +330,24 @@ def test_pdf_review_ranges_group_page_failures_and_support_older_rows():
     assert pdf_review_ranges({"page_count": 5, "meta": {"format": "pdf", "page_errors": pages}}) == {
         "error": [[1, 1], [3, 5]]
     }
+
+
+def test_ocr_preview_renders_requested_page_with_same_text(tmp_path, monkeypatch):
+    import base64
+    import fitz
+    from hijenny.page_ocr import recognize
+
+    path = tmp_path / "two-pages.pdf"
+    with fitz.open() as pdf:
+        for text in ("First 128", "Second 256"):
+            pdf.new_page(width=300, height=200).insert_text((25, 60), text)
+        pdf.save(path)
+    # Exercise page selection and rendering independently of installed OCR languages.
+    monkeypatch.setattr(fitz.Page, "get_textpage_ocr", lambda page, **kwargs: page.get_textpage())
+    for page_number, expected in [(1, "First 128"), (2, "Second 256")]:
+        assert recognize(path, page_number, "eng", "", False) == {"text": expected}
+        result = recognize(path, page_number, "eng", "", True)
+        with fitz.open(path) as pdf:
+            image = pdf[page_number - 1].get_pixmap(matrix=fitz.Matrix(2, 2), colorspace=fitz.csRGB, alpha=False)
+            assert base64.b64decode(result["preview_jpeg"]) == image.tobytes("jpeg", jpg_quality=85)
+        assert result["text"] == expected
