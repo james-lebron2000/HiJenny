@@ -744,3 +744,16 @@ object storage; V2.0 CMC + regulatory/IP agents; V3.0 BD intelligence platform.
 ### Linux 用户服务部署
 
 部署单元位于 [deploy/hijenny.service](deploy/hijenny.service)。用户目录下的 `~/.local/share/hijenny/current` 指向一个独立版本目录，`runtime-py312` 放置 Python 3.12 虚拟环境，`state` 保存运行数据。用户服务启用后，以 `systemctl --user status hijenny` 查看状态。服务监听用户私有目录中的 Unix socket；SSH 转发可将它接入本机浏览器。试验检索中可勾选记录加入「试验关注」，按需更新预计或实际完成日期并查看逐字段变更。
+
+#### 从本机打开已部署工作台
+
+适用于已获部署环境 SSH 访问权限、且该账号可读取服务套接字的操作人员。命令中的 `hijenny-pilot` 是本机 SSH 配置里指向部署账号、主机和端口的别名。先确认服务套接字，再将它转发到本机浏览器。
+
+```sh
+pilot_socket=$(ssh hijenny-pilot 'test -S "$XDG_RUNTIME_DIR/hijenny/agent.sock" && printf "%s" "$XDG_RUNTIME_DIR/hijenny/agent.sock"') &&
+ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:18878:$pilot_socket" hijenny-pilot
+```
+
+保持该终端打开，在同一台设备访问 [HiJenny 工作台](http://127.0.0.1:18878/#/home)。看到药物查询框后，可用“奥希替尼”查询并下载简报。结束使用时按 Ctrl+C 关闭本次转发。若本地端口已占用，可将命令和浏览器地址中的 `18878` 同时换成一个空闲端口。
+
+转发建立后，可在另一个终端运行 `curl -fsS http://127.0.0.1:18878/api/health`。正常响应中 `status` 和 `database` 均为 `ok`。若第一条 SSH 命令返回失败，请在部署账号下用 `systemctl --user status hijenny.service` 核对服务状态。回环地址仅供建立转发的设备使用；交给客户的访问入口应由其部署环境提供。
