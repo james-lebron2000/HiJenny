@@ -127,3 +127,24 @@ def test_revision_export_uses_direct_parent_and_selected_candidate():
         assert parent in text
     data["previous_design"]["id"] = str(uuid4())
     assert client.post("/api/clinical/synopsis.docx", json=data).status_code == 422
+
+
+def test_parent_review_response_is_separate_from_current_review_decisions():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    parent, version = str(uuid4()), str(uuid4())
+    review = dict(id=str(uuid4()), version=parent, role="统计", decision="需修改",
+                  reviewer="评审甲", created="2026-11-26T12:00:00Z", note="明确分析集")
+    response = dict(review=review, reply="已在 B 方案说明")
+    data = dict(id=version, parent=parent, question="复核", references=[], options=[{}, {}], responses=[response])
+    result = client.post("/api/clinical/synopsis.docx", json=data)
+    assert result.status_code == 200
+    text = "\n".join(p.text for p in Document(BytesIO(result.content)).paragraphs)
+    assert parent in text and review["id"] in text and review["note"] in text and response["reply"] in text
+    assert "统计复核\n待复核" in text
+    data["responses"].append(response)
+    assert client.post("/api/clinical/synopsis.docx", json=data).status_code == 422
+    data["responses"].pop()
+    review["version"] = version
+    assert client.post("/api/clinical/synopsis.docx", json=data).status_code == 422

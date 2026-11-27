@@ -44,6 +44,15 @@ class DesignReview(BaseModel):
     created: datetime
 
 
+class ReviewedComment(DesignReview):
+    id: UUID
+
+
+class ReviewResponse(BaseModel):
+    review: ReviewedComment
+    reply: str = Field(min_length=1, max_length=6000)
+
+
 class StatisticalPlan(BaseModel):
     estimand: Text = ""
     sets: Text = ""
@@ -114,12 +123,17 @@ class Synopsis(BaseModel):
     sap: StatisticalPlan = Field(default_factory=StatisticalPlan)
     protocol: dict[Literal["A", "B"], ProtocolSections] = Field(default_factory=dict)
     reviews: list[DesignReview] = Field(default_factory=list)
+    responses: list[ReviewResponse] = Field(default_factory=list)
     changes: list[Text] = Field(default_factory=list, max_length=64)
 
     @model_validator(mode="after")
     def reviews_belong_to_this_version(self):
         if self.previous_design and (self.previous_design.id != self.parent or self.parent == self.id):
             raise ValueError("对照设计与上一版编号不符")
+        if any(item.review.version != self.parent or self.parent == self.id for item in self.responses):
+            raise ValueError("修订回应必须对应直接上一版的复核意见")
+        if len({item.review.id for item in self.responses}) != len(self.responses):
+            raise ValueError("同一复核意见存在重复回应")
         if any(review.version != self.id for review in self.reviews):
             raise ValueError("复核记录与方案版本不符")
         return self
@@ -176,6 +190,15 @@ def append_review_and_sources(document, plan):
                 paragraph("本文件所列候选设计字段均与上一版相同。")
         else:
             paragraph("本次导出缺少上一版，无法核对原文。")
+    if plan.responses:
+        document.add_heading("本版对上版复核意见的回应", 1)
+        for item in plan.responses:
+            review = item.review
+            paragraph(f"{review.role} · {review.reviewer} · {review.decision} · {review.created.isoformat()}")
+            paragraph(f"来源版本 {review.version} · 意见编号 {review.id}")
+            paragraph(review.note)
+            paragraph("修订回应")
+            paragraph(item.reply)
     document.add_heading("本版专业复核记录", 1)
     for role in ("临床", "统计"):
         reviews = [r for r in plan.reviews if r.role == role]

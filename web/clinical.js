@@ -79,7 +79,7 @@ function renderClinical() {
   function reviewsFor(id) {
     const reviewPrefix='hijenny.design-review.'+id+'.';
     return Object.keys(localStorage).filter(key=>key.startsWith(reviewPrefix))
-      .map(key=>JSON.parse(localStorage.getItem(key))).sort((a,b)=>a.created.localeCompare(b.created));
+      .map(key=>({...JSON.parse(localStorage.getItem(key)),id:key.slice(reviewPrefix.length)})).sort((a,b)=>a.created.localeCompare(b.created));
   }
   function parentOf(item) {
     return item.parent?JSON.parse(localStorage.getItem(prefix+item.parent)):null;
@@ -134,6 +134,7 @@ function renderClinical() {
       <p>从倾向方案带入人群、对照、终点和评价时间。以下内容由统计人员填写，空缺会标入 Word 草稿。</p>
       ${Object.entries(sapFields).map(([key,label])=>`<label>${label}<textarea data-sap="${key}" maxlength="6000" rows="2">${esc(version.sap?.[key] || '')}</textarea></label>`).join('')}
       <button type="button" class="btn" id="sap-export">保存并导出 SAP 草稿</button></details>
+      <details id="design-replies" hidden><summary>修订时回应本版复核意见</summary><div></div></details>
       <button type="submit" class="btn primary">保存设计版本</button>
       <button type="button" class="btn" id="design-export">保存并导出 Word 草稿</button></form>
       ${version.id?`<section class="card"><h2>本版专业复核</h2>
@@ -143,6 +144,9 @@ function renderClinical() {
         ${previous?(differences.map(row=>`<article><h3>${esc(row.label)}</h3><p>${esc(row.impact)}</p>
         <strong>修订前</strong><pre class="source-snapshot">${esc(row.before || '（空白）')}</pre>
         <strong>修订后</strong><pre class="source-snapshot">${esc(row.after || '（空白）')}</pre></article>`).join('') || '<p>两种候选设计的字段均与上一版相同。</p>'):'<p>本浏览器缺少上一版，无法核对原文。</p>'}</details>`:''}
+      ${version.responses?.length?`<details id="saved-replies"><summary>本版对上版复核意见的回应（${version.responses.length}）</summary>
+        ${version.responses.map(({review,reply})=>`<article><h3>${esc(review.role)} · ${esc(review.reviewer)} · ${esc(review.decision)}</h3>
+        <p>${esc(review.note)}</p><p>修订回应</p><pre class="source-snapshot">${esc(reply)}</pre></article>`).join('')}</details>`:''}
       <div id="design-reviews"></div><form id="design-review-form">
       <label>专业角色<select name="role"><option>临床</option><option>统计</option></select></label>
       <label>复核人<input name="reviewer" required maxlength="120"></label>
@@ -217,6 +221,13 @@ function renderClinical() {
     const reviewForm=$('#design-review-form');
     function paintReviews() {
       const reviews=reviewsFor(version.id);
+      const replies=$('#design-replies',form);
+      replies.hidden=!reviews.length;
+      for (const review of reviews) {
+        if ($$('textarea[data-reply]',replies).some(el=>el.dataset.reply===review.id)) continue;
+        replies.querySelector('div').insertAdjacentHTML('beforeend',`<label>${esc(review.role)} · ${esc(review.reviewer)} · ${esc(review.decision)}
+          <span>${esc(review.note)}</span><textarea data-reply="${esc(review.id)}" rows="2" maxlength="6000" placeholder="记录处理方式和理由，随下一版保存"></textarea></label>`);
+      }
       $('#design-reviews').innerHTML=['临床','统计'].map(role=>{
         const entries=reviews.filter(r=>r.role===role);
         return '<h3>'+role+'复核 · '+esc(entries.at(-1)?.decision || '待复核')+'</h3>'+
@@ -273,6 +284,13 @@ function renderClinical() {
           $$('[data-csr]',section).map(el=>[el.dataset.csr,el.dataset.csr==='cutoff'?(el.value || null):el.value]));
       }
       next.sap=Object.fromEntries($$('[data-sap]',form).map(el=>[el.dataset.sap,el.value]));
+      const reviews=new Map(reviewsFor(version.id).map(review=>[review.id,review]));
+      next.responses=[];
+      for (const el of $$('textarea[data-reply]',form)) {
+        const reply=el.value.trim(), review=reviews.get(el.dataset.reply);
+        if (reply && !review) {$('#design-status').textContent='来源意见已不可用，请核对后再保存。';return false;}
+        if (reply) next.responses.push({review,reply});
+      }
       next.changes = changedSections(version.id ? version : null,next);
       try { localStorage.setItem(prefix+next.id,JSON.stringify(next)); }
       catch { $('#design-status').textContent = '本机存储失败，请保留此页并检查可用空间。'; return false; }
