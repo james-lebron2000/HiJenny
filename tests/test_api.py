@@ -289,6 +289,25 @@ def test_gateway_mode_requires_org_context_for_private_resources(client, monkeyp
     assert client.get("/api/public-events/count").status_code == 200
 
 
+def test_gateway_reader_can_review_but_only_editor_can_change_projects(client, monkeypatch):
+    monkeypatch.setattr(config, "REQUIRE_PROJECT_ROLE", True)
+    monkeypatch.setattr(config, "REQUIRE_ORG_HEADER", True)
+    org = {"X-Org-Id": "QA"}
+    editor = dict(org, **{"X-Project-Role": "editor"})
+    reader = dict(org, **{"X-Project-Role": "reader"})
+    for headers in (org, reader, {"X-Project-Role": "editor"}, dict(org, **{"X-Project-Role": "unknown"})):
+        assert client.post("/api/projects", headers=headers, json={"name": "QA"}).status_code == 403
+    project = client.post("/api/projects", headers=editor, json={"name": "QA"}).json()["project"]["project_id"]
+    base = "/api/projects/" + project
+    assert client.get(base, headers=reader).status_code == 200
+    assert client.patch(base, headers=reader, json={"name": "revised"}).status_code == 403
+    assert client.get(base, headers=reader).json()["project"]["name"] == "QA"
+    assert client.patch(base, headers=editor, json={"name": "revised"}).status_code == 200
+    assert client.get(base, headers=org).status_code == 403
+    assert client.get(base, headers=dict(reader, **{"X-Org-Id": "second"})).status_code == 404
+    assert client.get("/api/public-events/count").status_code == 200
+
+
 def test_org_scope_follows_project_resources_and_downloads(client):
     project = create_project(client)["project_id"]
     rows = seed_review_data(project)

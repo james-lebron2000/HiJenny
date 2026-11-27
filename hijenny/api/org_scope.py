@@ -1,5 +1,5 @@
 """Organization context supplied by the deployment gateway."""
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -11,6 +11,17 @@ def request_org(header: str | None) -> str | None:
     if not value and config.REQUIRE_ORG_HEADER:
         raise HTTPException(403, "项目访问需要由身份网关提供组织标识。")
     return value or None
+
+
+def check_project_role(request: Request):
+    if not config.REQUIRE_PROJECT_ROLE:
+        return
+    request_org(request.headers.get("X-Org-Id"))
+    role = request.headers.get("X-Project-Role", "")
+    if role == "editor" or (role == "reader" and request.method in {"GET", "HEAD"}):
+        return
+    raise HTTPException(403, "当前项目角色无权执行此操作。")
+
 
 class PrivateProjectCachePolicy:
     """Set cache directives on private API responses, including files and scoped errors."""

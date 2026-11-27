@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hijenny import config, exports, pipeline, reporting, store
 from sqlalchemy import text
-from hijenny.api.org_scope import PrivateProjectCachePolicy, request_org
+from hijenny.api.org_scope import PrivateProjectCachePolicy, check_project_role, request_org
 from hijenny.parse_coverage import pdf_review_ranges
 from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
@@ -555,7 +555,7 @@ def create_app() -> FastAPI:
     def favicon():
         return Response(status_code=204)
 
-    project_api = APIRouter(dependencies=[Depends(_check_org_scope)])
+    project_api = APIRouter(dependencies=[Depends(check_project_role), Depends(_check_org_scope)])
 
     # -- Health -------------------------------------------------------------
     @app.get("/api/health")
@@ -595,7 +595,7 @@ def create_app() -> FastAPI:
         }
 
     # -- Projects -----------------------------------------------------------
-    @app.post("/api/projects", status_code=201)
+    @app.post("/api/projects", status_code=201, dependencies=[Depends(check_project_role)])
     def create_project(payload: ProjectCreate, x_org_id: str | None = Header(default=None, alias="X-Org-Id")):
         with store.session_scope() as session:
             project = store.create_project(
@@ -609,7 +609,7 @@ def create_app() -> FastAPI:
             )
         return {"project": project}
 
-    @app.get("/api/projects")
+    @app.get("/api/projects", dependencies=[Depends(check_project_role)])
     def list_projects(
         org_id: str | None = Query(default=None),
         x_org_id: str | None = Header(default=None, alias="X-Org-Id"),
@@ -1258,7 +1258,7 @@ def create_app() -> FastAPI:
         return {"project_id": project_id, "outputs": _outputs_info(project_id)}
 
     # -- Safe file serving --------------------------------------------------
-    @app.get("/api/files/{file_path:path}")
+    @app.get("/api/files/{file_path:path}", dependencies=[Depends(check_project_role)])
     def serve_file(file_path: str, x_org_id: str | None = Header(default=None, alias="X-Org-Id")):
         if not file_path or file_path.endswith("/"):
             raise HTTPException(status_code=404, detail="File not found")

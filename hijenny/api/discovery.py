@@ -4,12 +4,12 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 
 from hijenny import store
-from hijenny.api.org_scope import request_org
+from hijenny.api.org_scope import check_project_role, request_org
 from hijenny.asset_names import chinese_search_name
 
 router = APIRouter()
@@ -150,7 +150,7 @@ class Opportunity(BaseModel):
         return value.strip()
 
 
-@router.post("/api/discovery/projects")
+@router.post("/api/discovery/projects", dependencies=[Depends(check_project_role)])
 def start_project(request: Opportunity, x_org_id: Annotated[str | None, Header(alias="X-Org-Id")] = None):
     org_id = request_org(x_org_id) or "ORG_DEFAULT"
     record = request.model_dump(mode="json")
