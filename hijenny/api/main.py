@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hijenny import config, exports, pipeline, reporting, store
 from sqlalchemy import text
-from hijenny.api.org_scope import PrivateProjectCachePolicy, check_project_role, project_grants, request_org, require_project, review_actor
+from hijenny.api.org_scope import PrivateProjectCachePolicy, check_project_role, gateway_user, project_grants, request_org, require_project, review_actor
 from hijenny.parse_coverage import pdf_review_ranges
 from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
@@ -1166,12 +1166,14 @@ def create_app() -> FastAPI:
         return {"events": events, "count": len(events)}
 
     @project_api.get("/api/projects/{project_id}/followup")
-    def followup(project_id: str):
+    def followup(request: Request, project_id: str):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
             history = diligence.histories(session, project_id)
             questions = store.list_questions(session, project_id)
             return {"questions": questions, "history": history,
+                    "gateway_identity_required": config.REQUIRE_REVIEW_ACTOR,
+                    "gateway_user": gateway_user(request) if config.REQUIRE_REVIEW_ACTOR else None,
                     "allowed": {q["question_id"]: diligence.allowed(history.get(q["question_id"], []), q)
                                 for q in questions},
                     "documents": [_doc_json(d) for d in store.list_documents(session, project_id)],

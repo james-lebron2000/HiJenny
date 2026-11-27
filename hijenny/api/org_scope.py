@@ -15,13 +15,20 @@ def request_org(header: str | None) -> str | None:
     return value or None
 
 
+def gateway_user(request: Request) -> str | None:
+    ids = request.headers.getlist("X-User-Id")
+    if len(ids) == 1 and re.fullmatch(r"[A-Za-z0-9@._:+|-]{1,128}", ids[0]):
+        return ids[0]
+    return None
+
+
 def review_actor(request: Request, submitted: str) -> str:
     if not config.REQUIRE_REVIEW_ACTOR:
         return submitted
-    ids = request.headers.getlist("X-User-Id")
-    if len(ids) != 1 or not re.fullmatch(r"[A-Za-z0-9@._:+|-]{1,128}", ids[0]):
+    user = gateway_user(request)
+    if user is None:
         raise HTTPException(403, "复核操作需要由身份网关提供有效的用户标识。")
-    return ids[0]
+    return user
 
 
 def project_grants(header: str | None) -> set[str] | None:

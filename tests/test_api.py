@@ -889,6 +889,10 @@ def test_gateway_review_identity_covers_review_and_followup_writes(client, monke
     for flag in ("REQUIRE_REVIEW_ACTOR", "REQUIRE_PROJECT_ROLE", "REQUIRE_ORG_HEADER"):
         monkeypatch.setattr(config, flag, True)
 
+    for headers, expected in ((editor, None), (user, user["X-User-Id"])):
+        context = client.get(base + "/followup", headers=headers).json()
+        assert context["gateway_identity_required"] and context["gateway_user"] == expected
+
     writes = [
         ("PATCH", base, {"name": "Identity audit"}),
         ("PATCH", evidence, {"verification_status": "verified"}),

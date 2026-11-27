@@ -74,6 +74,8 @@ async function renderFollowup(seq) {
   const valuationChoices=(selected)=>valuations.map(v=>option(v.id,selected,
     v.name+' · '+fmtDate(v.created)+' · '+v.id.slice(0,8))).join('');
   function cells(row) { return cols.map(k => `<td>${esc(row[k] || '待核')}</td>`).join(''); }
+  const mayEdit = state.projectPermissions?.edit !== false;
+  const mayRecord = mayEdit && (!data.gateway_identity_required || data.gateway_user);
   setView(`${queue}<section class="card bd"><div class="card-head"><h2>问题与来源</h2></div>
     <p>${esc(q.question)}</p><a class="btn sm" href="#/valuation?project=${encodeURIComponent(project)}&question=${encodeURIComponent(id)}">评估此问题对交易估值的影响</a>${quote ? `<blockquote>${esc(quote.quote)} · ${evidenceLink(quote)}</blockquote>` : ''}<details><summary>查看关联证据（${sources.length}）</summary>${sources.map(e => '<p>'+evidenceLink(e)+'</p>').join('')}</details></section>
     ${valuations.length?`<section class="card bd"><h2>此问题关联的本机估值版本（${valuations.length}）</h2>
@@ -92,9 +94,10 @@ async function renderFollowup(seq) {
     ${events.length ? '<ol>'+events.map(e=>`<li><strong>${esc(bdLabels[e.action])}</strong> · ${esc(e.actor)} · ${esc(fmtDate(e.ts))}
       <p>${esc(bdDecisions[e.after.decision] || '')} ${esc(e.after.note || e.after.asset || '')}</p>
       ${e.after.document_id ? sourceLink(e.after) : ''}</li>`).join('')+'</ol>' : '<p>尚未登记。可先索取材料或添加可比资产。</p>'}
-    <form id="bd-form"><label>下一步<select name="kind">${data.allowed[id].map(k=>option(k,'',bdLabels[k])).join('')}</select></label>
-    <div id="bd-fields"></div><label>经办人<input name="actor" required maxlength="120"></label>
-    <button class="btn primary" type="submit">保存记录</button> <a href="#/report?project=${esc(project)}">查看 Decision Brief →</a><p role="status"></p></form></section>`);
+    ${mayRecord ? `<form id="bd-form"><label>下一步<select name="kind">${data.allowed[id].map(k=>option(k,'',bdLabels[k])).join('')}</select></label>
+    <div id="bd-fields"></div><label>经办人${data.gateway_identity_required ? `<input name="actor" readonly value="${esc(data.gateway_user)}">` : '<input name="actor" required maxlength="120">'}</label>
+    <button class="btn primary" type="submit">保存记录</button><p role="status"></p></form>` : `<p>${mayEdit ? '请通过身份网关登录后登记。' : '当前项目为只读。'}</p>`}
+    <a href="#/report?project=${esc(project)}">查看 Decision Brief →</a></section>`);
   bindQueue();
   const comparison=$('#bd-valuation-compare');
   if (comparison) {
@@ -120,6 +123,7 @@ async function renderFollowup(seq) {
     compare();
   }
   const form = $('#bd-form');
+  if (!form) return;
   const select = form.elements.kind;
   const preferred = {request:'request', reply:'reply', record:'reply', review:'review', experiment:'experiment_result', publish:'publish'}[stages.get(id)];
   select.value = data.allowed[id].includes(preferred) ? preferred : data.allowed[id].find(k=> !['comparison','request'].includes(k)) || 'request';
