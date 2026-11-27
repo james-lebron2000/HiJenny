@@ -58,7 +58,15 @@ function downloadHomeEvidence(asset,result,lang) {
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+function trackHomeEvidence(event) {
+  try {
+    const payload={session_id:pilotSessionId(),sample_version:'asset-home-v1',event};
+    fetch('/api/pilot/events',{...jsonOptions('POST',payload),keepalive:true}).catch(()=>{});
+  } catch { /* Browsers without session storage can still use the archive. */ }
+}
+
 async function renderHome() {
+  trackHomeEvidence('home_open');
   const requested=hashParams().get('lang');
   const lang=Object.hasOwn(homeTasks,requested)?requested:'zh';
   const copy=homeTasks[lang], evidence=homeEvidence[lang];
@@ -77,6 +85,7 @@ async function renderHome() {
     event.preventDefault();
     const query=form.elements.asset.value.trim();
     if (!query) {form.elements.asset.focus();return;}
+    trackHomeEvidence('search_submitted');
     const hash='#/home?'+new URLSearchParams({lang,asset:query});
     if (location.hash===hash) renderHome(); else location.hash=hash;
   };
@@ -96,7 +105,12 @@ async function renderHome() {
       listed(evidence.results,result.outcomes,r=>trialLink(r)+' · '+esc(r.endpoints.join(' / ')))+
       listed(evidence.guidance,result.guidance,g=>`<a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.publisher)} ${esc(g.reference)}</a> · ${esc(g.version_date)}`)+
       `</div><a href="#/public-events?${esc(qs.toString())}">${evidence.more}</a> <button class="btn" type="button" data-asset-report>${homeReport[lang].download}</button> <a data-asset-pilot href="#/pilot?${esc(new URLSearchParams({lang,asset,as_of:result.as_of}).toString())}">${homeReport[lang].pilot}</a>`;
-    output.querySelector('[data-asset-report]').onclick=()=>downloadHomeEvidence(asset,result,lang);
+    trackHomeEvidence('evidence_shown');
+    output.querySelector('[data-asset-report]').onclick=()=>{
+      downloadHomeEvidence(asset,result,lang);
+      trackHomeEvidence('brief_requested');
+    };
+    output.querySelector('[data-asset-pilot]').onclick=()=>trackHomeEvidence('quote_link_clicked');
   } catch {
     if (output.isConnected) output.innerHTML=`<p>${evidence.error}</p>${researchLink}`;
   }

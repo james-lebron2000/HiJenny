@@ -1354,11 +1354,28 @@ def record_pilot_engagement(session, session_id, sample_version, event):
     ).on_conflict_do_nothing(index_elements=["session_id", "sample_version", "event"]))
 
 
+def home_evidence_metrics(session, since=None):
+    from hijenny.db import PilotEngagement
+
+    entries = select(PilotEngagement.session_id).where(
+        PilotEngagement.sample_version == "asset-home-v1", PilotEngagement.event == "home_open")
+    if since:
+        entries = entries.where(PilotEngagement.first_seen >= since.isoformat())
+    counts = dict(session.execute(select(PilotEngagement.event, func.count()).where(
+        PilotEngagement.sample_version == "asset-home-v1",
+        PilotEngagement.session_id.in_(entries)).group_by(PilotEngagement.event)).all())
+    return {label: counts.get(event, 0) for event, label in (
+        ("home_open", "打开首页"), ("search_submitted", "主动提交检索"),
+        ("evidence_shown", "展示有记录的证据（含默认示例）"), ("brief_requested", "请求下载简报"),
+        ("quote_link_clicked", "点击资产询价入口"), ("scoped_inquiry_accepted", "服务器受理含资产范围的询价"))}
+
+
 def pilot_metrics(session, since=None):
     from hijenny.db import PilotEngagement, PilotInquiry, PilotProgress
 
     # Anchor each cohort at entry so a later stage stays attached to its original cohort.
     counts = select(PilotEngagement.sample_version, PilotEngagement.event, func.count())
+    counts = counts.where(PilotEngagement.sample_version != "asset-home-v1")
     receipts = select(func.count()).select_from(PilotInquiry)
     stages = select(PilotProgress.stage, func.count(func.distinct(PilotProgress.receipt))).join(
         PilotInquiry, PilotInquiry.receipt == PilotProgress.receipt)

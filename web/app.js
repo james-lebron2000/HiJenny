@@ -122,6 +122,13 @@ async function api(path, options) {
   return data;
 }
 
+function pilotSessionId() {
+  const key='hijenny.pilot.session';
+  const id=sessionStorage.getItem(key) || crypto.randomUUID();
+  sessionStorage.setItem(key,id);
+  return id;
+}
+
 function jsonOptions(method, body) {
   return { method, headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body || {}) };
 }

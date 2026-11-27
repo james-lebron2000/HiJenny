@@ -30,8 +30,15 @@ class PilotEvent(PilotSession):
     event: Literal["pilot_open", "sample_open", "source_open"]
 
 
+class HomeEvidenceEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_id: UUID
+    sample_version: Literal["asset-home-v1"]
+    event: Literal["home_open", "search_submitted", "evidence_shown", "brief_requested", "quote_link_clicked"]
+
+
 @router.post("/api/pilot/events", status_code=204)
-def track_engagement(payload: PilotEvent):
+def track_engagement(payload: PilotEvent | HomeEvidenceEvent):
     with store.session_scope() as session:
         store.record_pilot_engagement(session, str(payload.session_id), payload.sample_version, payload.event)
 
@@ -63,6 +70,9 @@ def submit(request: PilotRequest):
             if request.analytics:
                 store.record_pilot_engagement(session, str(request.analytics.session_id),
                                               request.analytics.sample_version, "inquiry_accepted")
+                if request.asset_context:
+                    store.record_pilot_engagement(session, str(request.analytics.session_id),
+                                                  "asset-home-v1", "scoped_inquiry_accepted")
             return result
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc

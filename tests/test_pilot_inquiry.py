@@ -233,3 +233,29 @@ def test_asset_scope_is_optional_and_survives_quote_and_retry(tmp_path, monkeypa
         quote = pilot_sales.quote_draft(session, receipt, currency="CNY", amount="900", scope="演练",
                                        delivery="约定日期", tax="待确认", valid_until=date.today()+timedelta(days=2))
         assert "奥希替尼" in quote and "2026-11-27" in quote
+
+
+def test_home_evidence_cohort_and_scoped_inquiry_deduplication(tmp_path, monkeypatch):
+    from datetime import date
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "home-metrics.db")
+    monkeypatch.setattr(store, "_ENGINE", None)
+    monkeypatch.setattr(store, "_SESSION_FACTORY", None)
+    store.init_db()
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    anon = {"session_id": str(uuid4()), "sample_version": "asset-home-v1"}
+    for event in ["home_open", "home_open", "evidence_shown", "brief_requested", "brief_requested"]:
+        assert client.post("/api/pilot/events", json=dict(anon, event=event)).status_code == 204
+    for extras in [dict(event="scoped_inquiry_accepted"), dict(event="home_open", asset="private")]:
+        assert client.post("/api/pilot/events", json=dict(anon, **extras)).status_code == 422
+    req = dict(request_key=str(uuid4()), email="qa@example.invalid", stage="待确认", pages="待确认", meeting="2027-01-10",
+               deployment="待讨论", analytics=dict(anon, sample_version="asd101-v1"),
+               asset_context={"asset": "demo", "as_of": "2026-11-27"})
+    for _ in range(2):
+        assert client.post("/api/pilot/inquiries", json=req).status_code == 200
+    client.post("/api/pilot/events", json=dict(anon, session_id=str(uuid4()), event="brief_requested"))
+    with store.session_scope() as session:
+        assert list(store.home_evidence_metrics(session).values()) == [1, 0, 1, 1, 0, 1]
+        assert set(store.home_evidence_metrics(session, date(9999, 1, 1)).values()) == {0}
+        assert "asset-home-v1" not in next(iter(store.pilot_metrics(session).values()))
