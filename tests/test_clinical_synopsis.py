@@ -167,3 +167,20 @@ def test_handoff_rejects_broken_lineage_and_unmatched_review_responses():
     packet["reviews"] = [review]
     packet["versions"].reverse()
     assert check() == 422
+
+
+def test_parallel_handoff_requires_connected_sibling_evidence():
+    from hijenny.api.clinical import ClinicalHandoff
+    import pytest
+    from pydantic import ValidationError
+    base = dict(id=str(uuid4()), created="2026-11-27T01:00:00Z", question="评审", references=[], changes=[], options=[{}, {}])
+    left = dict(base, id=str(uuid4()), parent=base["id"])
+    right = dict(left, id=str(uuid4()))
+    merged = dict(left, id=str(uuid4()), parent=left["id"], adoptions=[
+        dict(field="试验字段", source_version=right["id"], base_version=base["id"], edited=True)])
+    packet = dict(format="hijenny-clinical-v2", versions=[base, left, right, merged], reviews=[])
+    ClinicalHandoff.model_validate(packet)
+    for versions in ([base, left, merged], [base, left, dict(right, parent=left["id"]), merged],
+                     [base, left, right, dict(right, id=str(uuid4())), merged]):
+        with pytest.raises(ValidationError):
+            ClinicalHandoff.model_validate(dict(packet, versions=versions))

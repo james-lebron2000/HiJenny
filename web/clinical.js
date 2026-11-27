@@ -135,7 +135,7 @@ function renderClinical() {
       <p data-lineage></p><label><input type="checkbox">仅看两版改动不同的字段</label>
       <div data-diffs></div><p data-adoption-status role="status"></p><button type="button" data-download-comparison class="btn">下载当前修订对照</button></details>`:''}
       <details id="design-handoff"><summary>交接设计版本与复核记录</summary>
-      <p>下载当前版本及其历次修订、来源快照和复核意见。导入时文件会提交给当前 HiJenny 服务校验，通过后保存到本浏览器。</p>
+      <p>下载当前版本、历次修订及采用条款所引的完整对照版本，包含来源快照和复核意见。导入时文件会提交给当前 HiJenny 服务校验，通过后保存到本浏览器。</p>
       <button class="btn" type="button" data-download>下载交接包</button>
       <label>导入交接包<input type="file" accept=".json,application/json" data-upload></label><p role="status"></p></details>
       <details><summary>关联登记试验（${refs.length}）</summary>
@@ -193,7 +193,12 @@ function renderClinical() {
         ${version.responses.map(({review,reply})=>`<article><h3>${esc(review.role)} · ${esc(review.reviewer)} · ${esc(review.decision)}</h3>
         <p>${esc(review.note)}</p><p>修订回应</p><pre class="source-snapshot">${esc(reply)}</pre></article>`).join('')}</details>`:''}
       ${version.adoptions?.length?`<details id="saved-adoptions"><summary>本版采用的平行修订（${version.adoptions.length}）</summary>
-        ${version.adoptions.map(a=>`<p>${esc(a.field)} · 对照版 ${esc(a.source_version)} · 共同原稿 ${esc(a.base_version)} · ${a.edited?'采用后另有编辑':'沿用原文'}</p>`).join('')}</details>`:''}
+        ${version.adoptions.map(a=>{
+          const source=JSON.parse(localStorage.getItem(prefix+a.source_version)), base=JSON.parse(localStorage.getItem(prefix+a.base_version));
+          const row=source && previous && base && parallelDesignChanges(base,previous,source).find(r=>r.name===a.field);
+          return `<article><p>${esc(a.field)} · 对照版 ${esc(a.source_version)} · 共同原稿 ${esc(a.base_version)} · ${a.edited?'采用后另有编辑':'沿用原文'}</p>
+            ${row?`<details><summary>核对来源字段原文</summary><pre class="source-snapshot">${esc(row.values[2] || '（空白）')}</pre></details>`:'<p>本浏览器缺少可核对的来源字段。</p>'}</article>`;
+        }).join('')}</details>`:''}
       <div id="design-reviews"></div><form id="design-review-form">
       <label>专业角色<select name="role"><option>临床</option><option>统计</option></select></label>
       <label>复核人<input name="reviewer" required maxlength="120"></label>
@@ -417,13 +422,21 @@ function renderClinical() {
     handoff.querySelector('[data-download]').onclick=()=>{
       if (!save()) return;
       try {
-        const lineage=[], reviews=[], seen=new Set();
-        for (let item=version;item;item=parentOf(item)) {
-          if (seen.has(item.id)) throw new Error('版本链包含重复编号。');
-          seen.add(item.id);lineage.unshift(item);reviews.push(...reviewsFor(item.id));
+        const lineage=[], reviews=[], seen=new Set(), visiting=new Set();
+        function collect(item) {
+          if (seen.has(item.id)) return;
+          if (visiting.has(item.id)) throw new Error('版本引用存在循环。');
+          visiting.add(item.id);
+          for (const id of [item.parent,...(item.adoptions || []).map(a=>a.source_version)].filter(Boolean)) {
+            const dependency=JSON.parse(localStorage.getItem(prefix+id));
+            if (!dependency) throw new Error('缺少来源版本 '+id+'，请先导入对应交接包。');
+            collect(dependency);
+          }
+          visiting.delete(item.id);seen.add(item.id);lineage.push(item);reviews.push(...reviewsFor(item.id));
         }
-        if (lineage[0].parent) throw new Error('缺少较早版本，无法导出完整交接包。');
-        const url=URL.createObjectURL(new Blob([JSON.stringify({format:'hijenny-clinical-v1',versions:lineage,reviews})],{type:'application/json'}));
+        collect(version);
+        const format=lineage.some(item=>item.adoptions?.length)?'hijenny-clinical-v2':'hijenny-clinical-v1';
+        const url=URL.createObjectURL(new Blob([JSON.stringify({format,versions:lineage,reviews})],{type:'application/json'}));
         const a=document.createElement('a');a.href=url;a.download='HiJenny-design-'+version.id+'.json';a.click();
         setTimeout(()=>URL.revokeObjectURL(url),1000);
       } catch(err) {toast(err.message,'err');}

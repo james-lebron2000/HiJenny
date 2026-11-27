@@ -165,24 +165,43 @@ class HandoffVersion(Synopsis):
 
 
 class ClinicalHandoff(BaseModel):
-    format: Literal["hijenny-clinical-v1"]
+    format: Literal["hijenny-clinical-v1", "hijenny-clinical-v2"]
     versions: list[HandoffVersion] = Field(min_length=1)
     reviews: list[ReviewedComment]
 
     @model_validator(mode="after")
     def verify_lineage(self):
         expected_parent = None
-        seen = set()
+        seen = {}
+        dependencies = {}
         reviews = {r.id: r for r in self.reviews}
         if len(reviews) != len(self.reviews):
             raise ValueError("重复的复核意见编号")
         for version in self.versions:
-            if version.id in seen or version.parent != expected_parent:
+            if version.id in seen or (version.parent is not None and version.parent not in seen):
+                raise ValueError("版本重复或缺少父版本")
+            if self.format == "hijenny-clinical-v1" and version.parent != expected_parent:
                 raise ValueError("设计版本链不完整")
             if any(reviews.get(item.review.id) != item.review for item in version.responses):
                 raise ValueError("修订回应缺少匹配的原始复核意见")
-            seen.add(version.id)
+            linked = {version.parent} if version.parent else set()
+            if self.format == "hijenny-clinical-v2":
+                for item in version.adoptions:
+                    source = seen.get(item.source_version)
+                    parent = seen.get(version.parent)
+                    if (not source or not parent or source.id == parent.id or
+                            source.parent != item.base_version or parent.parent != item.base_version):
+                        raise ValueError("采用字段缺少同一原稿的来源修订")
+                    linked.add(source.id)
+            dependencies[version.id] = linked
+            seen[version.id] = version
             expected_parent = version.id
+        needed = {self.versions[-1].id}
+        for key in reversed(seen):
+            if key in needed:
+                needed.update(dependencies[key])
+        if len(needed) != len(seen):
+            raise ValueError("含未关联的设计版本")
         if any(r.version not in seen for r in self.reviews):
             raise ValueError("复核意见所属版本不在交接包内")
         return self
