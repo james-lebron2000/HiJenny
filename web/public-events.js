@@ -1,8 +1,58 @@
+function publicCoverage(receipt) {
+  // Region refers to the source institution, independent of study sites and patient location.
+  const sources = {
+    trials: ['美国','临床试验','ClinicalTrials.gov'],
+    publications: ['美国','文献','PubMed'],
+    orange_book: ['美国','药品专利','FDA Orange Book'],
+    fda: ['美国','监管','Drugs@FDA'],
+    jrct: ['日本','临床试验','jRCT'],
+    ema: ['欧盟','监管','EMA']
+  };
+  const table = document.createElement('table');
+  table.createCaption().textContent='公开关注名单的来源覆盖';
+  const header=table.createTHead().insertRow();
+  const kinds=['临床试验','文献','药品专利','监管'];
+  for (const label of ['来源所在地区',...kinds]) {
+    const th=document.createElement('th');
+    th.scope='col'; th.textContent=label; header.append(th);
+  }
+  const body=table.createTBody();
+  for (const region of ['中国','美国','日本','欧盟']) {
+    const row=body.insertRow();
+    const th=document.createElement('th');
+    th.scope='row'; th.textContent=region; row.append(th);
+    for (const kind of kinds) {
+      const cell=row.insertCell();
+      const checks=receipt.checks.filter(r=>sources[r.source]?.[0]===region && sources[r.source][1]===kind);
+      if (!checks.length) {cell.textContent='本轮无核对目标';continue;}
+      const name=sources[checks[0].source][2];
+      const ok=checks.filter(r=>r.status==='ok');
+      const dates=checks.map(r=>r.last_success_utc || (r.status==='ok'?receipt.finished_utc:null)).filter(Boolean).sort();
+      cell.append(name,document.createElement('br'),'核对成功 '+ok.length+' / '+checks.length);
+      if (dates.length) cell.append(document.createElement('br'),'最近成功 '+fmtDate(dates.at(-1)));
+      const sample=ok.find(r=>r.records>0);
+      if (!sample) continue;
+      const params=new URLSearchParams({source:name});
+      if (['fda','orange_book'].includes(sample.source)) params.set('application',sample.target);
+      else if (['publications','trials','jrct'].includes(sample.source)) params.set('trial',sample.target);
+      else params.set('asset',sample.subject || '');
+      const link=document.createElement('a');
+      link.textContent='查看样本 '+sample.target;
+      link.href='#/public-events?'+params;
+      cell.append(document.createElement('br'),link);
+    }
+  }
+  return table;
+}
+
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、日本 jRCT 登记、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
     ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
     <details class="card" id="public-collection"><summary>最近一次公开采集</summary><div aria-live="polite">正在读取核对记录…</div></details>
+    <details class="card" id="public-coverage"><summary>四地区数据覆盖与缺口</summary>
+    <p>按来源机构所在地区列出本轮核对的目标。跨国试验和文献可涉及多个地区。成功数按关注目标计算；最近成功时间取该格内最近一次成功核对。</p>
+    <div style="overflow-x:auto" aria-live="polite">正在读取覆盖范围…</div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
     <label>FDA 申请号<input name="application" placeholder="NDA208065" title="NDA、ANDA 或 BLA 加六位数字"></label>
@@ -27,7 +77,9 @@ function renderPublicEvents() {
   api('/api/public-events/collection').then(({receipt})=>{
     if (!collection.isConnected) return;
     const body=collection.querySelector('div');
-    if (!receipt) {body.textContent='服务器尚未同步采集回执。';return;}
+    const coverage=$('#public-coverage div');
+    if (!receipt) {body.textContent=coverage.textContent='服务器尚未同步采集回执。';return;}
+    coverage.replaceChildren(publicCoverage(receipt));
     const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
     collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
     const names={orange_book_uses:'FDA 专利用途代码释义',orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
@@ -41,7 +93,9 @@ function renderPublicEvents() {
       link.textContent=({schedule:'查看定时采集运行',workflow_dispatch:'查看手动采集运行'})[receipt.trigger] || '查看采集运行';
       body.append(link);
     }
-  }).catch(()=>{collection.querySelector('div').textContent='暂时无法读取采集回执。';});
+  }).catch(()=>{
+    if (collection.isConnected) collection.querySelector('div').textContent=$('#public-coverage div').textContent='暂时无法读取采集回执。';
+  });
   const initial = hashParams();
   for (const el of form.elements) {
     if (!el.name || !initial.has(el.name)) continue;
