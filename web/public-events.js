@@ -74,7 +74,7 @@ function renderPublicEvents() {
     <label><input type="checkbox" name="study_interruption" value="true"> 仅看试验暂停、终止或撤回说明</label>
     <button class="btn primary">筛选</button><button class="btn" type="button" id="public-event-week">最近七天发现</button></form>
     <a id="public-event-report" hidden>下载当前筛选的完整简报</a>
-    <p id="public-event-status" role="status"></p><div id="public-event-list"></div>
+    <p id="public-event-status" role="status"></p><nav id="public-source-counts" aria-label="按来源查看归档"></nav><div id="public-event-list"></div>
     <button type="button" class="btn" id="public-event-more" hidden>加载更多</button></section>`);
   const form = $('#public-event-filters'), status = $('#public-event-status');
   const list = $('#public-event-list'), more = $('#public-event-more');
@@ -132,12 +132,34 @@ function renderPublicEvents() {
     }
     const request = generation;
     query.set('offset', String(offset));
+    const counts = $('#public-source-counts');
+    if (reset) counts.replaceChildren();
     const download = $('#public-event-report');
     download.hidden = true;
     more.hidden = true; status.textContent = '正在读取…';
     try {
       const result = await api('/api/public-events?' + query);
       if (generation !== request || !form.isConnected) return;
+      counts.replaceChildren();
+      if (result.total) {
+        const heading=document.createElement('p');
+        heading.textContent='当前筛选的来源分布（编号在各来源内去重）';
+        counts.append(heading);
+        for (const row of result.source_counts) {
+          const button=document.createElement('button');
+          button.type='button'; button.className='btn';
+          button.textContent=row.source+' · '+row.events+' 条归档 · '+row.records+' 个来源编号';
+          button.disabled=query.get('source')===row.source;
+          button.onclick=()=>{form.elements.source.value=row.source; form.requestSubmit();};
+          counts.append(button);
+        }
+      }
+      if (query.has('source')) {
+        const all=document.createElement('button');
+        all.type='button'; all.className='btn'; all.textContent='查看全部来源';
+        all.onclick=()=>{form.elements.source.value=''; form.requestSubmit();};
+        counts.append(all);
+      }
       for (const r of result.items) {
         const card = document.createElement('article');
         card.className = 'card';

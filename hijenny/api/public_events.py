@@ -129,15 +129,23 @@ def latest_collection():
     return {"receipt": json.loads(row[0]) if row else None}
 
 
+def source_counts(db, table, sql, args):
+    rows = db.execute(f"""SELECT json_extract(payload, '$.source') AS source, count(*) AS events,
+                          count(DISTINCT json_extract(payload, '$.record')) AS records
+                          FROM {table}""" + sql + " GROUP BY source ORDER BY events DESC, source", args)
+    return [{"source": source, "events": events, "records": records} for source, events, records in rows]
+
+
 @router.get("/api/public-events")
 def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
                   limit: int = Query(50, ge=1, le=100)):
     table, sql, args, order, _, mapping = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
-        count = db.execute(f"SELECT count(*) FROM {table}" + sql, args).fetchone()[0]
+        counts = source_counts(db, table, sql, args)
+        count = sum(row["events"] for row in counts)
         rows = db.execute(f"SELECT payload FROM {table}" + sql + order + " LIMIT ? OFFSET ?", (*args, limit, offset))
-        return {"total": count, "asset_match": mapping, "items": [json.loads(row[0]) for row in rows]}
+        return {"total": count, "source_counts": counts, "asset_match": mapping, "items": [json.loads(row[0]) for row in rows]}
 
 
 def display(value):
@@ -155,6 +163,11 @@ def report(filters=Depends(event_filters)):
     table, sql, args, order, labels, _ = filters
     lines = ["HiJenny 公开资产动态", "筛选范围（发现日期按台北时间）", *labels]
     with closing(connect()) as db:
+        db.execute("BEGIN")
+        counts = source_counts(db, table, sql, args)
+        if counts:
+            lines.extend(["", "当前筛选的来源分布（编号在各来源内去重）"])
+            lines.extend(f"{r['source']} · {r['events']} 条归档 · {r['records']} 个来源编号" for r in counts)
         rows = db.execute(f"SELECT payload FROM {table}" + sql + order, args)
         count = 0
         for count, (payload,) in enumerate(rows, 1):
