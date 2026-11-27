@@ -41,7 +41,16 @@ function valuationWorkbook(plan, project, parent) {
   const sheet=(name,widths,data)=>`<Worksheet ss:Name="${name}"><Table>${widths.map(w=>'<Column ss:Width="'+w+'"/>').join('')}${data.join('')}</Table></Worksheet>`;
   function evidence(version,prefix) {
     const disclosures=version.disclosures || [], deals=version.deals || [];
-    return (disclosures.length?sheet(prefix+'引用的公开披露',[230,170,90,240,260],[
+    const q=version.question;
+    const replies=q ? [
+      row(['估值版本',version.id,'问题编号',q.question_id].map(label)),
+      row(['卖方问题',q.question,'保存时状态',q.status].map(label)),
+      row(['跟进版本',q.revision,'已登记答复数',Array.isArray(q.replies)?q.replies.length:'旧版未记录'].map(label)),
+      row(['答复编号','登记时间','登记人','答复内容','文件名','原件位置'].map(label)),
+      ...(q.replies || []).map(r=>row([r.event_id,r.ts,r.actor,r.note,r.filename,r.locator].map(label)))
+    ] : [];
+    return (q?sheet(prefix+'卖方问题与答复',[220,165,140,340,180,200],replies):'')+
+      (disclosures.length?sheet(prefix+'引用的公开披露',[230,170,90,240,260],[
       row(['披露编号','字段','披露日','值','来源网址'].map(label)),
       ...disclosures.map(r=>row([r.id,r.field,r.source_date,r.value,r.url].map(label))) ]):'')+
       (deals.length?sheet(prefix+'可比交易',dealFields.map(()=>150),[row(dealFields.map(([,title])=>label(title))),

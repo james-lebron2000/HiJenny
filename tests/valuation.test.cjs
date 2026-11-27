@@ -81,3 +81,19 @@ test('parent comparison follows legacy row identities across rename and deletion
   assert.match(other,/统一口径/);
   assert.doesNotMatch(other,/现值变化/);
 });
+
+test('internal workbook keeps seller reply snapshots with their own valuation versions',()=>{
+  const workbook=runInNewContext(source+'\nvaluationWorkbook',{structuredClone,esc:s=>s.replaceAll('&','&amp;').replaceAll('<','&lt;')});
+  const plan={id:'old',name:'demo',flows:[],outputs:[{total:0},{total:0}],asOf:'2026-11-27',currency:'USD',
+    question:{question_id:'Q1',question:'Which population?',status:'Open',revision:0,replies:[]}};
+  const current={...plan,id:'new',parent:'old',question:{...plan.question,revision:1,replies:[
+    {event_id:'reply-1',ts:'2026-11-27',actor:'BD',note:'=A1 & <source>',filename:'CSR.pdf',locator:'page 10'}]}};
+  const xml=workbook(current,'demo-project',plan);
+  const sheet=name=>xml.split('<Worksheet ss:Name="'+name+'">')[1].split('</Worksheet>')[0];
+  assert.match(sheet('卖方问题与答复'),/reply-1/);
+  assert.match(sheet('卖方问题与答复'),/ss:Type="String">=A1 &amp; &lt;source>/);
+  assert.match(sheet('卖方问题与答复'),/page 10/);
+  assert.match(sheet('原版卖方问题与答复'),/Q1/);
+  assert.doesNotMatch(sheet('原版卖方问题与答复'),/reply-1/);
+  assert.doesNotMatch(workbook({...plan,question:null},'demo-project'),/卖方问题与答复/);
+});
