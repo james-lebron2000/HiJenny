@@ -447,3 +447,27 @@ def test_overlapping_watch_targets_count_shared_fact_once_per_change(tmp_path, m
     rows = [json.loads(line) for line in ledger.read_text().splitlines()]
     assert [(row["previous"], row["value"]) for row in rows] == [(None, "A"), ("A", "B")]
     assert len({row["id"] for row in rows}) == 2
+
+
+def test_atom_conditional_refresh_for_empty_and_changed_feed(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from hijenny.api.public_events import router
+
+    monkeypatch.setattr(public_events, "DATA_DIR", tmp_path)
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    url = "/api/public-events/feed.atom?source=SEC"
+    empty = client.get(url)
+    tag = empty.headers["etag"]
+    for validator in [tag, '"other", ' + tag[2:], "*"]:
+        same = client.get(url, headers={"If-None-Match": validator})
+        assert same.status_code == 304 and not same.content and same.headers["etag"] == tag
+    row = dict(id="first", source="SEC", asset="demo", subject="company", region=None, record="abc",
+               observed="2026-11-27T12:00:00Z", source_date="2026-11-26", url="https://www.sec.gov/",
+               kind="baseline", field="公司申报", value="8-K")
+    with closing(public_events.connect()) as db, db:
+        db.execute("insert into events values (?,?,?,?,?)", ("first", "demo", None, row["source_date"], json.dumps(row)))
+    changed = client.get(url, headers={"If-None-Match": tag})
+    assert changed.status_code == 200 and changed.headers["etag"] != tag and "8-K" in changed.text

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 from contextlib import closing
@@ -368,7 +369,7 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
         labels = ["最近七天发现（台北）", *(label for label in labels if not label.startswith(("发现起始日：", "发现结束日：")))]
     ET.SubElement(feed, "title").text = "HiJenny 公开动态" + (" · " + " · ".join(labels) if labels else "")
     ET.SubElement(ET.SubElement(feed, "author"), "name").text = "HiJenny"
-    updated = json.loads(receipt[0])["finished_utc"] if receipt else datetime.now(timezone.utc).isoformat()
+    updated = json.loads(receipt[0])["finished_utc"] if receipt else "1970-01-01T00:00:00Z"
     ET.SubElement(feed, "updated").text = events[0]["observed"] if events else updated
     for row in events:
         entry = ET.SubElement(feed, "entry")
@@ -379,7 +380,13 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
         ET.SubElement(entry, "updated").text = row["observed"]
         ET.SubElement(entry, "title").text = f'{row["asset"] or row["subject"]} · {row["field"]}'
         ET.SubElement(entry, "summary", type="text").text = "\n".join(event_details(row))
-    return Response(ET.tostring(feed, encoding="utf-8", xml_declaration=True), media_type="application/atom+xml")
+    content = ET.tostring(feed, encoding="utf-8", xml_declaration=True)
+    tag = '"' + hashlib.sha256(content).hexdigest() + '"'
+    headers = {"ETag": "W/" + tag, "Cache-Control": "no-cache"}
+    validators = request.headers.getlist("if-none-match")
+    if any(value.strip() == "*" or tag in re.findall(r'(?:W/)?("[^"]*")', value) for value in validators):
+        return Response(status_code=304, headers=headers)
+    return Response(content, media_type="application/atom+xml", headers=headers)
 
 
 @router.get("/api/public-events/report.txt", response_class=PlainTextResponse)
