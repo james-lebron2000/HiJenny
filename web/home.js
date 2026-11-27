@@ -38,9 +38,9 @@ const homeReport={
 };
 
 const homeUpdates={
-  zh:{title:'公开动态（按来源日期）',source:'查看原文',filed:'申报日',open:'查看完整动态与订阅',download:'下载全部动态简报（中文 TXT）',empty:'该名称暂无匹配动态。',error:'暂时无法读取公开动态。'},
-  en:{title:'Public updates by source date',source:'Open original source',filed:'Filed',open:'View all updates and subscriptions',download:'Download all matching updates (Chinese TXT)',empty:'No archived updates match this name.',error:'Archived updates are temporarily unavailable.'},
-  ja:{title:'公開情報（情報源の日付順）',source:'原資料を開く',filed:'提出日',open:'更新一覧と購読',download:'全件のレポートをダウンロード（中国語 TXT）',empty:'この名称に該当する更新はありません。',error:'現在、更新情報を読み込めません。'}
+  zh:{title:'公开动态（按来源日期）',source:'查看原文',filed:'申报日',open:'查看完整动态与订阅',download:'下载全部动态简报（中文 TXT）',empty:'当前查询条件下没有匹配的归档动态。',error:'暂时无法读取公开动态。'},
+  en:{title:'Public updates by source date',source:'Open original source',filed:'Filed',open:'View all updates and subscriptions',download:'Download all matching updates (Chinese TXT)',empty:'No archived updates match the current filters.',error:'Archived updates are temporarily unavailable.'},
+  ja:{title:'公開情報（情報源の日付順）',source:'原資料を開く',filed:'提出日',open:'更新一覧と購読',download:'全件のレポートをダウンロード（中国語 TXT）',empty:'この検索条件に該当する収録記録はありません。',error:'現在、更新情報を読み込めません。'}
 };
 
 function homeDisclosure(row,lang,cutoff) {
@@ -60,6 +60,19 @@ function homeDisclosure(row,lang,cutoff) {
   return summary+`<div><a data-home-disclosure href="#/public-events?${esc(params.toString())}">${label} · ${esc(row.record)}</a></div>`;
 }
 
+function homeMonitoring(receipt,lang) {
+  const copy={
+    zh:{title:'最近一批监测',success:'成功目标',none:'本批关注名单没有匹配的具名目标',unknown:'未标注对象的目标',noReceipt:'服务器尚无采集回执',manual_review:'待人工复核',failed:'采集失败',pending:'待核对'},
+    en:{title:'Latest monitoring run',success:'Successful targets',none:'No named watchlist target matched this scope',unknown:'Targets without a subject label',noReceipt:'No collection receipt available',manual_review:'Manual review',failed:'Collection failed',pending:'Pending review'},
+    ja:{title:'直近の収集状況',success:'収集成功',none:'この範囲に一致する名称付き監視対象はありません',unknown:'対象名が未登録の監視項目',noReceipt:'収集記録はまだありません',manual_review:'手動確認待ち',failed:'収集失敗',pending:'要確認'}
+  }[lang];
+  if (!receipt) return `<p>${copy.noReceipt}</p>`;
+  const gaps=receipt.pending.map(c=>`<li>${esc(copy[c.status] || copy.pending)} · ${esc(c.source)} · ${esc(c.target)}</li>`).join('');
+  const count=receipt.total ? `${copy.success} ${receipt.ok}/${receipt.total}` : copy.none;
+  const unknown=receipt.unlabeled ? ` · ${copy.unknown} ${receipt.unlabeled}` : '';
+  return `<div data-home-monitoring><p>${copy.title} · ${esc(receipt.finished_utc)} · ${count}${unknown}</p>${gaps ? '<ul>'+gaps+'</ul>' : ''}</div>`;
+}
+
 async function showHomeUpdates(panel,filters,lang) {
   const copy=homeUpdates[lang];
   const query=new URLSearchParams(filters);
@@ -67,6 +80,7 @@ async function showHomeUpdates(panel,filters,lang) {
   const archiveLink=`<a href="#/public-events?${esc(query.toString())}">${copy.open}</a>`;
   try {
     query.set('limit','3');
+    query.set('include_monitoring','true');
     const result=await api('/api/public-events?'+query);
     if (!panel.isConnected) return;
     const items=result.items.map(r=>{
@@ -83,7 +97,7 @@ async function showHomeUpdates(panel,filters,lang) {
       return `<li><a href="${esc(href)}">${esc(title)}</a> · ${esc(r.source)} · ${esc(when)}${sourceLink}${homeDisclosure(r,lang,filters.as_of)}${outcomes}</li>`;
     });
     panel.innerHTML=`<h3>${copy.title} (${result.total})</h3>`+
-      (items.length?'<ul>'+items.join('')+'</ul>':'<p>'+copy.empty+'</p>')+archiveLink+
+      (items.length?'<ul>'+items.join('')+'</ul>':'<p>'+copy.empty+'</p>')+homeMonitoring(result.latest_monitoring,lang)+archiveLink+
       (result.total ? ` <a class="btn" data-home-update-report href="${esc(reportUrl)}" download>${copy.download}</a>` : '');
     return result.total;
   } catch {

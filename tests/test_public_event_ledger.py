@@ -564,6 +564,16 @@ def test_exported_coverage_scopes_gaps_to_receipt_subject(tmp_path, monkeypatch)
     with closing(public_events.connect()) as db, db:
         db.execute("insert into collection_receipt values (1,?)", (json.dumps(receipt),))
     client = TestClient(app)
+    for asset, source, expected_total, expected_ok in [
+        ("奥希替尼", "Drugs@FDA", 1, 1), ("依达方", "jRCT", 1, 0),
+        ("依达方", "ClinicalTrials.gov", 0, 0), ("unwatched", "jRCT", 0, 0)
+    ]:
+        listing = client.get("/api/public-events", params=dict(asset=asset, source=source, as_of="2026-11-26",
+                                                              include_monitoring=True)).json()
+        monitoring = listing["latest_monitoring"]
+        assert listing["total"] == 0 and monitoring["finished_utc"] == receipt["finished_utc"]
+        assert (monitoring["total"], monitoring["ok"]) == (expected_total, expected_ok)
+        assert len(monitoring["pending"]) == expected_total - expected_ok
     for params, expected, has_gap in [
         ({"asset": "奥希替尼", "as_of": "2026-11-26"}, "成功 1/1", False),
         ({"asset": "依达方"}, "成功 0/1", True),

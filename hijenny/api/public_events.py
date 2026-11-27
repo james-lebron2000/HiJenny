@@ -308,8 +308,8 @@ def public_event_count(filters=Depends(event_filters)):
 
 
 @router.get("/api/public-events")
-def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
-                  limit: int = Query(50, ge=1, le=100)):
+def public_events(request: Request, filters=Depends(event_filters), offset: int = Query(0, ge=0),
+                  limit: int = Query(50, ge=1, le=100), include_monitoring: bool = False):
     table, sql, args, order, _, mapping = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
@@ -329,7 +329,12 @@ def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
         rows = db.execute(f"SELECT payload FROM {table}" + sql + order + " LIMIT ? OFFSET ?", (*args, limit, offset))
         items = [json.loads(row[0]) for row in rows]
         differences = {row["id"]: diff for row in items if (diff := document_changes(row))}
-        return {"total": count, "source_counts": counts, "asset_counts": asset_counts, "sec_filings": filings, "asset_match": mapping,
+        extra = {}
+        if include_monitoring:
+            row = db.execute("SELECT payload FROM collection_receipt WHERE id=1").fetchone()
+            extra["latest_monitoring"] = subject_monitoring(json.loads(row[0]), request.query_params.get("asset", ""),
+                                                         request.query_params.get("source")) if row else None
+        return {**extra, "total": count, "source_counts": counts, "asset_counts": asset_counts, "sec_filings": filings, "asset_match": mapping,
                 "document_changes": differences, "items": items}
 
 
@@ -386,6 +391,24 @@ RECEIPT_SOURCES = {
 }
 
 
+def subject_checks(checks, subject):
+    canonical = verified_asset(subject)
+    return [check for check in checks if (label := check.get("subject"))
+            and (label.strip().casefold() == subject.casefold() or (canonical and verified_asset(label) == canonical))]
+
+
+def subject_monitoring(receipt, asset, source):
+    checks = receipt.get("checks", [])
+    if source:
+        checks = [c for c in checks if c.get("source") in RECEIPT_SOURCES.get(source, ())]
+    selected = subject_checks(checks, asset.strip()) if asset.strip() else checks
+    return {"finished_utc": receipt.get("finished_utc"), "total": len(selected),
+            "ok": sum(c.get("status") == "ok" for c in selected),
+            "unlabeled": sum(not c.get("subject") for c in checks),
+            "pending": [{key: c.get(key) for key in ("source", "target", "status")}
+                        for c in selected if c.get("status") != "ok"]}
+
+
 def collection_coverage(receipt, params, unassigned=False):
     checks = receipt.get("checks", [])
     if unassigned:
@@ -415,12 +438,7 @@ def collection_coverage(receipt, params, unassigned=False):
     unknown_subjects = sum(not c.get("subject") for c in checks)
     if subject:
         scope = " · ".join([f"监测对象 {subject}", *qualifiers])
-        canonical = verified_asset(subject)
-        selected = []
-        for check in checks:
-            label = check.get("subject") or ""
-            if label.strip().casefold() == subject.casefold() or (canonical and verified_asset(label) == canonical):
-                selected.append(check)
+        selected = subject_checks(checks, subject)
         if not selected:
             if unknown_subjects:
                 return [f"{scope} · 未匹配到已标注对象；本批有 {unknown_subjects} 项未记录对象名称，覆盖待核。"]
