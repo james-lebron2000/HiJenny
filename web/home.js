@@ -60,7 +60,10 @@ async function showHomeUpdates(panel,filters,lang) {
       const when=[dateLabel,r.source_date].filter(Boolean).join(' ');
       const sourceLink=/^https?:\/\//i.test(r.url || '')
         ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${copy.source}</a>` : '';
-      return `<li><a href="${esc(href)}">${esc(title)}</a> · ${esc(r.source)} · ${esc(when)}${sourceLink}</li>`;
+      const measures=r.category==='primary-outcomes' ? r.value?.primary_outcomes : null;
+      const outcomes=Array.isArray(measures) ? measures.map(m=>
+        `<details class="home-outcome"><summary>${esc(r.record)} · ${esc(m.title || homeEvidence[lang].results)}</summary>${homeOutcomeDetails(m,lang)}</details>`).join('') : '';
+      return `<li><a href="${esc(href)}">${esc(title)}</a> · ${esc(r.source)} · ${esc(when)}${sourceLink}${outcomes}</li>`;
     });
     panel.innerHTML=`<h3>${copy.title} (${result.total})</h3>`+
       (items.length?'<ul>'+items.join('')+'</ul>':'<p>'+copy.empty+'</p>')+archiveLink+
@@ -69,6 +72,32 @@ async function showHomeUpdates(panel,filters,lang) {
   } catch {
     if (panel.isConnected) panel.innerHTML='<p>'+copy.error+'</p>'+archiveLink;
   }
+}
+
+function homeOutcomeDetails(m,lang) {
+  const copy=homeReport[lang];
+  const tableLabels={
+    zh:{denoms:denomHeaders,values:outcomeHeaders,scopes:['整个终点','分层','总体'],stat:'统计量',spread:'离散量类型'},
+    en:{denoms:['Scope','Group','Denominator','Denominator unit'],values:['Category','Group','Reported value','Unit','Dispersion','Lower limit','Upper limit','Comment'],scopes:['Entire endpoint','Stratum','Overall'],stat:'Statistic',spread:'Dispersion type'},
+    ja:{denoms:['適用範囲','群','解析分母','分母の単位'],values:['区分','群','報告値','単位','ばらつき','下限','上限','注記'],scopes:['評価項目全体','層','全体'],stat:'統計量',spread:'ばらつきの種類'}
+  }[lang];
+  const analyses={
+    zh:{title:'登记统计分析',headers:analysisHeaders,fields:analysisFields,empty:'本终点归档列出的统计分析为 0 项。',missing:'此版归档缺少统计分析字段。'},
+    en:{title:'Registered statistical analyses',headers:['Analysis','Field','Reported content'],empty:'This endpoint archive lists zero analyses.',missing:'The analyses field is unavailable in this archive version.',
+      fields:{groupIds:'Groups',paramType:'Effect measure',paramValue:'Estimate',ciPctValue:'Confidence level (%)',ciNumSides:'Interval sides',ciLowerLimit:'Lower limit',ciUpperLimit:'Upper limit',pValue:'P value',statisticalMethod:'Statistical method',statisticalComment:'Method comment',nonInferiorityType:'Comparison type',nonInferiorityComment:'Comparison design comment',groupDescription:'Group description',estimateComment:'Estimate comment',pValueComment:'P value comment'}},
+    ja:{title:'登録された統計解析',headers:['解析番号','項目','報告内容'],empty:'この評価項目の収録記録に記載された統計解析は0件です。',missing:'この版には統計解析の項目が収録されていません。',
+      fields:{groupIds:'解析対象群',paramType:'効果指標',paramValue:'推定値',ciPctValue:'信頼水準（%）',ciNumSides:'区間の片側・両側',ciLowerLimit:'下限',ciUpperLimit:'上限',pValue:'P値',statisticalMethod:'統計手法',statisticalComment:'手法の注記',nonInferiorityType:'比較の種類',nonInferiorityComment:'比較デザインの注記',groupDescription:'群の説明',estimateComment:'推定値の注記',pValueComment:'P値の注記'}}
+  }[lang];
+  const {denoms,rows}=measureRows(m,tableLabels.scopes);
+  const facts=[[copy.timeFrame,m.timeFrame || copy.missing],
+    [copy.population,m.populationDescription || copy.missing],[tableLabels.stat,m.paramType],[tableLabels.spread,m.dispersionType]];
+  return '<dl>'+facts.filter(([,value])=>value).map(([label,value])=>
+    `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join('')+'</dl>'+
+    registryTable(tableLabels.denoms,denoms,copy.missing,copy.missing)+
+    registryTable(tableLabels.values,rows,copy.missing,copy.missing)+
+    `<h4>${analyses.title}</h4>`+(Array.isArray(m.analyses)
+      ? registryTable(analyses.headers,analysisRows(m,analyses.fields),analyses.empty,copy.missing)
+      : '<p>'+analyses.missing+'</p>');
 }
 
 function downloadHomeEvidence(asset,result,lang) {
@@ -94,28 +123,6 @@ function downloadHomeEvidence(asset,result,lang) {
     return `<h4>${copy.planned}</h4>`+(items?'<ul>'+items+'</ul>'+archive(r.field_events?.planned_endpoints):'<p>'+copy.unavailable+'</p>')+
       '<p>'+posted+'</p>';
   };
-  const tableLabels={
-    zh:{denoms:denomHeaders,values:outcomeHeaders,scopes:['整个终点','分层','总体'],stat:'统计量',spread:'离散量类型'},
-    en:{denoms:['Scope','Group','Denominator','Denominator unit'],values:['Category','Group','Reported value','Unit','Dispersion','Lower limit','Upper limit','Comment'],scopes:['Entire endpoint','Stratum','Overall'],stat:'Statistic',spread:'Dispersion type'},
-    ja:{denoms:['適用範囲','群','解析分母','分母の単位'],values:['区分','群','報告値','単位','ばらつき','下限','上限','注記'],scopes:['評価項目全体','層','全体'],stat:'統計量',spread:'ばらつきの種類'}
-  }[lang];
-  const analyses={
-    zh:{title:'登记统计分析',headers:analysisHeaders,fields:analysisFields,empty:'本终点归档列出的统计分析为 0 项。',missing:'此版归档缺少统计分析字段。'},
-    en:{title:'Registered statistical analyses',headers:['Analysis','Field','Reported content'],empty:'This endpoint archive lists zero analyses.',missing:'The analyses field is unavailable in this archive version.',
-      fields:{groupIds:'Groups',paramType:'Effect measure',paramValue:'Estimate',ciPctValue:'Confidence level (%)',ciNumSides:'Interval sides',ciLowerLimit:'Lower limit',ciUpperLimit:'Upper limit',pValue:'P value',statisticalMethod:'Statistical method',statisticalComment:'Method comment',nonInferiorityType:'Comparison type',nonInferiorityComment:'Comparison design comment',groupDescription:'Group description',estimateComment:'Estimate comment',pValueComment:'P value comment'}},
-    ja:{title:'登録された統計解析',headers:['解析番号','項目','報告内容'],empty:'この評価項目の収録記録に記載された統計解析は0件です。',missing:'この版には統計解析の項目が収録されていません。',
-      fields:{groupIds:'解析対象群',paramType:'効果指標',paramValue:'推定値',ciPctValue:'信頼水準（%）',ciNumSides:'区間の片側・両側',ciLowerLimit:'下限',ciUpperLimit:'上限',pValue:'P値',statisticalMethod:'統計手法',statisticalComment:'手法の注記',nonInferiorityType:'比較の種類',nonInferiorityComment:'比較デザインの注記',groupDescription:'群の説明',estimateComment:'推定値の注記',pValueComment:'P値の注記'}}
-  }[lang];
-  const outcomeMeasures=r=>(r.measures || r.endpoints.map(title=>({title}))).map(m=>{
-    const {denoms,rows}=measureRows(m,tableLabels.scopes);
-    return `<li><strong>${esc(m.title)}</strong>`+details([[copy.timeFrame,m.timeFrame || copy.missing],
-      [copy.population,m.populationDescription || copy.missing],[tableLabels.stat,m.paramType],[tableLabels.spread,m.dispersionType]])+
-      registryTable(tableLabels.denoms,denoms,copy.missing,copy.missing)+
-      registryTable(tableLabels.values,rows,copy.missing,copy.missing)+
-      `<h4>${analyses.title}</h4>`+(Array.isArray(m.analyses)
-        ? registryTable(analyses.headers,analysisRows(m,analyses.fields),analyses.empty,copy.missing)
-        : '<p>'+analyses.missing+'</p>')+'</li>';
-  }).join('');
   const citationIndex=()=>{
     if (!citations.size) return '';
     const title={zh:'归档编号索引',en:'Archive reference index',ja:'収録記録番号一覧'}[lang];
@@ -146,7 +153,8 @@ function downloadHomeEvidence(asset,result,lang) {
     section(headers.trials,result.trials,r=>`<h3>${esc(r.record)} · ${esc(r.asset)}</h3>`+
       details([['phase',copy.phase],['status',copy.status],['sponsor',copy.sponsor],['conditions',copy.conditions],['countries',copy.sites]]
         .map(([key,label])=>[label,r[key],r.field_events?.[key]]).concat([[{zh:'登记状态的来源日期',en:'Source date for registry status',ja:'登録状況の情報源の日付'}[lang],r.source_date,r.id]]))+protocol(r)+link(registry(r)))+
-    section(headers.results,result.outcomes,r=>`<h3 id="outcome-${esc(r.record)}">${esc(r.record)}</h3><ul>${outcomeMeasures(r)}</ul>`+
+    section(headers.results,result.outcomes,r=>`<h3 id="outcome-${esc(r.record)}">${esc(r.record)}</h3><ul>${(r.measures || r.endpoints.map(title=>({title}))).map(m=>
+      `<li><strong>${esc(m.title)}</strong>${homeOutcomeDetails(m,lang)}</li>`).join('')}</ul>`+
       details([[copy.date,r.source_date,r.id]])+link(registry(r)+'?tab=results'))+
     section(headers.guidance,result.guidance,g=>`<h3>${esc(g.publisher)} · ${esc(g.reference)}</h3><p>${esc(g.type)} · ${esc(g.topic)} · ${esc(g.region)}</p>`+
       details([[copy.version,g.version_date],[copy.observed,g.observed]])+link(g.url))+citationIndex()+'</main></html>';

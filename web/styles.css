@@ -977,6 +977,9 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 .task-home a[aria-current="page"] { font-weight:700;text-decoration:underline; }
 
 .home-evidence { margin-top: 18px; }
+#home-asset-updates { min-width: 0; overflow-wrap: anywhere; }
+.home-outcome { margin-block: .5rem; }
+.home-outcome summary { cursor: pointer; }
 .home-evidence form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
 .home-evidence label { flex: 1 1 200px; }
 .home-source-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr)); gap: 12px; }
