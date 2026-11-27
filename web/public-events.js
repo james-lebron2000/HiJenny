@@ -590,6 +590,23 @@ function renderPublicEvents() {
           counts.append(button);
         }
       }
+      if (result.sec_filings?.length && !query.has('source_record')) {
+        const details=document.createElement('details'), summary=document.createElement('summary');
+        summary.textContent='按 SEC 申报文件查看 · '+result.sec_filings.length+' 份';
+        const records=document.createElement('ul');
+        for (const filing of result.sec_filings) {
+          const li=document.createElement('li'), link=document.createElement('a');
+          const params=new URLSearchParams(query);
+          params.delete('offset');
+          if (params.has('event_id')) {params.set('event',params.get('event_id')); params.delete('event_id');}
+          params.set('source','SEC'); params.set('source_record',filing.record);
+          link.href='#/public-events?'+params;
+          link.textContent=filing.record+' · '+filing.events+' 条归档';
+          li.append(filing.disclosed+' · ',link,' · '+filing.fields.join('、'));
+          records.append(li);
+        }
+        details.append(summary,records); counts.append(details);
+      }
       const hasAssetFacet=query.has('asset_label') || query.has('unassigned_asset');
       if (hasAssetFacet || ((query.has('asset') || query.has('source')) && !query.has('exact_asset') && result.total)) {
         const group=document.createElement('section'), title=document.createElement('p');

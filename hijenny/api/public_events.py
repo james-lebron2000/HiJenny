@@ -256,11 +256,19 @@ def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
         assets = db.execute(f"SELECT nullif(trim(json_extract(payload, '$.asset')), '') AS label, count(*) AS n FROM {table}" +
                             sql + " GROUP BY label ORDER BY n DESC, label", args)
         asset_counts = [{"label": label, "events": n} for label, n in assets]
+        filings = []
+        if len(counts) == 1 and counts[0]["source"] == "SEC":
+            groups = db.execute(f"""
+                SELECT json_extract(payload, '$.record') AS accession, max(date) AS disclosed, count(*),
+                       json_group_array(DISTINCT json_extract(payload, '$.field'))
+                FROM {table}""" + sql + " GROUP BY accession ORDER BY disclosed DESC, accession", args)
+            filings = [{"record": record, "disclosed": disclosed, "events": n, "fields": sorted(json.loads(fields))}
+                       for record, disclosed, n, fields in groups]
         count = sum(row["events"] for row in counts)
         rows = db.execute(f"SELECT payload FROM {table}" + sql + order + " LIMIT ? OFFSET ?", (*args, limit, offset))
         items = [json.loads(row[0]) for row in rows]
         differences = {row["id"]: diff for row in items if (diff := document_changes(row))}
-        return {"total": count, "source_counts": counts, "asset_counts": asset_counts, "asset_match": mapping,
+        return {"total": count, "source_counts": counts, "asset_counts": asset_counts, "sec_filings": filings, "asset_match": mapping,
                 "document_changes": differences, "items": items}
 
 
