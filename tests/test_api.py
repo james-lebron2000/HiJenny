@@ -874,3 +874,36 @@ def test_pdf_review_pages_reach_document_list_and_reports(client, monkeypatch):
     for text in ("possible scan or image-only · pp. 2", "no extractable content · pp. 3",
                  "beyond parsing limit · pp. 4–5"):
         assert text in md and text in paragraphs
+
+
+def test_gateway_review_identity_covers_review_and_followup_writes(client, monkeypatch):
+    project = create_project(client)
+    pid = project["project_id"]
+    rows = seed_review_data(pid)
+    base = f"/api/projects/{pid}"
+    question = "/api/questions/" + rows["question_id"]
+    evidence = "/api/evidence/" + rows["evidence_id"]
+    followup = base + "/followup/" + rows["question_id"]
+    editor = {"X-Org-Id": project["org_id"], "X-Project-Role": "editor"}
+    user = {**editor, "X-User-Id": "pilot-reviewer.42"}
+    for flag in ("REQUIRE_REVIEW_ACTOR", "REQUIRE_PROJECT_ROLE", "REQUIRE_ORG_HEADER"):
+        monkeypatch.setattr(config, flag, True)
+
+    writes = [
+        ("PATCH", base, {"name": "Identity audit"}),
+        ("PATCH", evidence, {"verification_status": "verified"}),
+        ("PATCH", "/api/findings/" + rows["finding_id"], {"status": "confirmed"}),
+        ("PATCH", question, {"priority": "low"}),
+        ("POST", followup, {"kind": "request", "revision": 0, "note": "Please provide table"}),
+        ("DELETE", question + "?actor=local-name", None),
+    ]
+    for method, path, fields in writes:
+        body = {"json": {**fields, "actor": "local-name"}} if fields else {}
+        for invalid in (editor, {**editor, "X-User-Id": "a,b"}):
+            assert client.request(method, path, headers=invalid, **body).status_code == 403
+        client.request(method, path, headers=user, **body).raise_for_status()
+
+    assert client.get(evidence, headers=editor).json()["evidence"]["verified_by"] == user["X-User-Id"]
+    events = client.get(base + "/review-events", headers=editor).json()["events"]
+    assert len(events) >= len(writes)
+    assert {event["actor"] for event in events} == {user["X-User-Id"]}

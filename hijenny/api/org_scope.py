@@ -15,6 +15,15 @@ def request_org(header: str | None) -> str | None:
     return value or None
 
 
+def review_actor(request: Request, submitted: str) -> str:
+    if not config.REQUIRE_REVIEW_ACTOR:
+        return submitted
+    ids = request.headers.getlist("X-User-Id")
+    if len(ids) != 1 or not re.fullmatch(r"[A-Za-z0-9@._:+|-]{1,128}", ids[0]):
+        raise HTTPException(403, "复核操作需要由身份网关提供有效的用户标识。")
+    return ids[0]
+
+
 def project_grants(header: str | None) -> set[str] | None:
     """None denotes organization-wide scope. An absent grant never confers it in strict mode."""
     if not config.REQUIRE_PROJECT_GRANTS:

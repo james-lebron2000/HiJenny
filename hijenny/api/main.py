@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hijenny import config, exports, pipeline, reporting, store
 from sqlalchemy import text
-from hijenny.api.org_scope import PrivateProjectCachePolicy, check_project_role, project_grants, request_org, require_project
+from hijenny.api.org_scope import PrivateProjectCachePolicy, check_project_role, project_grants, request_org, require_project, review_actor
 from hijenny.parse_coverage import pdf_review_ranges
 from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
@@ -662,11 +662,11 @@ def create_app() -> FastAPI:
         }
 
     @project_api.patch("/api/projects/{project_id}")
-    def patch_project(project_id: str, payload: ProjectPatch):
+    def patch_project(request: Request, project_id: str, payload: ProjectPatch):
         with store.session_scope() as session:
             _project_or_404(session, project_id)
             fields = payload.model_dump(exclude_none=True)
-            actor = fields.pop("actor", "reviewer")
+            actor = review_actor(request, fields.pop("actor", "reviewer"))
             before = store.get_project(session, project_id) or {}
             project = store.update_project(session, project_id, **fields)
             after = store.get_project(session, project_id) or {}
@@ -992,7 +992,8 @@ def create_app() -> FastAPI:
         }
 
     @project_api.patch("/api/evidence/{evidence_id}")
-    def patch_evidence(evidence_id: str, payload: EvidencePatch):
+    def patch_evidence(request: Request, evidence_id: str, payload: EvidencePatch):
+        actor = review_actor(request, payload.actor)
         with store.session_scope() as session:
             evidence = _evidence_or_404(session, evidence_id)
             before = dict(evidence)
@@ -1001,7 +1002,7 @@ def create_app() -> FastAPI:
                 evidence_id,
                 status=payload.verification_status,
                 note=payload.note,
-                by=payload.actor,
+                by=actor,
             )
             if updated:
                 store.log_review_event(
@@ -1009,7 +1010,7 @@ def create_app() -> FastAPI:
                     evidence["project_id"],
                     "evidence",
                     evidence_id,
-                    payload.actor,
+                    actor,
                     "verify",
                     before,
                     updated,
@@ -1056,9 +1057,9 @@ def create_app() -> FastAPI:
         return {"finding": finding, "evidence": evidence, "questions": questions}
 
     @project_api.patch("/api/findings/{finding_id}")
-    def patch_finding(finding_id: str, payload: FindingPatch):
+    def patch_finding(request: Request, finding_id: str, payload: FindingPatch):
         fields = payload.model_dump(exclude_none=True)
-        actor = fields.pop("actor", "reviewer")
+        actor = review_actor(request, fields.pop("actor", "reviewer"))
         with store.session_scope() as session:
             _finding_or_404(session, finding_id)
             updated = store.update_finding(session, finding_id, actor=actor, **fields)
@@ -1101,16 +1102,17 @@ def create_app() -> FastAPI:
         return {"question": question, "evidence": evidence}
 
     @project_api.patch("/api/questions/{question_id}")
-    def patch_question(question_id: str, payload: QuestionPatch):
+    def patch_question(request: Request, question_id: str, payload: QuestionPatch):
         fields = payload.model_dump(exclude_none=True)
-        actor = fields.pop("actor", "reviewer")
+        actor = review_actor(request, fields.pop("actor", "reviewer"))
         with store.session_scope() as session:
             _question_or_404(session, question_id)
             updated = store.update_question(session, question_id, actor=actor, **fields)
         return {"question": updated}
 
     @project_api.delete("/api/questions/{question_id}")
-    def delete_question(question_id: str, actor: str = Query(default="reviewer")):
+    def delete_question(request: Request, question_id: str, actor: str = Query(default="reviewer")):
+        actor = review_actor(request, actor)
         with store.session_scope() as session:
             _question_or_404(session, question_id)
             deleted = store.delete_question(session, question_id, actor=actor)
@@ -1190,7 +1192,8 @@ def create_app() -> FastAPI:
                     "revision": events[-1]["after"]["revision"] if events else 0, "replies": replies}
 
     @project_api.post("/api/projects/{project_id}/followup/{question_id}")
-    def record_followup(project_id: str, question_id: str, action: diligence.Action):
+    def record_followup(request: Request, project_id: str, question_id: str, action: diligence.Action):
+        action = action.model_copy(update={"actor": review_actor(request, action.actor)})
         with store.session_scope() as session:
             session.execute(text("BEGIN IMMEDIATE"))
             _project_or_404(session, project_id)
