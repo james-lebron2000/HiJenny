@@ -31,6 +31,33 @@ const homeEvidence={
     more:'資料一覧と試験比較を開く',research:'文献・試験検索へ',loading:'収録データを読み込み中…',empty:'公開ウォッチリストに該当する記録がありません。',error:'現在、収録データを読み込めません。'}
 };
 
+const homeReport={
+  zh:{title:'公开资产证据简报',download:'下载可打印简报',scope:'范围为 HiJenny 公开关注名单和已收录指南。终点按登记名称列出。',source:'原始来源',date:'登记更新',version:'来源版本',observed:'首次收录',none:'此截面暂无记录',phase:'阶段',status:'登记状态',sponsor:'牵头申办方',conditions:'疾病',sites:'中心所在地区'},
+  en:{title:'Public asset evidence brief',download:'Download printable brief',scope:'Coverage includes the HiJenny public watchlist and indexed guidance. Endpoints use registry titles.',source:'Original source',date:'Registry update',version:'Source version',observed:'First indexed',none:'No records at this cutoff',phase:'Phase',status:'Registry status',sponsor:'Lead sponsor',conditions:'Conditions',sites:'Site countries or regions'},
+  ja:{title:'医薬品の公開エビデンス概要',download:'印刷用の概要をダウンロード',scope:'HiJenny の公開ウォッチリストと収録済みの指針が対象です。評価項目は登録名で表示します。',source:'原資料',date:'登録更新日',version:'資料の版',observed:'初回収録日',none:'この時点の収録記録なし',phase:'試験相',status:'登録状況',sponsor:'主たる依頼者',conditions:'対象疾患',sites:'実施国・地域'}
+};
+
+function downloadHomeEvidence(asset,result,lang) {
+  const copy=homeReport[lang], headers=homeEvidence[lang];
+  const link=url=>`<p>${copy.source} · <a href="${esc(url)}">${esc(url)}</a></p>`;
+  const details=pairs=>'<dl>'+pairs.filter(([,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')+'</dl>';
+  const section=(name,items,render)=>`<section><h2>${name} (${items.length})</h2>`+
+    (items.length?items.map(r=>'<article>'+render(r)+'</article>').join(''):`<p>${copy.none}</p>`)+'</section>';
+  const registry=r=>'https://clinicaltrials.gov/study/'+encodeURIComponent(r.record);
+  const report=`<!doctype html><html lang="${lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(asset)} · ${copy.title}</title>
+    <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}@media print{body{margin:0;font-size:10pt}h2,h3{break-after:avoid}article{break-inside:avoid}}</style>
+    <main><p>HiJenny · ${copy.title}</p><h1>${esc(asset)}</h1><p>${headers.cutoff} ${esc(result.as_of)}</p><p>${copy.scope}</p>`+
+    section(headers.trials,result.trials,r=>`<h3>${esc(r.record)} · ${esc(r.asset)}</h3>`+
+      details([[copy.phase,r.phase],[copy.status,r.status],[copy.sponsor,r.sponsor],[copy.conditions,r.conditions],[copy.sites,r.countries],[copy.date,r.source_date]])+link(registry(r)))+
+    section(headers.results,result.outcomes,r=>`<h3>${esc(r.record)}</h3><ul>${r.endpoints.map(v=>'<li>'+esc(v)+'</li>').join('')}</ul>`+
+      details([[copy.date,r.source_date]])+link(registry(r)+'?tab=results'))+
+    section(headers.guidance,result.guidance,g=>`<h3>${esc(g.publisher)} · ${esc(g.reference)}</h3><p>${esc(g.type)} · ${esc(g.topic)} · ${esc(g.region)}</p>`+
+      details([[copy.version,g.version_date],[copy.observed,g.observed]])+link(g.url))+'</main></html>';
+  const url=URL.createObjectURL(new Blob([report],{type:'text/html;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;a.download='HiJenny-'+asset.replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,60)+'-'+result.as_of+'-'+lang+'.html';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 async function renderHome() {
   const requested=hashParams().get('lang');
   const lang=Object.hasOwn(homeTasks,requested)?requested:'zh';
@@ -68,7 +95,8 @@ async function renderHome() {
       listed(evidence.trials,result.trials,r=>trialLink(r)+' · '+esc(r.phase || r.status))+
       listed(evidence.results,result.outcomes,r=>trialLink(r)+' · '+esc(r.endpoints.join(' / ')))+
       listed(evidence.guidance,result.guidance,g=>`<a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.publisher)} ${esc(g.reference)}</a> · ${esc(g.version_date)}`)+
-      `</div><a href="#/public-events?${esc(qs.toString())}">${evidence.more}</a>`;
+      `</div><a href="#/public-events?${esc(qs.toString())}">${evidence.more}</a> <button class="btn" type="button" data-asset-report>${homeReport[lang].download}</button>`;
+    output.querySelector('[data-asset-report]').onclick=()=>downloadHomeEvidence(asset,result,lang);
   } catch {
     if (output.isConnected) output.innerHTML=`<p>${evidence.error}</p>${researchLink}`;
   }
