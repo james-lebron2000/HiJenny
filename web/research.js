@@ -213,6 +213,7 @@ function renderResearch() {
       $('#design-from-trials', panel).onclick = () => {
         clinicalSeed = records.map(item => ({
           id:item.id, title:item.title, date:item.date,
+          excerpts:fields.filter(field=>cell(item.comparison[field])!=='未提供').map(field=>({label:field,text:cell(item.comparison[field])})),
           snapshot:fields.map(field => field + '：' + cell(item.comparison[field])).join('\n'),
         }));
         nav('clinical');

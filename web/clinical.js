@@ -91,6 +91,12 @@ function renderClinical() {
         <p>登记更新 ${esc(r.date)}${r.archive_cutoff?' · <a href="#/public-events?'+esc(new URLSearchParams({source:'ClinicalTrials.gov',source_record:r.id,as_of:r.archive_cutoff}).toString())+'">回查 '+esc(r.archive_cutoff)+' 的归档</a>':''}</p><pre class="source-snapshot">${esc(r.snapshot)}</pre></article>`).join('') ||
       '<p>在医药检索中选择试验并打开设计对照，可使用选区创建新草稿。</p>'}</details>
       <form id="design-form"><label>研究问题 <input id="design-question" maxlength="400" required value="${esc(version.question)}"></label>
+      ${refs.length?`<details id="design-evidence"><summary>引用登记原文填写候选设计</summary>
+      <label>关联试验<select name="reference">${refs.map((r,i)=>option(String(i),'0',r.id+' · '+r.title)).join('')}</select></label>
+      <label>来源字段<select name="excerpt"></select></label>
+      <label>来源文字（可选取其中一段）<textarea name="quote" rows="5" readonly></textarea></label>
+      <label>填入位置<select name="destination">${['A','B'].map((letter,i)=>Object.entries(designFields).map(([key,label])=>option(i+'-'+key,'0-population','设计 '+letter+' · '+label)).join('')).join('')}</select></label>
+      <button type="button" class="btn" data-insert-quote>追加引用</button><p role="status"></p></details>`:''}
       <div class="design-options">${version.options.map((opt,i)=>`<fieldset class="card"><legend>候选设计 ${i?'B':'A'}</legend>
       ${Object.entries(designFields).map(([k,label])=>`<label>${label}<textarea rows="2" maxlength="6000" data-opt="${i}" data-key="${k}">${esc(opt[k] || '')}</textarea></label>`).join('')}</fieldset>`).join('')}</div>
       <label>倾向方案 <select id="design-choice">${[['','待讨论'],['A','设计 A'],['B','设计 B']].map(([v,label])=>option(v,version.choice,label)).join('')}</select></label>
@@ -143,6 +149,37 @@ function renderClinical() {
     choiceInput.addEventListener('change',displayProtocol);
     displayProtocol();
     let dirty = false;
+    const evidence=$('#design-evidence',form);
+    if (evidence) {
+      const {reference,excerpt,quote,destination}=form.elements;
+      const status=evidence.querySelector('[role="status"]');
+      const ref=()=>refs[Number(reference.value)];
+      const passages=()=>ref().excerpts?.length?ref().excerpts:[{label:'登记快照',text:ref().snapshot}];
+      function showQuote() {
+        quote.value=passages()[Number(excerpt.value)].text || '';
+        quote.setSelectionRange(0,0);
+        status.textContent='';
+      }
+      reference.onchange=()=>{
+        excerpt.innerHTML=passages().map((item,i)=>option(String(i),'0',item.label)).join('');
+        showQuote();
+      };
+      excerpt.onchange=showQuote;
+      reference.onchange();
+      evidence.querySelector('[data-insert-quote]').onclick=()=>{
+        const [index,key]=destination.value.split('-');
+        const field=form.querySelector(`[data-opt="${index}"][data-key="${key}"]`);
+        const text=(quote.selectionStart===quote.selectionEnd?quote.value:quote.value.slice(quote.selectionStart,quote.selectionEnd)).trim();
+        if (!text) {status.textContent='此字段没有可引用的文字。';return;}
+        const source=ref(), passage=passages()[Number(excerpt.value)];
+        const citation=[source.id,passage.label,source.archive_cutoff?'归档截止 '+source.archive_cutoff:'登记更新 '+(source.date || '未提供'),passage.event].filter(Boolean).join(' · ');
+        const addition='【'+citation+'】\n'+text;
+        const value=[field.value,addition].filter(Boolean).join('\n\n');
+        if (value.length>field.maxLength) {status.textContent='超过目标字段字数上限，请选取较短的来源段落。';return;}
+        field.value=value;dirty=true;
+        status.textContent='已追加到设计 '+(index==='0'?'A':'B')+' 的“'+designFields[key]+'”，保存版本前可继续编辑。';
+      };
+    }
     $('#csr-template',form).onclick=()=>{
       const url=URL.createObjectURL(new Blob(['\ufeff'+csrHeader+'\r\n'],{type:'text/csv;charset=utf-8'}));
       const a=document.createElement('a');a.href=url;a.download='HiJenny-CSR-结果表模板.csv';a.click();

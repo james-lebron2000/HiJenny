@@ -165,7 +165,8 @@ function bindArchivedComparison(panel) {
                   m.analyses===undefined?'此版归档尚未采集统计分析。':'本终点未列登记统计分析。');
               } else lines.push('截至当日未收录已公布主要终点结果。');
               const latest=records.map(r=>r.source_date).filter(Boolean).sort().pop();
-              return {id:ids[i],title:records[0].asset || ids[i],date:latest || '',archive_cutoff:cutoff,snapshot:lines.join('\n')};
+              const excerpts=records.filter(r=>fields.includes(r.field) && r.value).map(r=>({label:r.field,text:String(r.value),event:r.id}));
+              return {id:ids[i],title:records[0].asset || ids[i],date:latest || '',archive_cutoff:cutoff,excerpts,snapshot:lines.join('\n')};
             });
             nav('clinical');
           };

@@ -125,6 +125,7 @@ async def trials(client, query):
             "盲法": design_info.get("maskingInfo", {}).get("masking"),
             "入组人数": design.get("enrollmentInfo", {}).get("count"),
             "入组数类型": design.get("enrollmentInfo", {}).get("type"),
+            "入排标准原文": eligibility.get("eligibilityCriteria"),
             "年龄下限": eligibility.get("minimumAge"),
             "年龄上限": eligibility.get("maximumAge"),
             "登记主要终点": [p["text"] for p in passages if p["label"] == "登记主要终点"],
