@@ -328,3 +328,21 @@ def test_schedule_history_distinguishes_missing_failed_and_unavailable(monkeypat
     assert (receipt["state"], receipt["run_id"], receipt["conclusion"]) == ("found", "42", "failure")
     assert run({"workflow_runs": [dict(row,event="workflow_dispatch")]})["state"] == "unavailable"
     assert run({"message": "rate limited"})["state"] == "unavailable"
+
+
+def test_coverage_uses_first_observation_of_latest_full_source_date(tmp_path, monkeypatch):
+    from hijenny.api.public_events import latest_collection
+
+    monkeypatch.setattr(public_events, "DATA_DIR", tmp_path)
+    with closing(public_events.connect()) as db, db:
+        for event_id, disclosed, observed in [
+            ("first", "2026-01-10", "2026-01-10T16:01:00Z"),
+            ("later", "2026-01-10", "2026-02-12T00:00:00Z"),
+            ("older", "2026-01-08", "2026-03-01T00:00:00Z"),
+            ("partial", "2026-09", "2026-09-15T00:00:00Z"),
+            ("invalid", "2026-02-31", "2026-03-01T00:00:00Z"),
+        ]:
+            db.execute("INSERT INTO events(id,date,payload) VALUES (?,?,?)",
+                       (event_id, disclosed, json.dumps({"source": "EMA", "observed": observed})))
+    assert latest_collection()["source_timing"]["EMA"] == {
+        "event_id": "first", "source_date": "2026-01-10", "observed_day": "2026-01-11", "days": 1}

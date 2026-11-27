@@ -22,7 +22,7 @@ function publicScheduleStatus(schedule) {
   return p;
 }
 
-function publicCoverage(receipt) {
+function publicCoverage(receipt, timing) {
   // Region refers to the source institution, independent of study sites and patient location.
   const sources = {
     nmpa_index: ['中国','监管','NMPA'],
@@ -57,6 +57,14 @@ function publicCoverage(receipt) {
       const dates=checks.map(r=>r.last_success_utc || (r.status==='ok'?receipt.finished_utc:null)).filter(Boolean).sort();
       cell.append(name,document.createElement('br'),'核对成功 '+ok.length+' / '+checks.length);
       if (dates.length) cell.append(document.createElement('br'),'最近成功 '+fmtDate(dates.at(-1)));
+      const sample=timing?.[name];
+      if (sample) {
+        const link=document.createElement('a');
+        link.href='#/public-events?'+new URLSearchParams({event:sample.event_id});
+        link.textContent='来源日期 '+sample.source_date+' · 收录 '+sample.observed_day+
+          (sample.days>=0?' · 相隔 '+sample.days+' 天':' · 日期顺序待核');
+        cell.append(document.createElement('br'),link);
+      }
       const details=document.createElement('details');
       const summary=document.createElement('summary');
       summary.textContent='查看 '+checks.length+' 项核对明细';
@@ -310,7 +318,7 @@ function renderPublicEvents() {
     ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
     <details class="card" id="public-collection"><summary>最近一次公开采集</summary><div aria-live="polite">正在读取核对记录…</div></details>
     <details class="card" id="public-coverage"><summary>四地区数据覆盖与缺口</summary>
-    <p>按来源机构所在地区列出本轮核对的目标。跨国试验和文献可涉及多个地区。成功数按关注目标计算；最近成功时间取该格内最近一次成功核对。</p>
+    <p>按来源机构所在地区列出本轮核对的目标。跨国试验和文献可涉及多个地区。成功数按关注目标计算；最近成功时间取该格内最近一次成功核对。日期样本取该来源归档中最新的完整来源日期，与首次收录该日期记录的台北日历日比较。历史补录也计入，间隔仅描述该样本。</p>
     <div style="overflow-x:auto" aria-live="polite">正在读取覆盖范围…</div></details>
     <details class="card" id="archived-comparison"><summary>比较两项试验的登记方案和已归档主要终点</summary>
     <form><datalist id="archive-trial-ids"></datalist>
@@ -351,7 +359,7 @@ function renderPublicEvents() {
   const list = $('#public-event-list'), more = $('#public-event-more');
   bindArchivedComparison($('#archived-comparison'));
   const collection=$('#public-collection');
-  api('/api/public-events/collection').then(({receipt,verification})=>{
+  api('/api/public-events/collection').then(({receipt,verification,source_timing})=>{
     if (!collection.isConnected) return;
     const body=collection.querySelector('div');
     const coverage=$('#public-coverage div');
@@ -372,7 +380,7 @@ function renderPublicEvents() {
     if (!receipt) {
       body.textContent=coverage.textContent='服务器尚未同步采集回执。';body.prepend(syncStatus,publicScheduleStatus(verification?.scheduled_collection));return;
     }
-    coverage.replaceChildren(publicCoverage(receipt));
+    coverage.replaceChildren(publicCoverage(receipt,source_timing));
     const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
     for (const check of checks.filter(r=>r.source==='trials')) {
       $('#archive-trial-ids').append(new Option(check.subject || check.target,check.target));

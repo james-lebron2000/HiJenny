@@ -141,8 +141,25 @@ def latest_collection():
         db.execute("BEGIN")
         row = db.execute("SELECT payload FROM collection_receipt WHERE id=1").fetchone()
         check = db.execute("SELECT payload FROM verification WHERE id=1").fetchone()
+        # For the newest dated disclosure, retain the first archived observation of that date.
+        samples = db.execute(f"""
+            WITH dated AS (
+                SELECT id, date, json_extract(payload, '$.source') AS source,
+                       json_extract(payload, '$.observed') AS observed, {OBSERVED_DAY} AS observed_day
+                FROM events WHERE length(date)=10 AND date(date, '+0 days')=date
+            ), ranked AS (
+                SELECT *, row_number() OVER (
+                    PARTITION BY source ORDER BY date DESC, julianday(observed), id
+                ) AS position FROM dated WHERE observed_day IS NOT NULL
+            )
+            SELECT source, id, date, observed_day,
+                   CAST(julianday(observed_day)-julianday(date) AS INTEGER)
+            FROM ranked WHERE position=1
+        """)
+        timing = {source: dict(event_id=event_id, source_date=source_date, observed_day=day, days=days)
+                  for source, event_id, source_date, day, days in samples}
     return {"receipt": json.loads(row[0]) if row else None,
-            "verification": json.loads(check[0]) if check else None}
+            "verification": json.loads(check[0]) if check else None, "source_timing": timing}
 
 
 def source_counts(db, table, sql, args):
