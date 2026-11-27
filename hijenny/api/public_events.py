@@ -15,6 +15,19 @@ OBSERVED_DAY = "date(json_extract(payload, '$.observed'), '+8 hours')"
 KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原文核实"}
 
 
+# Verified search aliases expand only to the archived asset field.
+ASSET_NAMES = {
+    "ivonescimab": (
+        ("依沃西单抗", "依沃西单抗注射液", "依达方"),
+        "https://akesobio.com/cn/rd-and-science/products-center/ivonescimab/",
+    ),
+    "osimertinib": (
+        ("奥希替尼", "甲磺酸奥希替尼片", "泰瑞沙", "Tagrisso"),
+        "https://www.astrazeneca.com.cn/zh/media/press-releases/2025/01-02-01.html",
+    ),
+}
+
+
 def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
                   disclosed_to: date | None = None, source: Literal["NMPA", "SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA", "jRCT", "FDA Orange Book"] | None = None,
@@ -22,10 +35,20 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                   kind: Literal["baseline", "change", "reviewed"] | None = None):
     if discovered_from and discovered_to and discovered_from > discovered_to:
         raise HTTPException(422, "发现起始日期须早于或等于结束日期。")
-    sql = """ WHERE (instr(lower(asset), lower(?))>0
-                       OR instr(lower(json_extract(payload, '$.subject')), lower(?))>0)
-                    AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"""
-    args = [asset.strip(), asset.strip(), region.strip(), since.isoformat() if since else ""]
+    asset = asset.strip()
+    match = ["instr(lower(asset), lower(?))>0", "instr(lower(json_extract(payload, '$.subject')), lower(?))>0"]
+    args = [asset, asset]
+    normalized_name = asset.strip().removesuffix("®").strip().casefold()
+    mapping = None
+    for name, (aliases, url) in ASSET_NAMES.items():
+        if normalized_name in {alias.casefold() for alias in (name, *aliases)}:
+            mapping = {"name": name, "source": url}
+            # Preserve both ordinary substring matches and matches to the verified molecule.
+            match.append("instr(lower(json_extract(payload, '$.asset')), ?) > 0")
+            args.append(name)
+            break
+    sql = " WHERE (" + " OR ".join(match) + ") AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"
+    args.extend([region.strip(), since.isoformat() if since else ""])
     notice_id = notice_id.strip()
     if notice_id:
         if not re.fullmatch(r"[0-9]+", notice_id):
@@ -111,7 +134,9 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
         labels.insert(0, f"历史截面（截至台北日期）：{as_of}，每个来源字段仅列当时最后一次已收录的值。")
     if link_query:
         table += f" CROSS JOIN ({link_query}) AS registration"
-    return table, sql, [*link_args, *args], order, labels
+    if mapping:
+        labels.append(f"核对药名：{mapping['name']} · 名称来源：{mapping['source']}")
+    return table, sql, [*link_args, *args], order, labels, mapping
 
 
 @router.get("/api/public-events/collection")
@@ -124,12 +149,12 @@ def latest_collection():
 @router.get("/api/public-events")
 def public_events(filters=Depends(event_filters), offset: int = Query(0, ge=0),
                   limit: int = Query(50, ge=1, le=100)):
-    table, sql, args, order, _ = filters
+    table, sql, args, order, _, mapping = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
         count = db.execute(f"SELECT count(*) FROM {table}" + sql, args).fetchone()[0]
         rows = db.execute(f"SELECT payload FROM {table}" + sql + order + " LIMIT ? OFFSET ?", (*args, limit, offset))
-        return {"total": count, "items": [json.loads(row[0]) for row in rows]}
+        return {"total": count, "asset_match": mapping, "items": [json.loads(row[0]) for row in rows]}
 
 
 def display(value):
@@ -144,7 +169,7 @@ def display(value):
 
 @router.get("/api/public-events/report.txt", response_class=PlainTextResponse)
 def report(filters=Depends(event_filters)):
-    table, sql, args, order, labels = filters
+    table, sql, args, order, labels, _ = filters
     lines = ["HiJenny 公开资产动态", "筛选范围（发现日期按台北时间）", *labels]
     with closing(connect()) as db:
         rows = db.execute(f"SELECT payload FROM {table}" + sql + order, args)

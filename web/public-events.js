@@ -57,7 +57,7 @@ function renderPublicEvents() {
     <p>按来源机构所在地区列出本轮核对的目标。跨国试验和文献可涉及多个地区。成功数按关注目标计算；最近成功时间取该格内最近一次成功核对。</p>
     <div style="overflow-x:auto" aria-live="polite">正在读取覆盖范围…</div></details>
     <form id="public-event-filters" class="card">
-    <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
+    <label>资产或公司<input name="asset" placeholder="依达方、奥希替尼或 Summit"></label>
     <label>国家药监局公告编号<input name="notice_id" inputmode="numeric" pattern="[0-9]+" placeholder="1073516"></label>
     <label>国家药监局栏目标题关键词<input name="notice_title" placeholder="例如 Good Clinical Practice"></label>
     <label>FDA 申请号<input name="application" placeholder="NDA208065" title="NDA、ANDA 或 BLA 加六位数字"></label>
@@ -149,6 +149,14 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.source==='NMPA' && r.asset && (!query.has('asset') || query.has('source') || query.has('notice_id'))) {
+          const params = new URLSearchParams({asset:r.asset});
+          if (query.has('as_of')) params.set('as_of',query.get('as_of'));
+          const p=document.createElement('p'), link=document.createElement('a');
+          link.href='#/public-events?'+params;
+          link.textContent='查看该药物的跨来源记录';
+          p.append(link); card.append(p);
+        }
         if (r.source==='NMPA' && !query.has('notice_id')) {
           const params = new URLSearchParams({notice_id:r.record});
           if (query.has('as_of')) params.set('as_of',query.get('as_of'));
@@ -306,6 +314,13 @@ function renderPublicEvents() {
       download.hidden = result.total === 0;
       offset += result.items.length;
       status.textContent = (query.has('as_of')?'截至 '+query.get('as_of')+' 的历史截面 · ':'')+'已显示 '+offset+' / '+result.total+' 条记录';
+      if (result.asset_match) {
+        const link = document.createElement('a');
+        link.href = result.asset_match.source;
+        link.target = '_blank'; link.rel = 'noopener noreferrer';
+        link.textContent = '名称来源';
+        status.append(' · 核对药名 '+result.asset_match.name+' · ', link);
+      }
       more.hidden = offset >= result.total;
     } catch (err) {
       if (generation===request) { status.textContent='读取失败：'+err.message; more.hidden=false; }
