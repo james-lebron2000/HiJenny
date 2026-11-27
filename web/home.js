@@ -170,23 +170,37 @@ async function renderHome() {
   const asset=hashParams().get('asset')?.trim().slice(0,400) || evidence.example;
   const cutoff=hashParams().get('as_of');
   const filters=cutoff ? {asset,as_of:cutoff} : {asset};
-  const examples={
-    zh:[['奥希替尼','查临床读出：奥希替尼'],['依达方','查监管动态：依达方'],['Summit Therapeutics','查公司披露：Summit Therapeutics']],
-    en:[['osimertinib','Trial results · osimertinib'],['ivonescimab','Regulatory updates · ivonescimab'],['Summit Therapeutics','Company disclosures · Summit Therapeutics']],
-    ja:[['osimertinib','試験結果 · osimertinib'],['ivonescimab','規制動向 · ivonescimab'],['Summit Therapeutics','企業開示 · Summit Therapeutics']]
+  const scopes={
+    results:{source:'ClinicalTrials.gov',primary_results:'true'},
+    regulatory:{source:'NMPA'},
+    filings:{source:'SEC'}
+  };
+  const task=hashParams().get('task');
+  const scoped=Object.hasOwn(scopes,task);
+  const scopeLabels={
+    zh:{results:'登记主要终点结果',regulatory:'监管公告',filings:'公司申报'},
+    en:{results:'Registered primary outcome results',regulatory:'Regulatory notices',filings:'Company filings'},
+    ja:{results:'登録された主要評価項目の結果',regulatory:'規制当局の公表情報',filings:'企業提出資料'}
   }[lang];
-  const exampleLinks=examples.map(([name,label])=>{
-    const params=new URLSearchParams({...filters,asset:name,lang});
+  const navigation=scoped ? {...filters,task} : filters;
+  const examples={
+    zh:[['results','奥希替尼','查临床读出：奥希替尼'],['regulatory','依达方','查监管动态：依达方'],['filings','Summit Therapeutics','查公司披露：Summit Therapeutics']],
+    en:[['results','osimertinib','Trial results · osimertinib'],['regulatory','ivonescimab','Regulatory updates · ivonescimab'],['filings','Summit Therapeutics','Company disclosures · Summit Therapeutics']],
+    ja:[['results','osimertinib','試験結果 · osimertinib'],['regulatory','ivonescimab','規制動向 · ivonescimab'],['filings','Summit Therapeutics','企業開示 · Summit Therapeutics']]
+  }[lang];
+  const exampleLinks=examples.map(([task,name,label])=>{
+    const params=new URLSearchParams({...filters,asset:name,lang,task});
     return `<a href="#/home?${esc(params.toString())}">${esc(label)}</a>`;
   }).join(' · ');
   setView(`<section class="research-home task-home" lang="${lang}">
     <header><h1>${copy.title}</h1><nav aria-label="Language">${[['zh','中文'],['en','English'],['ja','日本語']].map(([code,name])=>
-      `<a href="#/home?${esc(new URLSearchParams({lang:code,...filters}).toString())}" lang="${code}" ${lang===code?'aria-current="page"':''}>${name}</a>`).join(' · ')}</nav></header>
+      `<a href="#/home?${esc(new URLSearchParams({lang:code,...navigation}).toString())}" lang="${code}" ${lang===code?'aria-current="page"':''}>${name}</a>`).join(' · ')}</nav></header>
     <section class="card home-evidence"><h2>${evidence.heading}</h2>
     <form id="home-asset-search"><label>${evidence.label}<input name="asset" type="search" required maxlength="400" value="${esc(asset)}"></label>
     <label>${evidence.cutoff}<input name="as_of" type="date" value="${esc(cutoff || '')}"></label><button class="btn primary">${evidence.search}</button></form>
     <p>${exampleLinks}</p>
-    <div id="home-evidence-results" aria-live="polite"></div><div id="home-asset-updates" aria-live="polite"></div></section>
+    ${scoped ? `<p><strong>${scopeLabels[task]} · ${scopes[task].source}</strong> · <a href="#/home?${esc(new URLSearchParams({lang,...filters}).toString())}">${{zh:'查看该名称的全部动态',en:'All updates for this name',ja:'この名称の更新をすべて表示'}[lang]}</a></p><div id="home-asset-updates" aria-live="polite"></div>` : ''}
+    <div id="home-evidence-results" aria-live="polite"></div>${scoped ? '' : '<div id="home-asset-updates" aria-live="polite"></div>'}</section>
     <div class="task-groups">${copy.groups.map(([role,first,second],i)=>`<section class="card"><h2>${role}</h2>
       <a href="#/${homeRoutes[i][0]}">${first}</a><a href="#/${homeRoutes[i][1]}">${second}</a></section>`).join('')}</div>
     <a class="btn" href="#/pilot?lang=${lang}">${copy.sample}</a></section>`);
@@ -197,12 +211,13 @@ async function renderHome() {
     if (!query) {form.elements.asset.focus();return;}
     trackHomeEvidence('search_submitted');
     const params=new URLSearchParams({lang,asset:query});
+    if (scoped && query===asset) params.set('task',task);
     if (form.elements.as_of.value) params.set('as_of',form.elements.as_of.value);
     const hash='#/home?'+params;
     if (location.hash===hash) renderHome(); else location.hash=hash;
   };
   const researchLink=`<a href="#/research?${esc(new URLSearchParams({query:asset}).toString())}">${evidence.research}</a>`;
-  const archiveMatches=showHomeUpdates($('#home-asset-updates'),filters,lang);
+  const archiveMatches=showHomeUpdates($('#home-asset-updates'),{...filters,...(scoped ? scopes[task] : {})},lang);
   output.textContent=evidence.loading;
   try {
     const result=await api('/api/public-events/asset-evidence?'+new URLSearchParams(filters));
