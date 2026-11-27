@@ -259,7 +259,7 @@ function updateTopbar() {
     evidence: ['Evidence Workspace', 'Every number traced to document, page and quote'],
     followup: ['BD 复核', '可比资产、卖方答复与验证判断'],
     findings: ['Findings & Questions', 'Consistency, gaps, seller questions and review'],
-    report: ['Report', 'Generated due-diligence report and exports'],
+    report: ['尽调报告', '项目决策简报与工作簿'],
   };
   const [title, sub] = titles[currentView()] || titles.projects;
   const titleEl = $('#topbar-title');
@@ -342,7 +342,7 @@ async function renderView() {
   if (state.view === 'projects') { await renderProjects(seq); return; }
   if (state.view === 'overview') { await renderOverview(seq); return; }
   if (!state.projectId) {
-    setView(`<div class="card">${emptyPanel('No project selected', 'Create or select a project to continue.', '<button class="btn primary" data-nav="projects">Go to Projects</button>')}</div>`);
+    setView(`<div class="card">${emptyPanel('请先选择项目', '打开一个获授权的项目，查看该项目的资料和报告。', '<button class="btn primary" data-nav="projects">选择项目</button>')}</div>`);
     return;
   }
   try {
@@ -434,7 +434,7 @@ async function renderProjects(seq) {
         <td class="num">${s.evidence || 0}</td>
         <td class="num">${s.findings || 0}</td>
         <td class="num">${s.questions || 0}</td>
-        <td>${ready ? chip('report ready', 'green') : chip('no report', 'grey')}</td>
+        <td>${ready ? chip('已生成', 'green') : chip('未生成', 'grey')}</td>
         <td class="muted">${esc(fmtDate(p.updated_at || p.created_at))}</td>
         <td><button class="btn sm primary" data-action="open-project" data-id="${esc(p.project_id)}">Open →</button></td>
       </tr>`;
@@ -465,7 +465,7 @@ async function renderProjects(seq) {
           <thead><tr>
             <th>Project</th><th>Asset</th><th>Indication</th><th>Phase</th><th>Status</th>
             <th class="num">Docs</th><th class="num">Evidence</th><th class="num">Findings</th><th class="num">Questions</th>
-            <th>Report</th><th>Updated</th><th></th>
+            <th>尽调报告</th><th>Updated</th><th></th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table></div>` : emptyPanel(canCreate ? 'No projects yet' : '当前没有可访问的项目', canCreate ? 'Create a project, upload the due-diligence package, then run the analysis pipeline.' : '请联系项目负责人核对成员名单。',
@@ -701,7 +701,7 @@ function overviewHtml(data) {
       <a class="btn sm" href="#/valuation?project=${encodeURIComponent(projectId)}">交易估值</a>
       <a class="btn sm" href="#/evidence?project=${encodeURIComponent(projectId)}">Evidence</a>
       <a class="btn sm" href="#/findings?project=${encodeURIComponent(projectId)}">Findings & Questions</a>
-      <a class="btn sm" href="#/report?project=${encodeURIComponent(projectId)}">Report</a>
+      <a class="btn sm" href="#/report?project=${encodeURIComponent(projectId)}">尽调报告</a>
       <button class="btn primary sm" data-action="refresh-view">Refresh</button>
     </div>
   </div>
@@ -1417,7 +1417,7 @@ function findingsViewHtml() {
         <button class="btn" ${projectEditAttribute()} data-action="run-analysis" data-force="1">Re-run analysis</button>
         <button class="btn" ${projectEditAttribute()} data-action="export-xlsx">内部尽调工作簿</button>
         <button class="btn" data-action="seller-reply">导出已批准的卖方问题单</button>
-        <button class="btn primary" ${projectEditAttribute()} data-action="generate-report">Generate report</button>
+        <button class="btn primary" ${projectEditAttribute()} data-action="generate-report">生成尽调报告</button>
       </div>
     </div>
     <div class="card" style="margin-bottom:14px"><div class="card-head"><h2>Risk profile</h2><span class="sub">active findings only${historyCount ? ` · ${historyCount} in history` : ''}</span></div>
@@ -1539,7 +1539,7 @@ function renderMarkdown(md) {
 }
 
 async function renderReport(seq) {
-  setView(loadingBlock('Loading report…'));
+  setView(loadingBlock('正在加载尽调报告…'));
   try {
     await ensureProjectLoaded();
     const outputsRes = await api(`/api/projects/${state.projectId}/outputs`);
@@ -1574,43 +1574,52 @@ function renderReportView() {
   })).filter(file => file.reasons.length);
   setView(`
     <div class="page-head">
-      <div><h1>Report</h1>
-        <div class="sub">${esc(state.project ? state.project.name : '')} · AI-generated due-diligence report — requires expert human review.</div>
+      <div><h1>尽调报告</h1>
+        <div class="sub">${esc(state.project ? state.project.name : '')}</div>
       </div>
       <div class="actions">
-        <button class="btn" data-action="refresh-view">Refresh</button>
-        <button class="btn navy" ${projectEditAttribute()} data-action="generate-report">${md.exists ? 'Regenerate report' : 'Generate report'}</button>
-        ${docx.exists ? `<a class="btn" href="${esc(docx.url)}">Download DOCX</a>` : ''}
-        ${md.exists ? `<a class="btn" href="${esc(md.url)}" download>Download MD</a>` : ''}
-        ${xlsx.exists ? `<a class="btn" href="${esc(xlsx.url)}">内部尽调工作簿</a>` : ''}
+        <button class="btn" data-action="refresh-view">刷新</button>
+        <button class="btn navy" ${projectEditAttribute()} data-action="generate-report">${md.exists ? '重新生成报告' : '生成尽调报告'}</button>
+        ${docx.exists ? `<a class="btn" href="${esc(docx.url)}" download>下载 Word 报告</a>` : ''}
+        ${md.exists ? `<a class="btn" href="${esc(md.url)}" download>下载 Markdown</a>` : ''}
+        ${xlsx.exists ? `<a class="btn" href="${esc(xlsx.url)}" download>下载 Excel 工作簿</a>` : ''}
       </div>
     </div>
     ${statStrip([
-      { k: 'Documents', v: stats.documents || 0 },
-      { k: 'Pages', v: stats.pages || 0 },
-      { k: 'Evidence', v: stats.evidence || 0 },
-      { k: 'Findings', v: stats.findings || 0 },
-      { k: 'Questions', v: stats.questions || 0 },
-      { k: 'Coverage', v: stats.coverage || 0 },
+      { k: '文档', v: stats.documents || 0 },
+      { k: '已解析页', v: stats.pages || 0 },
+      { k: '证据条目', v: stats.evidence || 0 },
+      { k: '风险发现', v: stats.findings || 0 },
+      { k: '卖方问题', v: stats.questions || 0 },
+      { k: '覆盖检查', v: stats.coverage || 0 },
     ])}
     ${warnings.length ? `<div class="notice" role="status"><div><strong>分发前需重新生成</strong>
       <ul>${warnings.map(file => `<li>${esc(file.name)} · ${file.reasons.join('；')}</li>`).join('')}</ul>
-      ${state.projectPermissions.edit === false ? '请联系项目编辑人员更新文件。' : '点击 Regenerate report，生成包含当前复核结果的文件。'}</div></div>` : ''}
-    <div class="notice info"><span>📋</span><div><strong>Decision Brief — Section 1</strong> — one-page summary for BD heads / investment committee, with evidence highlights, top open risks, seller questions and missing evidence. No automated Go/No-Go recommendation is made; the brief summarises evidence and open items for human review.</div></div>
-    ${md.exists && state.reportMd ? `<div class="report">${renderMarkdown(state.reportMd)}</div>` : `
-      <div class="card">${emptyPanel('No report generated yet',
-        state.projectPermissions.edit === false ? '编辑人员生成报告后，即可在此查阅和下载。' : 'Run the analysis pipeline, then generate the Markdown + DOCX report and the Excel workbooks from the reviewed evidence chain.',
-        state.projectPermissions.edit === false ? '' : '<button class="btn primary" data-action="generate-report">Generate report</button>')}</div>`}
-    <div class="card" style="margin-top:16px">
-      <div class="card-head"><h2>Outputs</h2><span class="sub">Files under data/projects/&lt;id&gt;/exports/</span></div>
-      <div class="card-body">
-        <div class="kv-grid">
-          <div class="kv"><span class="k">Markdown report</span><span class="v">${md.exists ? `<a href="${esc(md.url)}" download>${esc(md.name || 'HiJenny_Report.md')}</a>` : 'not generated'}</span></div>
-          <div class="kv"><span class="k">Word report</span><span class="v">${docx.exists ? `<a href="${esc(docx.url)}">${esc(docx.name || 'HiJenny_Report.docx')}</a>` : 'not generated'}</span></div>
-          <div class="kv"><span class="k">内部尽调工作簿</span><span class="v">${xlsx.exists ? `<a href="${esc(xlsx.url)}">${esc(xlsx.name || 'Seller_Questions.xlsx')}</a>` : 'not generated'}</span></div>
-        </div>
-      </div>
-    </div>`);
+      ${state.projectPermissions.edit === false ? '请联系项目编辑人员更新文件。' : '点击「重新生成报告」，更新这套文件。'}</div></div>` : ''}
+    ${md.exists && state.reportMd ? `<div id="report-navigation"></div><div class="report">${renderMarkdown(state.reportMd)}</div>` :
+      md.exists ? emptyPanel('报告预览暂时无法加载', '请刷新页面重试，或用上方按钮下载已有文件。') :
+      emptyPanel('项目尚未生成报告', state.projectPermissions.edit === false ? '编辑人员生成后，你可以在此查阅和下载。' : '点击「生成尽调报告」，将本项目的证据、风险发现和卖方问题汇总成报告。')}`);
+  const navigation = $('#report-navigation');
+  if (!navigation) return;
+  const sections = [...document.querySelectorAll('.report h2')];
+  if (!sections.length) return;
+  const labels = {
+    'Decision Brief':'决策简报', 'Executive Summary':'执行摘要', 'Asset Profile':'资产概况',
+    'Clinical Evidence Matrix':'临床证据矩阵', 'Key Findings':'主要风险发现', 'Evidence Gaps':'证据缺口',
+    'Seller Questions':'卖方问题', 'Human Review & Limitations':'人工复核与局限',
+    'Asset Discovery & Evaluation':'资产信息与评估'
+  };
+  navigation.innerHTML = `<label>跳到报告章节 <select><option value="">选择章节</option>${sections.map((heading, index) => {
+    const title = heading.textContent.replace(/^(?:\d+|Appendix [A-Z])\.\s*/, '');
+    return option(String(index), '', labels[title] || heading.textContent);
+  }).join('')}</select></label>`;
+  navigation.querySelector('select').onchange = event => {
+    if (!event.target.value) return;
+    const heading = sections[Number(event.target.value)];
+    heading.tabIndex = -1;
+    heading.focus();
+    heading.scrollIntoView({block:'start'});
+  };
 }
 
 /* --------------------------------------------------------------- actions */
@@ -1735,11 +1744,11 @@ async function handleAction(action, el) {
       return;
     }
     if (action === 'generate-report') {
-      toast('Generating Markdown + DOCX report…');
+      toast('正在生成尽调报告和工作簿…');
       const res = await api(`/api/projects/${state.projectId}/exports/report`, { method: 'POST' });
       state.outputs = null;
       const stats = res.stats || {};
-      toast(`Report ready: ${stats.findings || 0} findings, ${stats.questions || 0} questions`, 'ok');
+      toast(`已生成报告，包含 ${stats.findings || 0} 项风险发现、${stats.questions || 0} 个卖方问题`, 'ok');
       await renderView();
       return;
     }

@@ -142,7 +142,7 @@ hijenny serve --port 8123
 | 2 | **Upload & Analysis** | 拖拽批量上传 PDF/PPTX/XLSX；等待解析完成；点 **Analyze** 启动分析，页面轮询显示各阶段进度 |
 | 3 | **Evidence** | 左：文档树；中：PDF 页码预览；右：证据卡片。点击证据自动跳到原文页码并高亮引文 |
 | 4 | **Findings & Questions** | 按严重度/优先级/类型/状态筛选；行内修改优先级、状态、责任部门（自动记录审核事件）；删除问题；导出 Excel；强制重跑 |
-| 5 | **Report** | 渲染报告全文，下载 MD / DOCX / XLSX |
+| 5 | **尽调报告** | 按中文目录跳到决策简报、证据缺口或卖方问题，下载 Word、Markdown 和 Excel |
 
 > 上传后如果只想先解析、稍后分析，可在页面直接上传并等待；分析时可以离开页面，任务在后台线程执行。
 
@@ -487,7 +487,7 @@ hijenny serve --port 8123
 | 2 | **Upload & Analysis** | Drag-and-drop PDF/PPTX/XLSX; wait for parsing; click **Analyze** and watch stage progress |
 | 3 | **Evidence** | Document tree · PDF page preview · evidence cards; click a card to jump to the cited page |
 | 4 | **Findings & Questions** | Filter by severity/priority/type/status; inline edit priority/status/owner (audit-logged); delete; export Excel; force re-run |
-| 5 | **Report** | Rendered report plus MD/DOCX/XLSX downloads |
+| 5 | **尽调报告 (Report)** | Browse report sections and download MD/DOCX/XLSX |
 
 The analysis runs in a background thread, so you can leave the page while it runs.
 
