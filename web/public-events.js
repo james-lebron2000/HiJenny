@@ -433,7 +433,7 @@ function appendPublicCitation(card, event) {
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报、中国 NMPA 公告、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、日本 jRCT 登记、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
-    ${hashParams().get('event')?'<p>正在查看关注列表保存的来源记录。<a href="#/public-events">查看全部动态</a></p>':''}
+    ${hashParams().get('event')?'<p>正在查看引用链接指向的单条归档。<a href="#/public-events">查看全部动态</a></p>':''}
     <details class="card" id="public-collection"><summary>最近一次公开采集</summary><div aria-live="polite">正在读取核对记录…</div></details>
     <details class="card" id="public-coverage"><summary>四地区数据覆盖与缺口</summary>
     <p>按来源机构所在地区列出本轮核对的目标。跨国试验和文献可涉及多个地区。成功数按关注目标计算；最近成功时间取该格内最近一次成功核对。日期样本取该来源归档中最新的完整来源日期，与首次收录该日期记录的台北日历日比较。历史补录也计入，间隔仅描述该样本。</p>
@@ -601,16 +601,16 @@ function renderPublicEvents() {
       }
       if (result.sec_filings?.length && !query.has('source_record')) {
         const details=document.createElement('details'), summary=document.createElement('summary');
-        summary.textContent='按 SEC 申报文件查看 · '+result.sec_filings.length+' 份';
+        summary.textContent=query.has('event_id')?'查看这条归档所属的 SEC 申报文件':'按 SEC 申报文件查看 · '+result.sec_filings.length+' 份';
         const records=document.createElement('ul');
         for (const filing of result.sec_filings) {
           const li=document.createElement('li'), link=document.createElement('a');
           const params=new URLSearchParams(query);
           params.delete('offset');
-          if (params.has('event_id')) {params.set('event',params.get('event_id')); params.delete('event_id');}
+          params.delete('event_id');
           params.set('source','SEC'); params.set('source_record',filing.record);
           link.href='#/public-events?'+params;
-          link.textContent=filing.record+' · '+filing.events+' 条归档';
+          link.textContent=filing.record+(query.has('event_id')?' · 查看同一申报的匹配归档':' · '+filing.events+' 条归档');
           li.append(filing.disclosed+' · ',link,' · '+filing.fields.join('、'));
           records.append(li);
         }
