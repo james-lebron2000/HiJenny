@@ -757,3 +757,9 @@ ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:18878:$pilot_socket" hijenny-pi
 保持该终端打开，在同一台设备访问 [HiJenny 工作台](http://127.0.0.1:18878/#/home)。看到药物查询框后，可用“奥希替尼”查询并下载简报。结束使用时按 Ctrl+C 关闭本次转发。若本地端口已占用，可将命令和浏览器地址中的 `18878` 同时换成一个空闲端口。
 
 转发建立后，可在另一个终端运行 `curl -fsS http://127.0.0.1:18878/api/health`。正常响应中 `status` 和 `database` 均为 `ok`。若第一条 SSH 命令返回失败，请在部署账号下用 `systemctl --user status hijenny.service` 核对服务状态。回环地址仅供建立转发的设备使用；交给客户的访问入口应由其部署环境提供。
+
+### 资料分析中的扫描页 OCR
+
+在文档表展开「需核对 PDF 原页」，填写已列为疑似扫描的页码，选择与原页相符的语言，再点「读取本页文字」。识别使用本地 PyMuPDF 的 Tesseract 引擎，每次读取一页，结果供对照原件复核。识别结果仅显示在当前页面，刷新即清除。
+
+私有部署需将 Tesseract 的 `eng.traineddata`、`chi_sim.traineddata`、`chi_tra.traineddata`、`jpn.traineddata` 放入服务账号的 `~/.local/share/hijenny/tessdata/`。仓库的 systemd 模板已将 `TESSDATA_PREFIX` 指向该目录。其他启动方式可将此环境变量设为本机语言文件所在目录。每个服务进程最多同时识别两页，单页超时为 60 秒。

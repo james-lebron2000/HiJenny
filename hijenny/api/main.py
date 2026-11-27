@@ -13,6 +13,10 @@ from __future__ import annotations
 import hashlib
 import inspect
 import mimetypes
+import os
+import subprocess
+import sys
+from threading import BoundedSemaphore
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -30,6 +34,8 @@ from sqlalchemy import text
 from hijenny.parse_coverage import pdf_review_ranges
 from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
+
+_OCR_SLOTS = BoundedSemaphore(2)
 
 SERVICE_NAME = "HiJenny API"
 VERSION = "0.1.0"
@@ -781,6 +787,35 @@ def create_app() -> FastAPI:
         with store.session_scope() as session:
             _project_or_404(session, project_id)
             return _page_payload(session, project_id, document_id, page)
+
+    @app.post("/api/projects/{project_id}/documents/{document_id}/pages/{page}/ocr")
+    def ocr_scan_page(project_id: str, document_id: str, page: int = PathParam(..., ge=1),
+                      language: Literal["eng", "chi_sim+eng", "chi_tra+eng", "jpn+eng"] = "eng"):
+        with store.session_scope() as session:
+            document = _document_or_404(session, document_id, project_id)
+        if page not in (document.get("meta") or {}).get("scanned_pages", []):
+            raise HTTPException(422, "请选择标记为疑似扫描的原页。")
+        path = (_data_dir() / document["stored_path"]).resolve()
+        root = (_data_dir() / "projects" / project_id / "documents").resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            raise HTTPException(404, "原始文件不可用。")
+        directory = os.getenv("TESSDATA_PREFIX")
+        if not directory or not all((Path(directory) / (lang + ".traineddata")).is_file()
+                                    for lang in language.split("+")):
+            raise HTTPException(503, "部署环境尚未安装所选 OCR 语言。")
+        if not _OCR_SLOTS.acquire(blocking=False):
+            raise HTTPException(429, "已有页面正在识别，请稍后重试。")
+        try:
+            result = subprocess.run([sys.executable, "-m", "hijenny.page_ocr", str(path), str(page),
+                                     language, directory], capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(504, "单页识别超时，请核对原页。") from None
+        finally:
+            _OCR_SLOTS.release()
+        if result.returncode:
+            raise HTTPException(422, "该页识别失败，请核对原页。")
+        return {"document_id": document_id, "page": page, "language": language,
+                "text": result.stdout.decode("utf-8").strip()}
 
     # Convenience aliases (document id is globally unique).
     @app.get("/api/documents/{document_id}")

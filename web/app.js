@@ -884,8 +884,14 @@ async function renderUpload(seq) {
         return `<div>${esc(labels[reason] || reason)} · 第 ${links.join('、')} 页</div>`;
       });
 
+      const scans = doc.pdf_review_ranges?.scan;
+      const ocr = scans?.length ? `<div data-ocr-document="${esc(doc.document_id)}">
+        <label>扫描原页页码 <input type="number" min="1" max="${Number(doc.page_count)}" value="${scans[0][0]}"></label>
+        <label>识别语言 <select><option value="eng">英文</option><option value="chi_sim+eng">简体中文及英文</option><option value="chi_tra+eng">繁體中文及英文</option><option value="jpn+eng">日文及英文</option></select></label>
+        <button type="button" class="btn sm" data-action="page-ocr">读取本页文字</button>
+        <div role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></div></div>` : '';
       return `<tr>
-        <td class="title-cell">${esc(doc.filename)}${pageNotes.length ? `<details><summary>需核对 PDF 原页</summary>${pageNotes.join('')}</details>` : ''}</td>
+        <td class="title-cell">${esc(doc.filename)}${pageNotes.length ? `<details><summary>需核对 PDF 原页</summary>${pageNotes.join('')}${ocr}</details>` : ''}</td>
         <td>${chip(doc.doc_type || 'OTHER', 'blue')}</td>
         <td>${esc(doc.version || '—')}</td>
         <td class="num">${Number(doc.page_count || 0)}</td>
@@ -1577,6 +1583,19 @@ async function handleAction(action, el) {
     }
     if (action === 'refresh-view') { await renderView(); return; }
     if (action === 'browse-files') { const input = document.querySelector('#file-input'); if (input) input.click(); return; }
+    if (action === 'page-ocr') {
+      const panel=el.closest('[data-ocr-document]'), page=panel.querySelector('input').valueAsNumber;
+      const status=panel.querySelector('[role=status]');
+      if (!Number.isInteger(page) || page < 1) {status.textContent='请输入扫描原页页码。';return;}
+      el.disabled=true; status.textContent='正在本地识别…';
+      try {
+        const query=new URLSearchParams({language:panel.querySelector('select').value});
+        const result=await api(`/api/projects/${state.projectId}/documents/${panel.dataset.ocrDocument}/pages/${page}/ocr?${query}`,{method:'POST'});
+        status.textContent=result.text ? '第 '+result.page+' 页 OCR 草稿，请对照原文核实数字、单位和符号。\n'+result.text : '本页未识别出文字，请查看原件。';
+      } catch (error) {status.textContent=error.message;}
+      finally {el.disabled=false;}
+      return;
+    }
     if (action === 'run-analysis') { await runAnalysis(el.dataset.force === '1'); return; }
     if (action === 'select-doc') { await selectDocument(el.dataset.id); return; }
     if (action === 'select-evidence') { await selectEvidenceById(el.dataset.id); return; }
