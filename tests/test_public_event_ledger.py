@@ -346,3 +346,18 @@ def test_coverage_uses_first_observation_of_latest_full_source_date(tmp_path, mo
                        (event_id, disclosed, json.dumps({"source": "EMA", "observed": observed})))
     assert latest_collection()["source_timing"]["EMA"] == {
         "event_id": "first", "source_date": "2026-01-10", "observed_day": "2026-01-11", "days": 1}
+
+
+def test_jrct_target_preserves_previous_check_without_fetch(tmp_path, monkeypatch):
+    watch = {"jrct": [{"id": "jRCT2031230688", "asset": "demo"}]}
+    (tmp_path / "watchlist.json").write_text(json.dumps(watch))
+    (tmp_path / "events").mkdir()
+    receipt = tmp_path / "events" / "collection.json"
+    receipt.write_text(json.dumps({"watchlist_sha256": collector.fingerprint(watch),
+        "finished_utc": "2026-11-24T00:00:00Z", "checks": [
+            {"source": "jrct", "target": "jRCT2031230688", "status": "ok"}]}))
+    monkeypatch.setattr(collector, "fetch", lambda *args: pytest.fail("unexpected network read"))
+    assert collector.collect(tmp_path, receipt) == 0
+    row, = json.loads(receipt.read_text())["checks"]
+    assert row["status"] == "manual_review" and row["records"] is None
+    assert row["last_success_utc"] == "2026-11-24T00:00:00Z"

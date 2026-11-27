@@ -52,7 +52,7 @@ jobs:
               print("\n| 来源 | 目标编号 | 核对结果 | 来源记录数 | 新增事件 |", file=out)
               print("|---|---|---|---:|---:|", file=out)
               for row in receipt["checks"]:
-                  status = "成功" if row["status"] == "ok" else "失败 " + row["error"]
+                  status = {"ok": "成功", "manual_review": "待人工复核"}.get(row["status"], "失败 " + row.get("error", ""))
                   counts = [row[k] if row[k] is not None else "待核" for k in ("records", "new_events")]
                   print(f"| {row['source']} | {row['target']} | {status} | {counts[0]} | {counts[1]} |", file=out)
       - name: Report incomplete source checks

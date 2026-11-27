@@ -22,6 +22,16 @@ function publicScheduleStatus(schedule) {
   return p;
 }
 
+const fdaUsePolicy = ['https://www.fda.gov/about-fda/about-website/website-policies',
+  'FDA 网站自有内容通常可复用，另有版权标注的材料须逐件核对。'];
+const publicUsePolicies = {
+  'Drugs@FDA':fdaUsePolicy, 'FDA Orange Book':fdaUsePolicy,
+  'ClinicalTrials.gov':['https://clinicaltrials.gov/terms-conditions','发布登记数据应署名、保持更新、标明来源处理日期，并说明对数据的修改。部分材料涉及第三方权利。'],
+  PubMed:['https://pubmed.ncbi.nlm.nih.gov/disclaimer/','摘要和原文依权利人条件复用；请逐篇检查版权与许可。'],
+  EMA:['https://www.ema.europa.eu/en/about-us/about-website/legal-notice','EMA 自有材料可用于商业或非商业用途，每份副本均须注明 EMA。第三方材料另行取得权利人许可。'],
+  jRCT:['https://jrct.mhlw.go.jp/agreement','采用 PDL 1.0 并设例外；全面收集须申请许可。站方要求避免自动巡回采集，HiJenny 仅保留历史归档供人工核对。']
+};
+
 function publicCoverage(receipt, timing) {
   // Region refers to the source institution, independent of study sites and patient location.
   const sources = {
@@ -69,12 +79,31 @@ function publicCoverage(receipt, timing) {
       const summary=document.createElement('summary');
       summary.textContent='查看 '+checks.length+' 项核对明细';
       details.append(summary);
+      const policy=publicUsePolicies[name];
+      const terms=document.createElement('p');
+      terms.textContent=policy?policy[1]+' ':'该来源的复用条件待核。';
+      if (policy) {
+        const link=document.createElement('a');
+        link.href=policy[0]; link.target='_blank'; link.rel='noopener noreferrer';
+        link.textContent='官方使用说明';
+        terms.append(link);
+      }
+      details.append(terms);
       const list=document.createElement('ul');
       for (const check of checks) {
         const item=document.createElement('li');
         const section={orange_book:'专利与独占期',orange_book_uses:'专利用途释义',nmpa_index:'公告目录'}[check.source];
         item.append([check.subject,check.target,section].filter(Boolean).join(' · '));
         if (check.status==='ok') item.append(' · 命中 '+check.records+' 条来源记录');
+        else if (check.status==='manual_review') {
+          item.append(' · 待人工复核');
+          if (check.source==='jrct' && /^jRCT[0-9]{10}$/.test(check.target)) {
+            const link=document.createElement('a');
+            link.href='https://jrct.mhlw.go.jp/en-latest-detail/'+check.target;
+            link.textContent='打开 jRCT 原登记'; link.target='_blank'; link.rel='noopener noreferrer';
+            item.append(' · ',link);
+          }
+        }
         else item.append(' · 核对失败'+(check.error?' · '+check.error:''));
         const last=check.last_success_utc || (check.status==='ok'?receipt.finished_utc:null);
         item.append(document.createElement('br'),last?'最近成功 '+fmtDate(last):'尚无成功记录');
@@ -389,7 +418,7 @@ function renderPublicEvents() {
     const names={nmpa_index:'NMPA 药品栏目目录',nmpa:'国家药监局 NMPA',orange_book_uses:'FDA 专利用途代码释义',orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
     body.innerHTML='<p>公开关注名单全量核对 · 新增 '+esc(receipt.new_events)+' 条归档事件</p>'+
       registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],checks.map(r=>[
-        names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':'待更新 · '+r.error,
+        names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':r.status==='manual_review'?'待人工复核':'待更新 · '+r.error,
         r.last_success_utc?fmtDate(r.last_success_utc):r.status==='ok'?fmtDate(receipt.finished_utc):'未记录',r.records ?? '待核',r.new_events ?? '待核']));
     body.prepend(syncStatus,publicScheduleStatus(verification?.scheduled_collection));
     if (/^[0-9]+$/.test(receipt.run_id)) {
