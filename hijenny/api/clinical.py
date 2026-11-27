@@ -108,7 +108,15 @@ class PreviousDesign(BaseModel):
     options: list[DesignOption] = Field(min_length=2, max_length=2)
 
 
+class AdoptedField(BaseModel):
+    field: Text
+    source_version: UUID
+    base_version: UUID
+    edited: bool
+
+
 class Synopsis(BaseModel):
+    adoptions: list[AdoptedField] = Field(default_factory=list)
     parent: UUID | None = None
     previous_design: PreviousDesign | None = None
     id: UUID
@@ -240,6 +248,11 @@ def append_review_and_sources(document, plan):
                 paragraph("本文件所列候选设计字段均与上一版相同。")
         else:
             paragraph("本次导出缺少上一版，无法核对原文。")
+    if plan.adoptions:
+        document.add_heading("本版采用的平行修订", 1)
+        for item in plan.adoptions:
+            paragraph(f"{item.field} · 对照版 {item.source_version} · 共同原稿 {item.base_version}")
+            paragraph("采用后另有编辑" if item.edited else "沿用原文")
     if plan.responses:
         document.add_heading("本版对上版复核意见的回应", 1)
         for item in plan.responses:

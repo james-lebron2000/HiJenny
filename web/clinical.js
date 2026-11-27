@@ -73,7 +73,7 @@ function parallelDesignChanges(base,current,other) {
       const [original,left,right]=values;
       if (left===original && right===original) continue;
       const status=left===right?'两版改动一致':left===original?'仅对照版修改':right===original?'仅当前版修改':'两版改动不同';
-      rows.push({name:prefix+name,status,values});
+      rows.push({name:prefix+name,path:[...path,key],status,values});
     }
   }
   fields({question:'研究问题',choice:'倾向方案',rationale:'选择依据',pending:'待复核事项'},[]);
@@ -87,6 +87,18 @@ function parallelDesignChanges(base,current,other) {
   for (const [key,label] of Object.entries(ibSections))
     fields({summary:'摘要',source:'资料来源'},['ib','sections',key],'IB · '+label+' · ');
   return rows;
+}
+
+function designInput(form,path) {
+  const [group,section,field,part]=path;
+  switch (group) {
+    case 'options': return form.querySelector(`[data-opt="${section}"][data-key="${field}"]`);
+    case 'sap': return form.querySelector(`[data-sap="${section}"]`);
+    case 'protocol':
+    case 'csr': return form.querySelector(`[data-${group}-choice="${section}"] [data-${group}="${field}"]`);
+    case 'ib': return section==='sections'?form.querySelector(`[data-ib="${field}"] [data-ib-field="${part}"]`):form.querySelector('#ib-'+section);
+    default: return form.querySelector('#design-'+group);
+  }
 }
 
 function renderClinical() {
@@ -121,7 +133,7 @@ function renderClinical() {
       ${siblings.length?`<details id="design-parallel"><summary>核对同一原稿的平行修订（${siblings.length}）</summary>
       <label>对照版本<select>${siblings.map(v=>option(v.id,siblings[0].id,fmtDate(v.created)+' · '+v.question+' · '+v.id)).join('')}</select></label>
       <p data-lineage></p><label><input type="checkbox">仅看两版改动不同的字段</label>
-      <div data-diffs></div><button type="button" class="btn">下载当前修订对照</button></details>`:''}
+      <div data-diffs></div><p data-adoption-status role="status"></p><button type="button" data-download-comparison class="btn">下载当前修订对照</button></details>`:''}
       <details id="design-handoff"><summary>交接设计版本与复核记录</summary>
       <p>下载当前版本及其历次修订、来源快照和复核意见。导入时文件会提交给当前 HiJenny 服务校验，通过后保存到本浏览器。</p>
       <button class="btn" type="button" data-download>下载交接包</button>
@@ -180,6 +192,8 @@ function renderClinical() {
       ${version.responses?.length?`<details id="saved-replies"><summary>本版对上版复核意见的回应（${version.responses.length}）</summary>
         ${version.responses.map(({review,reply})=>`<article><h3>${esc(review.role)} · ${esc(review.reviewer)} · ${esc(review.decision)}</h3>
         <p>${esc(review.note)}</p><p>修订回应</p><pre class="source-snapshot">${esc(reply)}</pre></article>`).join('')}</details>`:''}
+      ${version.adoptions?.length?`<details id="saved-adoptions"><summary>本版采用的平行修订（${version.adoptions.length}）</summary>
+        ${version.adoptions.map(a=>`<p>${esc(a.field)} · 对照版 ${esc(a.source_version)} · 共同原稿 ${esc(a.base_version)} · ${a.edited?'采用后另有编辑':'沿用原文'}</p>`).join('')}</details>`:''}
       <div id="design-reviews"></div><form id="design-review-form">
       <label>专业角色<select name="role"><option>临床</option><option>统计</option></select></label>
       <label>复核人<input name="reviewer" required maxlength="120"></label>
@@ -189,6 +203,7 @@ function renderClinical() {
       <div id="design-status" role="status"></div>
       ${version.changes.length ? '<h2>本版变更与影响</h2><ul>'+version.changes.map(c=>'<li>'+esc(c)+'</li>').join('')+'</ul>' : ''}</section>`);
     const form = $('#design-form');
+    const adopted=new Map();
     const parallel=$('#design-parallel');
     if (parallel) {
       const picker=parallel.querySelector('select'), conflicts=parallel.querySelector('input');
@@ -200,11 +215,23 @@ function renderClinical() {
         parallel.querySelector('[data-lineage]').textContent='共同原稿 '+previous.id+' · 当前版 '+version.id+' · 对照版 '+other.id;
         const different=rows.filter(r=>r.status==='两版改动不同').length;
         parallel.querySelector('[data-diffs]').innerHTML=`<p>共 ${rows.length} 个修改字段，其中 ${different} 个字段的两版改动不同。</p>`+
-          visible.map(row=>`<details><summary>${esc(row.name)} · ${row.status}</summary>
-            ${row.values.map((value,i)=>`<strong>${['共同原稿','当前版','对照版'][i]}</strong><pre class="source-snapshot">${esc(value || '（空白）')}</pre>`).join('')}</details>`).join('');
+          visible.map((row,i)=>`<details><summary>${esc(row.name)} · ${row.status}</summary>
+            ${row.values.map((value,i)=>`<strong>${['共同原稿','当前版','对照版'][i]}</strong><pre class="source-snapshot">${esc(value || '（空白）')}</pre>`).join('')}
+            ${row.values[1]===row.values[2]?'':`<button type="button" class="btn" data-adopt="${i}">${row.values[2]?'将对照版原文带入草稿':'按对照版清空草稿字段'}</button>`}</details>`).join('');
       }
+      parallel.querySelector('[data-diffs]').onclick=e=>{
+        const button=e.target.closest('button[data-adopt]');
+        if (!button) return;
+        const row=visible[Number(button.dataset.adopt)], input=designInput(form,row.path);
+        if (input.value!==row.values[1] && input.value!==row.values[2] && !confirm('用所选对照版替换这个字段尚未保存的文字？')) return;
+        input.value=row.values[2];
+        input.dispatchEvent(new Event('input',{bubbles:true}));
+        input.dispatchEvent(new Event('change',{bubbles:true}));
+        adopted.set(row.name,{input,value:input.value,source_version:picker.value,base_version:previous.id});
+        parallel.querySelector('[data-adoption-status]').textContent=row.name+' 已带入草稿，保存设计版本后生效。';
+      };
       parallel.onchange=compare;
-      parallel.querySelector('button').onclick=()=>{
+      parallel.querySelector('[data-download-comparison]').onclick=()=>{
         const lines=['HiJenny 设计修订对照',parallel.querySelector('[data-lineage]').textContent,
           conflicts.checked?'范围：两版改动不同的字段':'范围：全部修改字段',parallel.querySelector('[data-diffs] p').textContent];
         for (const row of visible) lines.push('',row.name+' · '+row.status,...row.values.map((v,i)=>['共同原稿','当前版','对照版'][i]+'：'+(v || '（空白）')));
@@ -349,6 +376,9 @@ function renderClinical() {
         if (reply && !review) {$('#design-status').textContent='来源意见已不可用，请核对后再保存。';return false;}
         if (reply) next.responses.push({review,reply});
       }
+      next.adoptions=Array.from(adopted,([field,{input,value,source_version,base_version}])=>({
+        field,source_version,base_version,edited:input.value!==value
+      }));
       next.changes = changedSections(version.id ? version : null,next);
       try { localStorage.setItem(prefix+next.id,JSON.stringify(next)); }
       catch { $('#design-status').textContent = '本机存储失败，请保留此页并检查可用空间。'; return false; }
