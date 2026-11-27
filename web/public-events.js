@@ -438,6 +438,7 @@ function renderPublicEvents() {
     <button class="btn">对照归档终点</button></form><div aria-live="polite" data-comparison></div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="依达方、奥希替尼或 Summit"></label>
+    <input type="hidden" name="asset_label">
     <label><input type="checkbox" name="exact_asset" value="true"> 仅匹配完整归档资产标签（按卡片所列原名）</label>
     <label>国家药监局公告编号<input name="notice_id" inputmode="numeric" pattern="[0-9]+" placeholder="1073516"></label>
     <label>国家药监局栏目标题关键词<input name="notice_title" placeholder="例如 Good Clinical Practice"></label>
@@ -554,7 +555,7 @@ function renderPublicEvents() {
       query = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
       const eventId = hashParams().get('event');
       if (eventId) query.set('event_id', eventId);
-      showAssetEvidence($('#asset-evidence'),query.get('asset')?.trim() || '',query.get('as_of'),query.has('exact_asset'));
+      showAssetEvidence($('#asset-evidence'),query.get('asset_label') || query.get('asset')?.trim() || '',query.get('as_of'),query.has('exact_asset') || query.has('asset_label'));
       setSavedQuery(null); offset = 0; generation++; list.replaceChildren();
     }
     $('#public-observed-after').hidden=!query.has('observed_after');
@@ -588,6 +589,30 @@ function renderPublicEvents() {
           button.onclick=()=>{form.elements.source.value=row.source; form.requestSubmit();};
           counts.append(button);
         }
+      }
+      if (query.has('asset_label') || (query.has('asset') && !query.has('exact_asset') && result.total)) {
+        const group=document.createElement('section');
+        const title=document.createElement('p');
+        title.textContent=query.has('asset_label')?'已选资产标签 · '+query.get('asset_label'):'按归档资产标签细分';
+        group.append(title);
+        for (const row of result.asset_counts) {
+          if (!row.label) {
+            group.append('未标注资产 · '+row.events+' 条 ');
+          } else if (!query.has('asset_label')) {
+            const button=document.createElement('button');
+            button.type='button'; button.className='btn';
+            button.textContent=row.label+' · '+row.events+' 条';
+            button.onclick=()=>{form.elements.asset_label.value=row.label; form.requestSubmit();};
+            group.append(button);
+          }
+        }
+        if (query.has('asset_label')) {
+          const clear=document.createElement('button');
+          clear.type='button'; clear.className='btn'; clear.textContent='清除资产标签';
+          clear.onclick=()=>{form.elements.asset_label.value=''; form.requestSubmit();};
+          group.append(clear);
+        }
+        counts.append(group);
       }
       if (query.has('source')) {
         const all=document.createElement('button');
