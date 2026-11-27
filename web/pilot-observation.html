@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HiJenny · 客户试用记录</title>
+<style>
+*{box-sizing:border-box}body{max-width:46rem;margin:2rem auto;padding:0 1rem;font:1rem/1.55 system-ui,sans-serif;color:#182d36}
+h1,h2{line-height:1.25}fieldset{margin:1.3rem 0;border:1px solid #b6c9ca;border-radius:.4rem;padding:1rem}
+legend{font-weight:650}label{display:block;margin:.7rem 0}input,textarea,select,button{font:inherit}
+input,textarea,select{width:100%;padding:.4rem}textarea{min-height:4.5rem}button{padding:.45rem .8rem;cursor:pointer}
+#example{padding:.65rem 1rem;background:#edf5f4}output{display:block;margin-top:.5rem}
+</style>
+<main>
+<h1>HiJenny 客户试用记录</h1>
+<p>主持人每次记录一位参与者的一项任务。先请参与者描述自己要交付什么，再打开工作台。记录仅在当前页面填写，离开前请下载到项目的私有交付目录。</p>
+<form id="observation">
+<fieldset><legend>任务约定</legend>
+<label>参与者代号<input name="participant" required></label>
+<label>参与者角色<select name="role" required><option value="">请选择</option><option>商务拓展</option><option>临床开发</option><option>医学事务</option><option>个人研究者</option></select></label>
+<p id="example" hidden></p>
+<label>参与者确认的任务与完成标准<textarea required name="task" placeholder="用参与者自己的话记录业务问题、交付对象和判断完成的条件"></textarea></label>
+<label>使用场景、对标地区及当前做法<textarea name="workflow" required></textarea></label>
+<label>应用版本（部署提交号）<input name="release" required></label>
+<label>资料截止日（台北）<input name="cutoff" type="date" required></label>
+</fieldset>
+<fieldset><legend>独立操作</legend>
+<button id="start" type="button">开始计时</button>
+<button id="stop" type="button" disabled>结束计时</button>
+<output id="timing" aria-live="polite"></output>
+<label>试用结果<select name="outcome" required><option value="">请选择</option><option>独立完成</option><option>提示后完成</option><option>未完成</option></select></label>
+<label>卡住的位置与主持人提示<textarea name="assistance" placeholder="需要提示或未完成时，记录发生在哪一步，以及提示内容"></textarea></label>
+<label>交付物文件名、证据编号或未产出原因<textarea name="artifact" required></textarea></label>
+</fieldset>
+<fieldset><legend>复核与采购反馈</legend>
+<label>复核人代号<input name="reviewer" required></label>
+<label>与约定标准逐项核对的结果及待修正问题<textarea name="review" required></textarea></label>
+<label>参与者原话：还会在什么场景使用，谁决定采购？<textarea name="feedback" placeholder="可记录未讨论、拒绝或无预算"></textarea></label>
+</fieldset>
+<button type="submit">下载本次试用记录（JSON）</button>
+<output id="message" aria-live="polite"></output>
+</form></main>
+<script>
+const form=document.querySelector('form'), fields=form.elements;
+const example=document.querySelector('#example'), timing=document.querySelector('#timing');
+const message=document.querySelector('#message');
+const examples={
+  '商务拓展':'可选任务：为交易委员会准备一页公开披露摘要，区分首付款与或有里程碑，附上可复核的出处。',
+  '临床开发':'可选任务：为团队整理一项登记试验的主要终点，标明分析人群、评价时间和效应估计，交付带引文的简报。',
+  '医学事务':'可选任务：围绕一次具体的专家会议问题，准备含公开引文、待核实事项及后续行动的会前简报。',
+  '个人研究者':'可选任务：围绕一个研究问题，从试验登记和论文中筛选材料，交付说明纳入理由、可供同事复查的研究底稿。'
+};
+let started,ended,elapsedStart,seconds;
+fields.role.onchange=()=>{
+  example.textContent=examples[fields.role.value] || '';
+  example.hidden=!example.textContent;
+};
+fields.start.onclick=()=>{
+  started=new Date().toISOString();
+  elapsedStart=performance.now();
+  fields.start.disabled=true;
+  fields.stop.disabled=false;
+  timing.textContent='开始时间 '+new Date(started).toLocaleTimeString();
+  message.textContent='';
+};
+fields.stop.onclick=()=>{
+  ended=new Date().toISOString();
+  seconds=Math.round((performance.now()-elapsedStart)/1000);
+  fields.stop.disabled=true;
+  timing.textContent+='，结束时间 '+new Date(ended).toLocaleTimeString()+'，用时 '+seconds+' 秒';
+};
+form.onsubmit=event=>{
+  event.preventDefault();
+  if (!ended) { message.textContent='请记录本次任务的开始与结束时间。'; return; }
+  if (fields.outcome.value!=='独立完成' && !fields.assistance.value.trim()) {
+    message.textContent='请补充卡住的位置或收到的提示。'; fields.assistance.focus();return;
+  }
+  const record={...Object.fromEntries(new FormData(form)),started_utc:started,ended_utc:ended,elapsed_seconds:seconds};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(record,null,2)+'\n'],{type:'application/json'}));
+  const link=document.createElement('a');
+  link.href=url;link.download='HiJenny-试用记录-'+started.replace(/[:.]/g,'-')+'.json';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  message.textContent='已请求下载。请核对文件并与本次交付物一同保存在私有项目目录。';
+};
+</script>
+</html>
