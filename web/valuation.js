@@ -85,6 +85,12 @@ async function renderValuation(seq) {
     return [r.asset || r.subject,r.field,r.value,r.region,'披露 '+r.source_date,
       r.effective?'发生或生效 '+r.effective:''].filter(Boolean).join(' · ');
   }
+  function archiveUrl(r) {
+    return location.origin+location.pathname+'#/public-events?'+new URLSearchParams({event:r.id});
+  }
+  function disclosureLinks(r) {
+    return `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">SEC 原文</a> · <a href="${esc(archiveUrl(r))}" target="_blank" rel="noopener noreferrer">HiJenny 单条归档</a>`;
+  }
   function scenarioSources(plan, scenario) {
     return (plan.disclosures || []).filter(r=>scenario.disclosureIds?.includes(r.id));
   }
@@ -109,7 +115,7 @@ async function renderValuation(seq) {
       <label>按资产或公司查已核实的 SEC 披露<input id="val-public-query" value="${esc(searchAsset)}" placeholder="例如 ivonescimab"></label>
       <button type="button" class="btn" id="val-public-search">查找估值日已披露的记录</button>
       <div id="val-public-list" aria-live="polite"></div>
-      ${(draft.disclosures || []).map((r,i)=>`<p>${esc(disclosureText(r))} · <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">SEC 原文</a>
+      ${(draft.disclosures || []).map((r,i)=>`<p>${esc(disclosureText(r))} · ${disclosureLinks(r)}
       <button type="button" class="btn" data-remove-disclosure="${i}">移除依据</button></p>`).join('')}</section>
       ${(draft.deals || []).map((deal,i)=>`<fieldset class="card" data-deal="${i}"><legend>可比交易 ${i+1}</legend>
       ${dealFields.map(([key,label,type])=>`<label>${label}<input data-term="${key}" type="${type}" ${type==='number'?'min="0" step="any"':'required maxlength="2000"'} value="${esc(deal[key] ?? '')}"></label>`).join('')}
@@ -153,7 +159,7 @@ async function renderValuation(seq) {
         ${late.length?`<section class="card"><h3>本版含估值日后披露的依据</h3><ul>${late.map(line=>`<li>${esc(line)}</li>`).join('')}</ul></section>`:''}
         <table><caption>按现值差额的绝对值排序，差额为替代减基准</caption><thead><tr><th>现金流</th><th>基准现值</th><th>替代现值</th><th>差额</th></tr></thead><tbody>
         ${differences.map(({index:i,delta,assumptions})=>`<tr><th>${esc(v.flows[i].label)}<br><small>${esc(assumptions.join(' · ') || '金额、年份和概率相同')}</small></th>${v.outputs.map((o,j)=>`<td>${number(o.presentValues[i])}${scenarioSources(v,v.flows[i].cases[j]).map(r=>
-          `<br><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.field)} · ${esc(r.source_date)}</a>`).join('')}</td>`).join('')}<td>${number(delta)}</td></tr>`).join('')}
+          `<br>${esc(r.field)} · ${esc(r.source_date)} · ${disclosureLinks(r)}`).join('')}</td>`).join('')}<td>${number(delta)}</td></tr>`).join('')}
         <tr><th>合计</th>${totals.map(t=>`<td>${number(t)}</td>`).join('')}<td>${number(totals[1]-totals[0])}</td></tr></tbody></table>
         <p>替代情景较基准变化 ${number(totals[1]-totals[0])} 百万 ${esc(v.currency)}。</p>
         ${v.deals?.length ? `<h3>本版参照的交易条款</h3><div class="bd-scroll"><table>
@@ -176,7 +182,7 @@ async function renderValuation(seq) {
         if (late.length) lines.push('', '本版含估值日后披露的依据', ...late);
         if (v.origin) lines.push('', '机会筛选快照 '+v.origin.snapshot_id, v.origin.asset, v.origin.rationale,
           v.origin.trial_title, sourceLink({id:v.origin.nct}), '检索时间 '+v.origin.retrieved);
-        for (const r of v.disclosures || []) lines.push('', '公开交易依据 · '+disclosureText(r), r.url, '公开动态编号 '+r.id);
+        for (const r of v.disclosures || []) lines.push('', '公开交易依据 · '+disclosureText(r), r.url, '公开动态编号 '+r.id,archiveUrl(r));
         for (const deal of v.deals || []) {
           lines.push('', '可比交易披露', ...dealFields.map(([key,label])=>label+' · '+(deal[key] || '未披露')));
         }
@@ -184,7 +190,7 @@ async function renderValuation(seq) {
           lines.push('',f.label);
           f.cases.forEach((c,j)=>{
             lines.push(scenarioNames[j]+' · 第 '+c.year+' 年 · 金额 '+c.amount+' · 概率 '+c.probability+'% · 现值 '+v.outputs[j].presentValues[i]);
-            for (const r of scenarioSources(v,c)) lines.push('本情景参照 · '+disclosureText(r), r.url, '公开动态编号 '+r.id);
+            for (const r of scenarioSources(v,c)) lines.push('本情景参照 · '+disclosureText(r), r.url, '公开动态编号 '+r.id,archiveUrl(r));
           });
           lines.push('依据 '+f.basis);
         });
@@ -218,7 +224,7 @@ async function renderValuation(seq) {
         if (!offset) list.replaceChildren();
         for (const r of page.items) {
           const entry=document.createElement('p');
-          entry.innerHTML=`${esc(disclosureText(r))} · <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">核对原文</a> <button type="button" class="btn">加入估值依据</button>`;
+          entry.innerHTML=`${esc(disclosureText(r))} · ${disclosureLinks(r)} <button type="button" class="btn">加入估值依据</button>`;
           const add=entry.querySelector('button');
           add.disabled=(draft.disclosures || []).some(d=>d.id===r.id);
           add.onclick=()=>{
