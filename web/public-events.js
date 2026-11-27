@@ -341,6 +341,36 @@ async function showAssetEvidence(panel, asset, cutoff) {
   } catch (err) {if (current()) panel.textContent='资产证据暂时无法读取，请重新筛选。'+err.message;}
 }
 
+function appendPublicCitation(card, event) {
+  const link=document.createElement('a');
+  link.href='#/public-events?'+new URLSearchParams({event:event.id});
+  link.textContent='此条归档的固定链接';
+  // Capture only the archived heading and facts, before any live lookup controls are attached.
+  const facts=Array.from(card.querySelectorAll('h2,p'),node=>node.textContent);
+  const citation=[...facts,event.source+' · '+event.record,event.url,'HiJenny 归档 '+link.href].join('\n');
+  const actions=document.createElement('p'), copy=document.createElement('button');
+  const status=document.createElement('span');
+  status.setAttribute('role','status');
+  copy.type='button'; copy.className='btn'; copy.textContent='复制带出处的引用';
+  copy.onclick=async()=>{
+    try {
+      await navigator.clipboard.writeText(citation);
+      status.textContent='已复制引用和原文链接';
+    } catch {
+      let field=actions.querySelector('textarea');
+      if (!field) {
+        field=document.createElement('textarea'); field.readOnly=true;
+        field.setAttribute('aria-label','单条归档引用'); field.rows=5; field.value=citation;
+        actions.append(field);
+      }
+      status.textContent='请选择并复制下方引用';
+      field.focus(); field.select();
+    }
+  };
+  actions.append(link,' · ',copy,' ',status);
+  card.append(actions);
+}
+
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报、中国 NMPA 公告、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、日本 jRCT 登记、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
@@ -483,6 +513,11 @@ function renderPublicEvents() {
       const result = await api('/api/public-events?' + query);
       if (generation !== request || !form.isConnected) return;
       counts.replaceChildren();
+      if (query.has('event_id')) {
+        const exit=document.createElement('a');
+        exit.href='#/public-events'; exit.textContent='返回全部公开动态';
+        counts.append(exit);
+      }
       if (result.total) {
         const heading=document.createElement('p');
         heading.textContent='当前筛选的来源分布（编号在各来源内去重）';
@@ -513,6 +548,7 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        appendPublicCitation(card,r);
         if (!query.has('source_record') || !query.has('source') ||
             [...query.keys()].some(key=>!['source_record','source','offset','disclosed_to','discovered_to'].includes(key))) {
           const params=new URLSearchParams({source:r.source,source_record:r.record});
