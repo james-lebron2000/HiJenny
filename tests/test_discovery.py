@@ -65,3 +65,9 @@ def test_concurrent_handoff_reuses_project_and_retains_original_reason(tmp_path,
         start_project(seed)
     assert missing.value.status_code == 403
     assert not start_project(seed, "ORG_OTHER")["created"]
+    monkeypatch.setattr(config, "REQUIRE_PROJECT_GRANTS", True)
+    own_id = other["project"]["project_id"]
+    assert start_project(seed, "ORG_OTHER", own_id)["project"]["project_id"] == own_id
+    with pytest.raises(HTTPException) as denied:
+        start_project(seed, "ORG_OTHER", restored["project_id"])
+    assert denied.value.status_code == 403

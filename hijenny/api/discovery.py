@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 
 from hijenny import store
-from hijenny.api.org_scope import check_project_role, request_org
+from hijenny.api.org_scope import check_project_role, project_grants, request_org
 from hijenny.asset_names import chinese_search_name
 
 router = APIRouter()
@@ -151,7 +151,9 @@ class Opportunity(BaseModel):
 
 
 @router.post("/api/discovery/projects", dependencies=[Depends(check_project_role)])
-def start_project(request: Opportunity, x_org_id: Annotated[str | None, Header(alias="X-Org-Id")] = None):
+def start_project(request: Opportunity, x_org_id: Annotated[str | None, Header(alias="X-Org-Id")] = None,
+                  x_project_ids: Annotated[str | None, Header(alias="X-Project-Ids")] = None):
+    grants = project_grants(x_project_ids)
     org_id = request_org(x_org_id) or "ORG_DEFAULT"
     record = request.model_dump(mode="json")
     record["url"] = f"https://clinicaltrials.gov/study/{request.nct}"
@@ -161,8 +163,12 @@ def start_project(request: Opportunity, x_org_id: Annotated[str | None, Header(a
     with store.session_scope() as session:
         session.execute(text("BEGIN IMMEDIATE"))
         for existing in store.list_projects(session, org_id):
+            if grants is not None and existing["project_id"] not in grants:
+                continue
             if existing["meta"].get("opportunity_key") == key:
                 return {"project": existing, "created": False}
+        if grants is not None:
+            raise HTTPException(403, "新建项目需要组织级编辑授权。")
         project = store.create_project(session, name=f"{request.asset} · 机会评估"[:200],
                                        asset_name=request.asset, indication=request.criteria.condition,
                                        phase=request.phase, org_id=org_id, meta={"opportunity_key": key, "opportunity": record})

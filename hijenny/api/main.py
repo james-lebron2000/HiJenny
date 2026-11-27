@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hijenny import config, exports, pipeline, reporting, store
 from sqlalchemy import text
-from hijenny.api.org_scope import PrivateProjectCachePolicy, check_project_role, request_org
+from hijenny.api.org_scope import PrivateProjectCachePolicy, check_project_role, project_grants, request_org, require_project
 from hijenny.parse_coverage import pdf_review_ranges
 from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
@@ -501,6 +501,7 @@ def _check_org_scope(request: Request):
                     break
         if not project_id:
             raise HTTPException(404, "Project resource not found")
+        require_project(project_grants(request.headers.get("X-Project-Ids")), project_id)
         _project_or_404(session, project_id, scope)
 
 
@@ -596,7 +597,9 @@ def create_app() -> FastAPI:
 
     # -- Projects -----------------------------------------------------------
     @app.post("/api/projects", status_code=201, dependencies=[Depends(check_project_role)])
-    def create_project(payload: ProjectCreate, x_org_id: str | None = Header(default=None, alias="X-Org-Id")):
+    def create_project(request: Request, payload: ProjectCreate, x_org_id: str | None = Header(default=None, alias="X-Org-Id")):
+        if project_grants(request.headers.get("X-Project-Ids")) is not None:
+            raise HTTPException(403, "新建项目需要组织级编辑授权。")
         with store.session_scope() as session:
             project = store.create_project(
                 session,
@@ -611,14 +614,18 @@ def create_app() -> FastAPI:
 
     @app.get("/api/projects", dependencies=[Depends(check_project_role)])
     def list_projects(
+        request: Request,
         org_id: str | None = Query(default=None),
         x_org_id: str | None = Header(default=None, alias="X-Org-Id"),
     ):
+        grants = project_grants(request.headers.get("X-Project-Ids"))
         scope = request_org(x_org_id) or (org_id or "").strip() or None
         with store.session_scope() as session:
             projects = store.list_projects(session, org_id=scope)
             enriched = []
             for project in projects:
+                if grants is not None and project["project_id"] not in grants:
+                    continue
                 stats = store.project_stats(session, project["project_id"])
                 enriched.append(
                     {
@@ -1259,7 +1266,7 @@ def create_app() -> FastAPI:
 
     # -- Safe file serving --------------------------------------------------
     @app.get("/api/files/{file_path:path}", dependencies=[Depends(check_project_role)])
-    def serve_file(file_path: str, x_org_id: str | None = Header(default=None, alias="X-Org-Id")):
+    def serve_file(request: Request, file_path: str, x_org_id: str | None = Header(default=None, alias="X-Org-Id")):
         if not file_path or file_path.endswith("/"):
             raise HTTPException(status_code=404, detail="File not found")
         data_root = _data_dir().resolve()
@@ -1279,6 +1286,7 @@ def create_app() -> FastAPI:
         )
         if not allowed:
             raise HTTPException(status_code=404, detail="File not found")
+        require_project(project_grants(request.headers.get("X-Project-Ids")), parts[1])
         scope = request_org(x_org_id)
         if scope:
             with store.session_scope() as session:

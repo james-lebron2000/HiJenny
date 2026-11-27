@@ -1,4 +1,6 @@
 """Organization context supplied by the deployment gateway."""
+import re
+
 from fastapi import HTTPException, Request
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -11,6 +13,24 @@ def request_org(header: str | None) -> str | None:
     if not value and config.REQUIRE_ORG_HEADER:
         raise HTTPException(403, "项目访问需要由身份网关提供组织标识。")
     return value or None
+
+
+def project_grants(header: str | None) -> set[str] | None:
+    """None denotes organization-wide scope. An absent grant never confers it in strict mode."""
+    if not config.REQUIRE_PROJECT_GRANTS:
+        return None
+    value = (header or "").strip()
+    if value == "*":
+        return None
+    ids = {part.strip() for part in value.split(",")}
+    if not all(re.fullmatch(r"prj_[A-Za-z0-9_-]+", item) for item in ids):
+        raise HTTPException(403, "项目访问需要有效的项目授权名单。")
+    return ids
+
+
+def require_project(grants: set[str] | None, project_id: str):
+    if grants is not None and project_id not in grants:
+        raise HTTPException(404, "Project resource not found")
 
 
 def check_project_role(request: Request):

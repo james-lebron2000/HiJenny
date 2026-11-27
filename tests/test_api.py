@@ -308,6 +308,25 @@ def test_gateway_reader_can_review_but_only_editor_can_change_projects(client, m
     assert client.get("/api/public-events/count").status_code == 200
 
 
+def test_asset_project_grants_apply_within_one_organization(client, monkeypatch):
+    a, b = [create_project(client, name)["project_id"] for name in ("Asset A", "Asset B")]
+    resources = [(pid, seed_review_data(pid)["question_id"], upload_pdf(client, pid).json()["documents"][0]["file_url"])
+                 for pid in (a, b)]
+    for flag in ("REQUIRE_PROJECT_GRANTS", "REQUIRE_PROJECT_ROLE", "REQUIRE_ORG_HEADER"):
+        monkeypatch.setattr(config, flag, True)
+    gateway = {"X-Org-Id": "ORG_DEFAULT", "X-Project-Role": "editor"}
+    headers = {**gateway, "X-Project-Ids": a}
+    assert client.get("/api/projects", headers=gateway).status_code == 403
+    assert [p["project_id"] for p in client.get("/api/projects", headers=headers).json()["projects"]] == [a]
+    for pid, question, url in resources:
+        expected = 200 if pid == a else 404
+        for path in (f"/api/projects/{pid}", f"/api/questions/{question}", url):
+            assert client.get(path, headers=headers).status_code == expected
+    assert client.post("/api/projects", json={"name": "Third"}, headers=headers).status_code == 403
+    for grant in ("*", f"{a}, {b}"):
+        assert client.get("/api/projects", headers={**gateway, "X-Project-Ids": grant}).json()["count"] == 2
+
+
 def test_org_scope_follows_project_resources_and_downloads(client):
     project = create_project(client)["project_id"]
     rows = seed_review_data(project)
