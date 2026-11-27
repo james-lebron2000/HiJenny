@@ -597,7 +597,7 @@ function renderPublicEvents() {
   };
   bindArchivedComparison($('#archived-comparison'));
   const collection=$('#public-collection');
-  api('/api/public-events/collection').then(({receipt,verification,source_timing,collection_links})=>{
+  api('/api/public-events/collection').then(({receipt,verification,source_timing,collection_links,subject_aliases={}})=>{
     if (!collection.isConnected) return;
     const body=collection.querySelector('div');
     const coverage=$('#public-coverage div');
@@ -628,29 +628,49 @@ function renderPublicEvents() {
       (pending.length ? ' · 待处理 '+pending.length : '');
     const names={nmpa_index:'NMPA 药品栏目目录',nmpa:'国家药监局 NMPA',orange_book_uses:'FDA 专利用途代码释义',orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
     body.innerHTML=`<p>公开关注名单全量核对 · 新增 ${esc(receipt.new_events)} 条归档事件</p>
+      <label>监测对象 <select id="public-check-subject"><option value="">全部监测对象</option></select></label>
       <label>查看采集目标 <select id="public-check-filter">
         <option value="all">全部（${checks.length}）</option>
         <option value="pending">待处理（${pending.length}）</option>
         <option value="ok">成功（${ok}）</option>
       </select></label>
       <button type="button" class="btn sm" id="download-collection-receipt">下载本批完整回执</button>
+      <p id="public-check-counts" aria-live="polite"></p>
       <div id="public-check-rows" aria-live="polite"></div>`;
     const filter=body.querySelector('#public-check-filter');
     filter.value=pending.length?'pending':'all';
+    const subjectPicker=body.querySelector('#public-check-subject');
+    const subjects=[null,...[...new Set(checks.map(r=>r.subject || ''))].sort()];
+    for (const subject of subjects.slice(1)) {
+      const alias=subject_aliases[subject]?.find(name=>/[\u3400-\u9fff]/.test(name));
+      // Select by the receipt label so combination regimens retain their own counts.
+      subjectPicker.add(new Option(alias ? alias+' · '+subject : subject || '旧回执未记录对象', String(subjectPicker.options.length)));
+    }
     const manual=document.createElement('div');
+    const manualTargets=new Map();
     for (const r of pending.filter(check=>check.status==='manual_review')) {
       const controls=manualRegistryControls(r,receipt);
-      if (controls) manual.append(controls);
+      if (controls) {manualTargets.set(r,controls);manual.append(controls);}
     }
     body.append(manual);
     const updateChecks=()=>{
-      manual.hidden=filter.value==='ok';
-      const rows=filter.value==='pending'?pending:filter.value==='ok'?checks.filter(r=>r.status==='ok'):checks;
+      const subject=subjects[subjectPicker.selectedIndex];
+      const scoped=subject===null?checks:checks.filter(r=>(r.subject || '')===subject);
+      const succeeded=scoped.filter(r=>r.status==='ok');
+      const outstanding=scoped.filter(r=>r.status!=='ok');
+      for (const [index,count] of [scoped.length,outstanding.length,succeeded.length].entries()) {
+        filter.options[index].text=['全部','待处理','成功'][index]+'（'+count+'）';
+      }
+      body.querySelector('#public-check-counts').textContent='本批监测范围 · '+scoped.length+' 项目标，成功 '+succeeded.length+
+        ' 项，待处理 '+outstanding.length+' 项。';
+      const rows=filter.value==='pending'?outstanding:filter.value==='ok'?succeeded:scoped;
+      for (const [target,controls] of manualTargets) controls.hidden=!rows.includes(target);
       const host=body.querySelector('#public-check-rows');
       host.innerHTML=rows.length?registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],rows.map(r=>[
         names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':r.status==='manual_review'?'待人工复核':'核对失败'+(r.error?' · '+r.error:''),
         r.last_success_utc?fmtDate(r.last_success_utc):r.status==='ok'?fmtDate(receipt.finished_utc):'未记录',r.records ?? '待核',r.new_events ?? '待核'])):'<p>本批没有符合该筛选的目标。</p>';
     };
+    subjectPicker.onchange=()=>{filter.value='all';updateChecks();};
     filter.onchange=updateChecks;
     updateChecks();
     body.querySelector('#download-collection-receipt').onclick=()=>{

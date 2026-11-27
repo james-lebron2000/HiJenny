@@ -10,7 +10,7 @@ from xml.etree import ElementTree as ET
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, Response
 
-from hijenny.asset_names import verified_asset
+from hijenny.asset_names import ASSET_NAMES, verified_asset
 from hijenny.config import REPO_ROOT
 from hijenny.public_events import connect
 from hijenny.registry_report import outcome_text, safety_text
@@ -215,7 +215,12 @@ def latest_collection():
         timing = {source: dict(event_id=event_id, source_date=source_date, observed_day=day, days=days)
                   for source, event_id, source_date, day, days in samples}
     receipt = json.loads(row[0]) if row else None
-    return {"receipt": receipt, "collection_links": collection_links(receipt or {}),
+    subject_aliases = {}
+    for target in (receipt or {}).get("checks", []):
+        subject = target.get("subject")
+        if subject and (match := verified_asset(subject)):
+            subject_aliases[subject] = list(ASSET_NAMES[match["name"]][0])
+    return {"receipt": receipt, "subject_aliases": subject_aliases, "collection_links": collection_links(receipt or {}),
             "verification": json.loads(check[0]) if check else None, "source_timing": timing}
 
 
