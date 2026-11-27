@@ -43,6 +43,23 @@ const homeUpdates={
   ja:{title:'公開情報（情報源の日付順）',source:'原資料を開く',filed:'提出日',open:'更新一覧と購読',download:'全件のレポートをダウンロード（中国語 TXT）',empty:'この名称に該当する更新はありません。',error:'現在、更新情報を読み込めません。'}
 };
 
+function homeDisclosure(row,lang,cutoff) {
+  if (row.source!=='NMPA' && row.source!=='SEC') return '';
+  const labels={
+    zh:{notice:'同一公告的归档',filing:'同一申报的归档'},
+    en:{notice:'Archived entries for this notice',filing:'Archived entries for this filing'},
+    ja:{notice:'この公告の収録記録',filing:'この提出書類の収録記録'}
+  }[lang];
+  const isNotice=row.source==='NMPA';
+  const value=typeof row.value==='string' && row.field!=='公司申报' ? row.value : '';
+  const summary=value ? `<p>${esc(value)}</p>` : '';
+  if (!row.record) return summary;
+  const params=new URLSearchParams({source:row.source,source_record:row.record});
+  if (cutoff) params.set('as_of',cutoff);
+  const label=isNotice ? labels.notice : labels.filing;
+  return summary+`<div><a data-home-disclosure href="#/public-events?${esc(params.toString())}">${label} · ${esc(row.record)}</a></div>`;
+}
+
 async function showHomeUpdates(panel,filters,lang) {
   const copy=homeUpdates[lang];
   const query=new URLSearchParams(filters);
@@ -63,7 +80,7 @@ async function showHomeUpdates(panel,filters,lang) {
       const measures=r.category==='primary-outcomes' ? r.value?.primary_outcomes : null;
       const outcomes=Array.isArray(measures) ? measures.map(m=>
         `<details class="home-outcome"><summary>${esc(r.record)} · ${esc(m.title || homeEvidence[lang].results)}</summary>${homeOutcomeDetails(m,lang)}</details>`).join('') : '';
-      return `<li><a href="${esc(href)}">${esc(title)}</a> · ${esc(r.source)} · ${esc(when)}${sourceLink}${outcomes}</li>`;
+      return `<li><a href="${esc(href)}">${esc(title)}</a> · ${esc(r.source)} · ${esc(when)}${sourceLink}${homeDisclosure(r,lang,filters.as_of)}${outcomes}</li>`;
     });
     panel.innerHTML=`<h3>${copy.title} (${result.total})</h3>`+
       (items.length?'<ul>'+items.join('')+'</ul>':'<p>'+copy.empty+'</p>')+archiveLink+
