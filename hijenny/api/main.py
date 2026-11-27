@@ -925,6 +925,7 @@ def create_app() -> FastAPI:
     # -- Evidence -----------------------------------------------------------
     @project_api.get("/api/projects/{project_id}/evidence")
     def list_evidence(
+        request: Request,
         project_id: str,
         field_name: str | None = Query(default=None),
         category: str | None = Query(default=None),
@@ -961,6 +962,8 @@ def create_app() -> FastAPI:
         return {
             "evidence": rows,
             "count": len(rows),
+            "gateway_identity_required": config.REQUIRE_REVIEW_ACTOR,
+            "gateway_user": gateway_user(request) if config.REQUIRE_REVIEW_ACTOR else None,
             "facets": {
                 "field_name": _group_counts(rows, "field_name"),
                 "category": _group_counts(rows, "category"),

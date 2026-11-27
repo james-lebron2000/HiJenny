@@ -1083,7 +1083,23 @@ function quotePanelHtml() {
     return `<div class="label">Selected evidence</div><div style="color:var(--muted)">Click an evidence card to jump to its document page and see the verbatim quote.</div>`;
   }
   return `<div class="label">${esc(ev.field_name)} = ${esc(evidenceValue(ev))} · ${esc(ev.filename || '')} p.${Number(ev.page || 0)} · ${esc(ev.verification_status || '')}</div>
-    <blockquote>${esc(normWs(ev.quote))}</blockquote>`;
+    <blockquote>${esc(normWs(ev.quote))}</blockquote>
+    ${ev.verified_by ? `<p>最近复核人 · ${esc(ev.verified_by)}</p>` : ''}
+    ${ev.verification_note ? `<p>核对说明 · ${esc(ev.verification_note)}</p>` : ''}
+    ${evidenceReviewForm(ev)}`;
+}
+
+function evidenceReviewForm(ev) {
+  if (state.projectPermissions.edit === false) return '';
+  if (state.evidenceIdentityRequired && !state.evidenceUser) return '<p>通过身份网关登录后可登记复核。</p>';
+  const statuses = {pending:'待复核', verified:'已核实', failed:'与原件不符', unverifiable:'现有材料无法核实'};
+  return `<details><summary>登记证据复核</summary>
+    <form data-form="review-evidence" data-id="${esc(ev.evidence_id)}">
+      <label>核对结果<select name="verification_status">${Object.entries(statuses).map(([key,label])=>option(key,ev.verification_status,label)).join('')}</select></label>
+      <label>核对说明<textarea name="note" rows="2" maxlength="4000">${esc(ev.verification_note || '')}</textarea></label>
+      <label>复核人<input name="actor" required maxlength="128" ${state.evidenceIdentityRequired ? `readonly value="${esc(state.evidenceUser)}"` : ''}></label>
+      <button class="btn primary" type="submit">保存复核结果</button>
+    </form></details>`;
 }
 
 function updatePreviewToolbar() {
@@ -1156,12 +1172,17 @@ async function updatePreview() {
     body.innerHTML = `<div class="preview-empty">Select a document in the left panel to preview pages and evidence.</div>`;
     return;
   }
+  const page = state.previewPage;
   state.pageData = null;
+  body.textContent = '正在载入原页…';
+  let loadedPage = null;
   try {
-    state.pageData = await api(`/api/projects/${state.projectId}/documents/${doc.document_id}/pages/${state.previewPage}`);
+    loadedPage = await api(`/api/projects/${state.projectId}/documents/${doc.document_id}/pages/${page}`);
   } catch (error) {
-    state.pageData = null;
+    // A PDF may still be available when text extraction is unavailable.
   }
+  if (!body.isConnected || state.previewDocId !== doc.document_id || state.previewPage !== page) return;
+  state.pageData = loadedPage;
   if (state.previewMode === 'pdf' && doc.pdf_url) {
     const search = selectedQuoteForSearch();
     const src = `${doc.pdf_url}#page=${state.previewPage}${search ? '&search=' + encodeURIComponent(search) : ''}`;
@@ -1213,6 +1234,8 @@ async function renderEvidence(seq) {
     if (seq !== state.renderSeq) return;
     state.documents = docsRes.documents || [];
     state.evidenceAll = evRes.evidence || [];
+    state.evidenceIdentityRequired = evRes.gateway_identity_required;
+    state.evidenceUser = evRes.gateway_user;
     const withEvidence = state.documents.find((d) => Number(d.evidence_count || 0) > 0);
     if (!state.previewDocId || !state.documents.some((d) => d.document_id === state.previewDocId)) {
       state.previewDocId = (withEvidence || state.documents[0] || {}).document_id || null;
@@ -1817,6 +1840,25 @@ function handleInput(input, el) {
 const renderEvidenceCardsDebounced = debounce(() => renderEvidenceCards(), 160);
 
 async function handleSubmit(form, formEl) {
+  if (form === 'review-evidence') {
+    const id = formEl.dataset.id;
+    const seq = state.renderSeq;
+    const fields = Object.fromEntries(new FormData(formEl));
+    fields.actor = fields.actor.trim();
+    if (!fields.actor) { toast('请填写复核人。', 'warn'); return; }
+    const submit = formEl.querySelector('button[type=submit]');
+    submit.disabled = true;
+    try {
+      const res = await api('/api/evidence/' + encodeURIComponent(id), jsonOptions('PATCH', fields));
+      if (seq !== state.renderSeq) return;
+      state.evidenceAll = state.evidenceAll.map(ev => ev.evidence_id === id ? res.evidence : ev);
+      renderEvidenceCards();
+      if (state.selectedEvidenceId === id) $('#quote-panel').innerHTML = quotePanelHtml();
+      toast('证据复核已保存。', 'ok');
+    } catch (error) { toast(error.message, 'error'); }
+    finally { submit.disabled = false; }
+    return;
+  }
   if (form !== 'create-project') return;
   try {
     const data = new FormData(formEl);
