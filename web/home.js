@@ -43,16 +43,16 @@ const homeUpdates={
   ja:{title:'公開情報（情報源の日付順）',open:'更新一覧・レポートのダウンロード・購読',empty:'この名称に該当する更新はありません。',error:'現在、更新情報を読み込めません。'}
 };
 
-async function showHomeUpdates(panel,asset,lang) {
+async function showHomeUpdates(panel,filters,lang) {
   const copy=homeUpdates[lang];
-  const query=new URLSearchParams({asset});
+  const query=new URLSearchParams(filters);
   const archiveLink=`<a href="#/public-events?${esc(query.toString())}">${copy.open}</a>`;
   try {
     query.set('limit','3');
     const result=await api('/api/public-events?'+query);
     if (!panel.isConnected) return;
     const items=result.items.map(r=>{
-      const href='#/public-events?'+new URLSearchParams({event:r.id});
+      const href='#/public-events?'+new URLSearchParams({event:r.id,...(filters.as_of ? {as_of:filters.as_of} : {})});
       return `<li><a href="${esc(href)}">${esc(r.field)}</a> · ${esc(r.source)} · ${esc([r.date_label,r.source_date].filter(Boolean).join(' '))}</li>`;
     });
     panel.innerHTML=`<h3>${copy.title} (${result.total})</h3>`+
@@ -96,11 +96,14 @@ async function renderHome() {
   const lang=Object.hasOwn(homeTasks,requested)?requested:'zh';
   const copy=homeTasks[lang], evidence=homeEvidence[lang];
   const asset=hashParams().get('asset')?.trim().slice(0,400) || evidence.example;
+  const cutoff=hashParams().get('as_of');
+  const filters=cutoff ? {asset,as_of:cutoff} : {asset};
   setView(`<section class="research-home task-home" lang="${lang}">
     <header><h1>${copy.title}</h1><nav aria-label="Language">${[['zh','中文'],['en','English'],['ja','日本語']].map(([code,name])=>
-      `<a href="#/home?${esc(new URLSearchParams({lang:code,asset}).toString())}" lang="${code}" ${lang===code?'aria-current="page"':''}>${name}</a>`).join(' · ')}</nav></header>
+      `<a href="#/home?${esc(new URLSearchParams({lang:code,...filters}).toString())}" lang="${code}" ${lang===code?'aria-current="page"':''}>${name}</a>`).join(' · ')}</nav></header>
     <section class="card home-evidence"><h2>${evidence.heading}</h2>
-    <form id="home-asset-search"><label>${evidence.label}<input name="asset" type="search" required maxlength="400" value="${esc(asset)}"></label><button class="btn primary">${evidence.search}</button></form>
+    <form id="home-asset-search"><label>${evidence.label}<input name="asset" type="search" required maxlength="400" value="${esc(asset)}"></label>
+    <label>${evidence.cutoff}<input name="as_of" type="date" value="${esc(cutoff || '')}"></label><button class="btn primary">${evidence.search}</button></form>
     <div id="home-evidence-results" aria-live="polite"></div><div id="home-asset-updates" aria-live="polite"></div></section>
     <div class="task-groups">${copy.groups.map(([role,first,second],i)=>`<section class="card"><h2>${role}</h2>
       <a href="#/${homeRoutes[i][0]}">${first}</a><a href="#/${homeRoutes[i][1]}">${second}</a></section>`).join('')}</div>
@@ -111,14 +114,16 @@ async function renderHome() {
     const query=form.elements.asset.value.trim();
     if (!query) {form.elements.asset.focus();return;}
     trackHomeEvidence('search_submitted');
-    const hash='#/home?'+new URLSearchParams({lang,asset:query});
+    const params=new URLSearchParams({lang,asset:query});
+    if (form.elements.as_of.value) params.set('as_of',form.elements.as_of.value);
+    const hash='#/home?'+params;
     if (location.hash===hash) renderHome(); else location.hash=hash;
   };
   const researchLink=`<a href="#/research?${esc(new URLSearchParams({query:asset}).toString())}">${evidence.research}</a>`;
-  showHomeUpdates($('#home-asset-updates'),asset,lang);
+  showHomeUpdates($('#home-asset-updates'),filters,lang);
   output.textContent=evidence.loading;
   try {
-    const result=await api('/api/public-events/asset-evidence?'+new URLSearchParams({asset}));
+    const result=await api('/api/public-events/asset-evidence?'+new URLSearchParams(filters));
     if (!output.isConnected) return;
     if (!result.trials.length && !result.outcomes.length && !result.guidance.length) {
       output.innerHTML=`<p>${esc(asset)} · ${evidence.empty}</p>${researchLink}`;return;
