@@ -137,8 +137,11 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
 @router.get("/api/public-events/collection")
 def latest_collection():
     with closing(connect()) as db:
+        db.execute("BEGIN")
         row = db.execute("SELECT payload FROM collection_receipt WHERE id=1").fetchone()
-    return {"receipt": json.loads(row[0]) if row else None}
+        check = db.execute("SELECT payload FROM verification WHERE id=1").fetchone()
+    return {"receipt": json.loads(row[0]) if row else None,
+            "verification": json.loads(check[0]) if check else None}
 
 
 def source_counts(db, table, sql, args):

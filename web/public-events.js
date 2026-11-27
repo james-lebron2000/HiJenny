@@ -140,11 +140,27 @@ function renderPublicEvents() {
   const form = $('#public-event-filters'), status = $('#public-event-status');
   const list = $('#public-event-list'), more = $('#public-event-more');
   const collection=$('#public-collection');
-  api('/api/public-events/collection').then(({receipt})=>{
+  api('/api/public-events/collection').then(({receipt,verification})=>{
     if (!collection.isConnected) return;
     const body=collection.querySelector('div');
     const coverage=$('#public-coverage div');
-    if (!receipt) {body.textContent=coverage.textContent='服务器尚未同步采集回执。';return;}
+    const syncStatus=document.createElement('p');
+    syncStatus.id='public-verification';
+    if (verification?.status==='ok') {
+      const same=receipt && verification.collection_finished_utc===receipt.finished_utc &&
+        (verification.collection_run || '')===(receipt.run_id || '');
+      syncStatus.textContent=(same?'本批次生产 API 对账通过':'上批次生产 API 对账通过，当前回执待核')+
+        ' · '+fmtDate(verification.finished_utc)+' · '+verification.events_verified+' 条归档 · '+verification.sources_verified+' 个来源';
+    } else if (verification?.status==='failed') {
+      syncStatus.textContent='最近一次服务器同步或对账失败 · '+fmtDate(verification.finished_utc)+' · '+verification.error_type;
+    } else if (verification?.status==='running') {
+      syncStatus.textContent='服务器已开始同步对账 · '+fmtDate(verification.started_utc)+' · 等待完成回执';
+    } else {
+      syncStatus.textContent='服务器尚无生产 API 对账记录。';
+    }
+    if (!receipt) {
+      body.textContent=coverage.textContent='服务器尚未同步采集回执。';body.prepend(syncStatus);return;
+    }
     coverage.replaceChildren(publicCoverage(receipt));
     const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
     collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
@@ -153,6 +169,7 @@ function renderPublicEvents() {
       registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],checks.map(r=>[
         names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':'待更新 · '+r.error,
         r.last_success_utc?fmtDate(r.last_success_utc):r.status==='ok'?fmtDate(receipt.finished_utc):'未记录',r.records ?? '待核',r.new_events ?? '待核']));
+    body.prepend(syncStatus);
     if (/^[0-9]+$/.test(receipt.run_id)) {
       const link=document.createElement('a');
       link.href='https://github.com/james-lebron2000/HiJenny/actions/runs/'+receipt.run_id;

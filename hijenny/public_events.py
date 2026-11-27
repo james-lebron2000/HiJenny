@@ -24,6 +24,7 @@ def connect():
     db.execute("CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, asset TEXT, region TEXT, date TEXT, payload TEXT)")
     db.execute("CREATE TABLE IF NOT EXISTS files (name TEXT PRIMARY KEY, sha TEXT)")
     db.execute("CREATE TABLE IF NOT EXISTS collection_receipt (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)")
+    db.execute("CREATE TABLE IF NOT EXISTS verification (id INTEGER PRIMARY KEY CHECK(id=1), attempt TEXT, payload TEXT NOT NULL)")
     return db
 
 

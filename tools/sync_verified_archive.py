@@ -5,6 +5,8 @@ import re
 import tempfile
 from contextlib import closing
 from pathlib import Path
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import httpx
 
@@ -13,6 +15,24 @@ from tools.verify_public_archive import verify
 
 
 def sync_verified(socket_path):
+    attempt = uuid4().hex
+    status = {"status": "running", "started_utc": datetime.now(timezone.utc).isoformat()}
+    with closing(connect()) as db, db:
+        db.execute("INSERT OR REPLACE INTO verification VALUES (1,?,?)", (attempt, json.dumps(status)))
+    try:
+        result = reconcile(socket_path)
+        status.update(result, status="ok")
+        return result
+    except Exception as error:
+        status.update(status="failed", error_type=type(error).__name__)
+        raise
+    finally:
+        status["finished_utc"] = datetime.now(timezone.utc).isoformat()
+        with closing(connect()) as db, db:
+            db.execute("UPDATE verification SET payload=? WHERE id=1 AND attempt=?", (json.dumps(status), attempt))
+
+
+def reconcile(socket_path):
     listing = json.loads(get(REPO + "/contents/data/public/events?ref=main"))
     files = {f["name"]: f["sha"] for f in listing if f["name"] == "collection.json"
              or re.fullmatch(r"[0-9]{4}-[0-9]{2}\.jsonl", f["name"])}
