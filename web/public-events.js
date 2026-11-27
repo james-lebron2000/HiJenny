@@ -102,6 +102,48 @@ function bindSavedPublicFilters(onApply) {
   };
 }
 
+function bindArchivedComparison(panel) {
+  const form=panel.querySelector('form'), output=panel.querySelector('[data-comparison]');
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei'}).format(new Date());
+  form.elements.cutoff.value=hashParams().get('as_of') || today;
+  form.elements.cutoff.max=today;
+  let generation=0;
+  form.oninput=()=>{generation++; output.replaceChildren();};
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    const request=++generation, cutoff=form.elements.cutoff.value;
+    const ids=[form.elements.first.value,form.elements.second.value].map(id=>id.toUpperCase());
+    if (ids[0]===ids[1]) {output.textContent='请选择两个不同的试验。';return;}
+    const queries=ids.map(id=>new URLSearchParams({source:'ClinicalTrials.gov',source_record:id,as_of:cutoff}));
+    output.textContent='正在读取两项试验的归档…';
+    try {
+      const results=await Promise.all(queries.map(q=>api('/api/public-events?limit=100&'+q)));
+      if (request!==generation || !panel.isConnected) return;
+      const measures=results.map(result=>result.items.find(r=>r.category==='primary-outcomes')?.value.primary_outcomes || []);
+      output.innerHTML='<p>归档截至 '+esc(cutoff)+'（台北）。逐项核对原报口径后，再判断结果能否比较。</p>'+
+        ids.map((id,i)=>`<p><a href="#/public-events?${esc(queries[i].toString())}">${esc(id)} · ${esc(results[i].items[0]?.asset || '无归档')} · 查看当时记录</a></p>`+
+          (measures[i].length?`<label>${esc(id)} 的主要终点<select data-side="${i}">${measures[i].map((m,n)=>`<option value="${n}">${esc(m.title)}</option>`).join('')}</select></label>`:
+          '<p>截至所选日期，尚无该试验的主要终点结果归档。</p>')).join('')+'<div data-dimensions></div>';
+      function draw() {
+        const selected=measures.map((all,i)=>all[Number(output.querySelector(`[data-side="${i}"]`)?.value || 0)]);
+        const dimensions=[['终点名称',m=>m.title],['分析人群',m=>m.populationDescription],
+          ['报告组',m=>(m.groups || []).map(g=>g.title).join(' / ')],['评价时间',m=>m.timeFrame],
+          ['统计量',m=>m.paramType],['计量单位',m=>m.unitOfMeasure],
+          ['分析分母',m=>measureRows(m).denoms.map(row=>row.join(' · ')).join(' / ')]];
+        const rows=dimensions.map(([label,read])=>{
+          const values=selected.map(m=>m?read(m):null);
+          return [label,...values,values.some(v=>!v)?'资料不足':values[0]===values[1]?'原报文字相同':'原报文字不同'];
+        });
+        output.querySelector('[data-dimensions]').innerHTML=registryTable(['核对项',...ids,'口径核对'],rows)+
+          selected.map((m,i)=>m?`<details><summary>${esc(ids[i])} · 查看各组原报结果与统计分析</summary>
+            ${registryTable(outcomeHeaders,measureRows(m).rows)}
+            ${m.analyses===undefined?'<p>此版归档尚未采集统计分析。</p>':registryTable(analysisHeaders,analysisRows(m))}</details>`:'').join('');
+      }
+      output.querySelectorAll('select').forEach(select=>{select.onchange=draw;}); draw();
+    } catch (err) {if (request===generation) output.textContent='归档读取失败，可重新提交。'+err.message;}
+  };
+}
+
 function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报、中国 NMPA 公告、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、日本 jRCT 登记、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
@@ -110,6 +152,12 @@ function renderPublicEvents() {
     <details class="card" id="public-coverage"><summary>四地区数据覆盖与缺口</summary>
     <p>按来源机构所在地区列出本轮核对的目标。跨国试验和文献可涉及多个地区。成功数按关注目标计算；最近成功时间取该格内最近一次成功核对。</p>
     <div style="overflow-x:auto" aria-live="polite">正在读取覆盖范围…</div></details>
+    <details class="card" id="archived-comparison"><summary>比较两项试验的已归档主要终点</summary>
+    <form><datalist id="archive-trial-ids"></datalist>
+    <label>第一项试验<input name="first" required list="archive-trial-ids" pattern="[Nn][Cc][Tt][0-9]{8}" placeholder="NCT 编号"></label>
+    <label>第二项试验<input name="second" required list="archive-trial-ids" pattern="[Nn][Cc][Tt][0-9]{8}" placeholder="NCT 编号"></label>
+    <label>归档截止日期（台北）<input name="cutoff" type="date" required></label>
+    <button class="btn">对照归档终点</button></form><div aria-live="polite" data-comparison></div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="依达方、奥希替尼或 Summit"></label>
     <label>国家药监局公告编号<input name="notice_id" inputmode="numeric" pattern="[0-9]+" placeholder="1073516"></label>
@@ -139,6 +187,7 @@ function renderPublicEvents() {
     <button type="button" class="btn" id="public-event-more" hidden>加载更多</button></section>`);
   const form = $('#public-event-filters'), status = $('#public-event-status');
   const list = $('#public-event-list'), more = $('#public-event-more');
+  bindArchivedComparison($('#archived-comparison'));
   const collection=$('#public-collection');
   api('/api/public-events/collection').then(({receipt,verification})=>{
     if (!collection.isConnected) return;
@@ -163,6 +212,9 @@ function renderPublicEvents() {
     }
     coverage.replaceChildren(publicCoverage(receipt));
     const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
+    for (const check of checks.filter(r=>r.source==='trials')) {
+      $('#archive-trial-ids').append(new Option(check.subject || check.target,check.target));
+    }
     collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
     const names={nmpa_index:'NMPA 药品栏目目录',nmpa:'国家药监局 NMPA',orange_book_uses:'FDA 专利用途代码释义',orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
     body.innerHTML='<p>公开关注名单全量核对 · 新增 '+esc(receipt.new_events)+' 条归档事件</p>'+
