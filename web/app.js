@@ -55,6 +55,7 @@ const state = {
   pageData: null,
   pendingFocusEvidence: null,
   showCreateForm: false,
+  projectPermissions: {},
   reportMd: null,
   reportUrl: null,
   apiOnline: false,
@@ -279,7 +280,7 @@ function updateTopbar() {
     statusEl.innerHTML = project ? projectStatusChip(project.status) : '';
   }
   const analyzeBtn = $('#btn-analyze-topbar');
-  if (analyzeBtn) analyzeBtn.disabled = !state.projectId || Boolean(state.run && state.run.status === 'running');
+  if (analyzeBtn) analyzeBtn.disabled = state.projectPermissions.edit === false || !state.projectId || Boolean(state.run && state.run.status === 'running');
 }
 
 function updateSidebarBadges() {
@@ -374,6 +375,7 @@ async function renderProjects(seq) {
   try {
     const data = await api('/api/projects');
     if (seq !== state.renderSeq) return;
+    state.projectPermissions = data.permissions || {};
     state.projects = data.projects || [];
     if (!state.projects.some((p) => p.project_id === state.projectId)) {
       selectProject(state.projects.length ? state.projects[0].project_id : null);
@@ -391,6 +393,10 @@ async function renderProjects(seq) {
       return acc;
     }, { docs: 0, pages: 0, evidence: 0, findings: 0, questions: 0 });
 
+    const canCreate = state.projectPermissions.create !== false;
+    const accessHint = state.projectPermissions.edit === false ? '当前为只读访问，可打开获授权项目查看资料。' :
+      !canCreate ? '可编辑下列已授权项目。新建项目需要组织级编辑权限。' : '';
+    if (!canCreate) state.showCreateForm = false;
     const createForm = state.showCreateForm ? `
       <div class="card">
         <div class="card-head"><h2>New due-diligence project</h2><span class="sub">One project per asset / package</span></div>
@@ -435,7 +441,7 @@ async function renderProjects(seq) {
         <div><h1>Projects</h1><div class="sub">Each project holds one due-diligence package, its evidence chain and review state.</div></div>
         <div class="actions">
           <button class="btn" data-action="refresh-view">Refresh</button>
-          <button class="btn primary" data-action="toggle-create-project">+ New project</button>
+          ${canCreate ? '<button class="btn primary" data-action="toggle-create-project">+ New project</button>' : ''}
         </div>
       </div>
       ${statStrip([
@@ -446,6 +452,7 @@ async function renderProjects(seq) {
         { k: 'Findings', v: agg.findings },
         { k: 'Seller questions', v: agg.questions },
       ])}
+      ${accessHint ? `<p>${accessHint}</p>` : ''}
       ${createForm}
       <div class="card">
         <div class="card-head"><h2>All projects</h2><span class="sub">${state.projects.length} project(s)</span></div>
@@ -457,8 +464,8 @@ async function renderProjects(seq) {
             <th>Report</th><th>Updated</th><th></th>
           </tr></thead>
           <tbody>${rows}</tbody>
-        </table></div>` : emptyPanel('No projects yet', 'Create a project, upload the due-diligence package, then run the analysis pipeline.',
-          '<button class="btn primary" data-action="toggle-create-project">+ Create the first project</button>')}
+        </table></div>` : emptyPanel(canCreate ? 'No projects yet' : '当前没有可访问的项目', canCreate ? 'Create a project, upload the due-diligence package, then run the analysis pipeline.' : '请联系项目负责人核对成员名单。',
+          canCreate ? '<button class="btn primary" data-action="toggle-create-project">+ Create the first project</button>' : '')}
       </div>`);
   } catch (error) {
     if (seq === state.renderSeq) setView(errorPanel(error));
@@ -921,8 +928,8 @@ async function renderUpload(seq) {
         </div>
         <div class="actions">
           <button class="btn" data-action="refresh-view">Refresh</button>
-          <button class="btn" data-action="run-analysis" data-force="1">Force re-run</button>
-          <button class="btn primary" data-action="run-analysis">▶ Run analysis</button>
+          <button class="btn" ${state.projectPermissions.edit === false ? 'disabled' : ''} data-action="run-analysis" data-force="1">Force re-run</button>
+          <button class="btn primary" ${state.projectPermissions.edit === false ? 'disabled' : ''} data-action="run-analysis">▶ Run analysis</button>
         </div>
       </div>
       ${ingestionMissing ? `<div class="notice warn"><span>⚠️</span><div>The parsing module (<code>hijenny.ingestion</code>) is not installed yet. Uploads are registered and saved; pages/evidence appear once the parser is available and analysis is run.</div></div>` : ''}
@@ -1375,7 +1382,7 @@ function findingsViewHtml() {
       <div class="actions">
         <button class="btn" data-action="refresh-view">Refresh</button>
         <button class="btn" data-action="toggle-events">${state.showEvents ? 'Hide' : 'Review'} events</button>
-        <button class="btn" data-action="run-analysis" data-force="1">Re-run analysis</button>
+        <button class="btn" ${state.projectPermissions.edit === false ? 'disabled' : ''} data-action="run-analysis" data-force="1">Re-run analysis</button>
         <button class="btn" data-action="export-xlsx">内部尽调工作簿</button>
         <button class="btn" data-action="seller-reply">导出已批准的卖方问题单</button>
         <button class="btn primary" data-action="generate-report">Generate report</button>
@@ -1822,6 +1829,7 @@ async function handleSubmit(form, formEl) {
     state.project = res.project;
     state.showCreateForm = false;
     const list = await api('/api/projects');
+    state.projectPermissions = list.permissions || {};
     state.projects = list.projects || [];
     toast('Project created', 'ok');
     nav('upload');
@@ -1863,6 +1871,7 @@ async function uploadFiles(files) {
 }
 
 async function runAnalysis(force) {
+  if (state.projectPermissions.edit === false) { toast('发起分析需要项目编辑权限。', 'warn'); return; }
   if (!state.projectId) { toast('Select a project first', 'warn'); return; }
   const projectId = state.projectId;
   try {
@@ -2033,6 +2042,7 @@ async function init() {
   await loadHealth();
   try {
     const data = await api('/api/projects');
+    state.projectPermissions = data.permissions || {};
     state.projects = data.projects || [];
     const stored = localStorage.getItem('hijenny.project');
     const requested = hashParams().get('project');

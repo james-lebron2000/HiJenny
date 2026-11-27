@@ -318,6 +318,10 @@ def test_asset_project_grants_apply_within_one_organization(client, monkeypatch)
     headers = {**gateway, "X-Project-Ids": a}
     assert client.get("/api/projects", headers=gateway).status_code == 403
     assert [p["project_id"] for p in client.get("/api/projects", headers=headers).json()["projects"]] == [a]
+    assert client.get("/api/projects", headers=headers).json()["permissions"] == {"edit": True, "create": False}
+    for role, can_edit in [("editor", True), ("reader", False)]:
+        access = client.get("/api/projects", headers={**gateway, "X-Project-Ids": "*", "X-Project-Role": role})
+        assert access.json()["permissions"] == {"edit": can_edit, "create": can_edit}
     for pid, question, url in resources:
         expected = 200 if pid == a else 404
         for path in (f"/api/projects/{pid}", f"/api/questions/{question}", url):

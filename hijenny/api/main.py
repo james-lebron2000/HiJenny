@@ -634,7 +634,9 @@ def create_app() -> FastAPI:
                         "outputs": _outputs_info(project["project_id"]),
                     }
                 )
-        return {"projects": enriched, "count": len(enriched)}
+        can_edit = not config.REQUIRE_PROJECT_ROLE or request.headers.get("X-Project-Role") == "editor"
+        return {"projects": enriched, "count": len(enriched),
+                "permissions": {"edit": can_edit, "create": can_edit and grants is None}}
 
     @project_api.get("/api/projects/{project_id}")
     def get_project(
