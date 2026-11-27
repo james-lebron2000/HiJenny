@@ -1,6 +1,7 @@
 function publicCoverage(receipt) {
   // Region refers to the source institution, independent of study sites and patient location.
   const sources = {
+    nmpa_index: ['中国','监管','NMPA'],
     nmpa: ['中国','监管','NMPA'],
     trials: ['美国','临床试验','ClinicalTrials.gov'],
     publications: ['美国','文献','PubMed'],
@@ -56,6 +57,7 @@ function renderPublicEvents() {
     <div style="overflow-x:auto" aria-live="polite">正在读取覆盖范围…</div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
+    <label>国家药监局栏目标题关键词<input name="notice_title" placeholder="例如 Good Clinical Practice"></label>
     <label>FDA 申请号<input name="application" placeholder="NDA208065" title="NDA、ANDA 或 BLA 加六位数字"></label>
     <label>试验登记号<input name="trial" placeholder="NCT 或 jRCT 编号" pattern="[Nn][Cc][Tt][0-9]{8}|[Jj][Rr][Cc][Tt][0-9]{10}" title="NCT 加八位数字或 jRCT 加十位数字"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
@@ -83,7 +85,7 @@ function renderPublicEvents() {
     coverage.replaceChildren(publicCoverage(receipt));
     const checks=receipt.checks, ok=checks.filter(r=>r.status==='ok').length;
     collection.querySelector('summary').textContent='最近一次公开采集 · '+fmtDate(receipt.finished_utc)+' · 成功 '+ok+' / '+checks.length;
-    const names={nmpa:'国家药监局 NMPA',orange_book_uses:'FDA 专利用途代码释义',orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
+    const names={nmpa_index:'NMPA 药品栏目目录',nmpa:'国家药监局 NMPA',orange_book_uses:'FDA 专利用途代码释义',orange_book:'FDA Orange Book',jrct:'jRCT',ema:'EMA',sec:'SEC',fda:'Drugs@FDA',trials:'ClinicalTrials.gov',publications:'PubMed'};
     body.innerHTML='<p>公开关注名单全量核对 · 新增 '+esc(receipt.new_events)+' 条归档事件</p>'+
       registryTable(['来源','资产或公司','目标编号','核对结果','最近成功核对','来源记录数','新增事件'],checks.map(r=>[
         names[r.source] || r.source,r.subject || '旧回执未记录',r.target,r.status==='ok'?'成功':'待更新 · '+r.error,
