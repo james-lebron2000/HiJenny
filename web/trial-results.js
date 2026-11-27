@@ -3,6 +3,10 @@
 function registryValue(value) {
   return value === null || value === undefined || value === '' ? '未提供' : String(value);
 }
+function registryTableText(headers,values) {
+  return [headers,...values].map(row=>row.map(registryValue).join(' | ')).join('\n');
+}
+
 function registryTable(headers, rows) {
   if (!rows.length) return '<p>登记未提供此表的数据行。</p>';
   return `<div class="comparison-scroll" tabindex="0"><table><thead><tr>${headers.map(h=>'<th scope="col">'+esc(h)+'</th>').join('')}</tr></thead>
@@ -118,12 +122,11 @@ function showPostedResults(panel, snapshot) {
     add.disabled=true;
     try {
       const m=active(), {rows,denoms}=measureRows(m);
-      const toText=(headers,values)=>[headers,...values].map(row=>row.map(registryValue).join(' | ')).join('\n');
       const item={id:snapshot.id,postedResult:true,title:snapshot.title,date:snapshot.updated || '',detail:'登记结果 · '+m.title,
         url:source,passages:[{label:m.title,text:details(m).map(([k,v])=>k+'：'+registryValue(v)).join('\n')},
-          {label:'登记分析分母',text:toText(denomHeaders,denoms)},
-          {label:'登记测量值',text:toText(outcomeHeaders,rows)}]};
-      if (m.analyses?.length) item.passages.push({label:'登记统计分析',text:toText(analysisHeaders,analysisRows(m))});
+          {label:'登记分析分母',text:registryTableText(denomHeaders,denoms)},
+          {label:'登记测量值',text:registryTableText(outcomeHeaders,rows)}]};
+      if (m.analyses?.length) item.passages.push({label:'登记统计分析',text:registryTableText(analysisHeaders,analysisRows(m))});
       const run={id:crypto.randomUUID(),created:new Date().toISOString(),question:m.title,review:{},note:'',
         steps:[{source:'trials',query:snapshot.id,attempts:1,retrieved:snapshot.retrieved,
           result:{total:1,items:[item]}}]};

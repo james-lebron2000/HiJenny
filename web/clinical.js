@@ -88,7 +88,7 @@ function renderClinical() {
       <button type="button" id="design-new" class="btn">新建空白设计</button>
       <details><summary>关联登记试验（${refs.length}）</summary>
       ${refs.map(r=>`<article><a href="${esc(sourceLink(r))}" target="_blank" rel="noopener noreferrer">${esc(r.id)} · ${esc(r.title)}</a>
-        <p>登记更新 ${esc(r.date)}</p><pre class="source-snapshot">${esc(r.snapshot)}</pre></article>`).join('') ||
+        <p>登记更新 ${esc(r.date)}${r.archive_cutoff?' · <a href="#/public-events?'+esc(new URLSearchParams({source:'ClinicalTrials.gov',source_record:r.id,as_of:r.archive_cutoff}).toString())+'">回查 '+esc(r.archive_cutoff)+' 的归档</a>':''}</p><pre class="source-snapshot">${esc(r.snapshot)}</pre></article>`).join('') ||
       '<p>在医药检索中选择试验并打开设计对照，可使用选区创建新草稿。</p>'}</details>
       <form id="design-form"><label>研究问题 <input id="design-question" maxlength="400" required value="${esc(version.question)}"></label>
       <div class="design-options">${version.options.map((opt,i)=>`<fieldset class="card"><legend>候选设计 ${i?'B':'A'}</legend>

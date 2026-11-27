@@ -143,6 +143,34 @@ function bindArchivedComparison(panel) {
           selected.map((m,i)=>m?`<details><summary>${esc(ids[i])} · 查看各组原报结果与统计分析</summary>
             ${registryTable(outcomeHeaders,measureRows(m).rows)}
             ${m.analyses===undefined?'<p>此版归档尚未采集统计分析。</p>':registryTable(analysisHeaders,analysisRows(m))}</details>`:'').join('');
+        const canDraft=results.every(result=>result.items.length);
+        const target=output.querySelector('[data-dimensions]');
+        if (canDraft) {
+          const draft=document.createElement('button');
+          draft.type='button'; draft.className='btn primary'; draft.textContent='用这两项历史快照起草研究设计';
+          draft.onclick=()=>{
+            clinicalSeed=results.map((result,i)=>{
+              const records=result.items, lines=['HiJenny 归档截止日（台北） '+cutoff];
+              const cite=r=>'来源更新 '+r.source_date+' · 首次观察 '+r.observed+' · 归档编号 '+r.id;
+              for (const field of fields) {
+                const r=records.find(entry=>entry.field===field);
+                lines.push(field+' · '+(r?registryValue(r.value)+'（'+cite(r)+'）':'截至当日未收录'));
+              }
+              const m=selected[i];
+              if (m) {
+                lines.push('所选公布终点 · '+m.title, cite(records.find(r=>r.category==='primary-outcomes')));
+                for (const row of rows.slice(1)) lines.push(row[0]+' · '+registryValue(row[i+1]));
+                lines.push(registryTableText(outcomeHeaders,measureRows(m).rows));
+                lines.push(m.analyses?.length?registryTableText(analysisHeaders,analysisRows(m)):
+                  m.analyses===undefined?'此版归档尚未采集统计分析。':'本终点未列登记统计分析。');
+              } else lines.push('截至当日未收录已公布主要终点结果。');
+              const latest=records.map(r=>r.source_date).filter(Boolean).sort().pop();
+              return {id:ids[i],title:records[0].asset || ids[i],date:latest || '',archive_cutoff:cutoff,snapshot:lines.join('\n')};
+            });
+            nav('clinical');
+          };
+          target.append(draft);
+        }
       }
       output.querySelectorAll('select').forEach(select=>{select.onchange=draw;}); draw();
     } catch (err) {if (request===generation) output.textContent='归档读取失败，可重新提交。'+err.message;}
