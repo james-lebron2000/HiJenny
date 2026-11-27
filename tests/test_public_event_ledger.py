@@ -520,3 +520,29 @@ def test_restore_complete_public_archive_offline_and_replay(tmp_path, monkeypatc
             result = verify("", read_json=read)
             assert count == result["events_verified"] > 0
             assert result["sources_verified"] > 0
+
+
+def test_atom_overflow_links_to_complete_filtered_report(tmp_path, monkeypatch):
+    from xml.etree import ElementTree
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from hijenny.api.public_events import router
+
+    monkeypatch.setattr(public_events, "DATA_DIR", tmp_path)
+    with closing(public_events.connect()) as db, db:
+        for i in range(102):
+            row = dict(id=str(i), record=str(i), asset="demo", subject="company", field="首付款",
+                       value="new" if i else "other", source="SEC", observed="2026-11-27T00:00:00Z",
+                       source_date="2026-11-26", kind="reviewed", url="https://www.sec.gov/")
+            db.execute("insert into events values (?,?,?,?,?)", (str(i), "demo", "", row["source_date"], json.dumps(row)))
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    feed = client.get("/api/public-events/feed.atom", params=dict(source="SEC", keyword="new", as_of="2026-11-27"))
+    root = ElementTree.fromstring(feed.content)
+    assert len(root.findall("{*}entry")) == 100
+    assert "当前匹配 101 条" in root.findtext("{*}subtitle")
+    link = root.find("{*}link[@rel='alternate']").get("href")
+    report = client.get(link)
+    assert report.text.count("HiJenny 单条归档") == 101
+    assert "event=0&" not in report.text and "as_of=2026-11-27" in report.text

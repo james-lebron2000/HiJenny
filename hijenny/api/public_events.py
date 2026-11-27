@@ -380,8 +380,9 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
     table, sql, args, _, labels, _ = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
-        rows = db.execute(f"SELECT payload FROM {table}" + sql +
-                          " ORDER BY julianday(json_extract(payload, '$.observed')) DESC, id LIMIT 100", args)
+        rows = db.execute(f"SELECT payload, count(*) OVER () FROM {table}" + sql +
+                          " ORDER BY julianday(json_extract(payload, '$.observed')) DESC, id LIMIT 100", args).fetchall()
+        total = rows[0][1] if rows else 0
         events = [json.loads(row[0]) for row in rows]
         receipt = db.execute("SELECT payload FROM collection_receipt WHERE id=1").fetchone()
     feed = ET.Element("feed", xmlns="http://www.w3.org/2005/Atom")
@@ -404,6 +405,10 @@ def event_feed(request: Request, filters=Depends(event_filters), rolling_week: b
         run_url = collection_links(latest).get("run")
         if run_url:
             ET.SubElement(feed, "link", rel="related", title="本批公开库采集记录", href=run_url)
+    if total > len(events):
+        coverage.append(f"当前匹配 {total} 条，订阅列出最近 {len(events)} 条。可下载完整筛选简报。")
+        report_url = request.url.replace(path=request.url.path.removesuffix("feed.atom") + "report.txt")
+        ET.SubElement(feed, "link", rel="alternate", type="text/plain", title="下载完整筛选简报", href=str(report_url))
     ET.SubElement(feed, "subtitle").text = "\n".join(coverage)
     ET.SubElement(feed, "updated").text = max(timestamps, key=datetime.fromisoformat) if timestamps else "1970-01-01T00:00:00Z"
     snapshot_suffix = "&as_of=" + as_of.isoformat() if as_of else ""
