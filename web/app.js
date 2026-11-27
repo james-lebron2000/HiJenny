@@ -889,7 +889,10 @@ async function renderUpload(seq) {
         <label>扫描原页页码 <input type="number" min="1" max="${Number(doc.page_count)}" value="${scans[0][0]}"></label>
         <label>识别语言 <select><option value="eng">英文</option><option value="chi_sim+eng">简体中文及英文</option><option value="chi_tra+eng">繁體中文及英文</option><option value="jpn+eng">日文及英文</option></select></label>
         <button type="button" class="btn sm" data-action="page-ocr">读取本页文字</button>
-        <div role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></div></div>` : '';
+        <div role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></div></div>
+        <div><label>打开同事的核对记录（JSON）<input type="file" data-change="open-ocr-note"
+          data-document="${esc(doc.document_id)}" accept=".json,application/json"></label>
+        <div data-note-output role="status"></div></div>` : '';
       return `<tr>
         <td class="title-cell">${esc(doc.filename)}${pageNotes.length ? `<details><summary>需核对 PDF 原页</summary>${pageNotes.join('')}${ocr}</details>` : ''}</td>
         <td>${chip(doc.doc_type || 'OTHER', 'blue')}</td>
@@ -1696,8 +1699,49 @@ async function handleAction(action, el) {
   }
 }
 
+function checkOcrNote(note, doc, projectId) {
+  if (!note || note.project_id !== projectId || note.document_id !== doc.document_id ||
+      !/^[0-9a-f]{64}$/.test(doc.sha256) || note.registered_sha256 !== doc.sha256) {
+    throw new Error('记录的项目、文档编号或 PDF 登记哈希与当前资料不匹配。');
+  }
+  if (!Number.isInteger(note.page) || !doc.pdf_review_ranges?.scan?.some(([a,b])=>a<=note.page && note.page<=b)) {
+    throw new Error('记录页码不在该文件的扫描页范围内。');
+  }
+  const reviewed=note.outcome==='reviewed';
+  if ((!reviewed && note.outcome!=='illegible') ||
+      (reviewed ? typeof note.reviewed_text!=='string' || !note.reviewed_text.trim() : note.reviewed_text!==null) ||
+      typeof note.reviewer!=='string' || !note.reviewer.trim() || typeof note.ocr_draft!=='string' ||
+      !['eng','chi_sim+eng','chi_tra+eng','jpn+eng'].includes(note.language) ||
+      typeof note.reviewed_at!=='string' || !Number.isFinite(Date.parse(note.reviewed_at))) {
+    throw new Error('核对记录缺少有效的复核人、时间、语言、文字或结果。');
+  }
+}
+
+async function openOcrNote(input) {
+  const file=input.files[0];
+  if (!file) return;
+  const doc=state.documents.find(item=>item.document_id===input.dataset.document);
+  const output=input.closest('div').querySelector('[data-note-output]');
+  input.disabled=true;
+  output.textContent='正在核对记录…';
+  try {
+    const note=JSON.parse(await file.text());
+    if (!input.isConnected) return;
+    checkOcrNote(note,doc,state.projectId);
+    output.innerHTML=`<p>已匹配当前 PDF 登记哈希 · <a target="_blank" rel="noopener" href="${esc(doc.file_url)}#page=${note.page}">打开第 ${note.page} 页</a></p>
+      <p>${esc(note.reviewer)} · ${esc(note.reviewed_at)} · ${esc(note.language)} · ${note.outcome==='reviewed'?'记录为已逐字核对':'原页不清，需补原件'}</p>
+      <details open class="ocr-note-text"><summary>OCR 原稿</summary><pre>${esc(note.ocr_draft)}</pre></details>
+      ${note.outcome==='reviewed'?`<details open class="ocr-note-text"><summary>核对后文字</summary><pre>${esc(note.reviewed_text)}</pre></details>`:''}`;
+  } catch (error) {
+    output.textContent=error instanceof SyntaxError ? '无法读取 JSON，请选择导出的核对记录。' : error.message;
+  } finally {
+    input.value='';input.disabled=false;
+  }
+}
+
 async function handleChange(change, el) {
   try {
+    if (change === 'open-ocr-note') { await openOcrNote(el); return; }
     if (change === 'evidence-filter') {
       state.filters.evidence[el.dataset.field] = el.value;
       renderEvidenceCards();
