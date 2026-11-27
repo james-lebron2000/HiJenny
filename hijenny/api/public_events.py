@@ -3,8 +3,9 @@ import re
 from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from hijenny.asset_names import verified_asset
@@ -238,11 +239,21 @@ def display(value):
 
 
 @router.get("/api/public-events/report.txt", response_class=PlainTextResponse)
-def report(filters=Depends(event_filters)):
+def report(request: Request, filters=Depends(event_filters)):
     table, sql, args, order, labels, _ = filters
     lines = ["HiJenny 公开资产动态", "筛选范围（发现日期按台北时间）", *labels]
     with closing(connect()) as db:
         db.execute("BEGIN")
+        receipt_row = db.execute("SELECT payload FROM collection_receipt WHERE id=1").fetchone()
+        if receipt_row:
+            receipt = json.loads(receipt_row[0])
+            lines.append("导出时数据库所载最近一次采集回执 · " + receipt["finished_utc"])
+            run_id = str(receipt.get("run_id", ""))
+            if re.fullmatch(r"[0-9]+", run_id):
+                lines.append("采集记录 · https://github.com/james-lebron2000/HiJenny/actions/runs/" + run_id)
+        else:
+            lines.append("导出时数据库尚无采集回执")
+        archive_page = str(request.base_url) + "#/public-events?"
         counts = source_counts(db, table, sql, args)
         if counts:
             lines.extend(["", "当前筛选的来源分布（编号在各来源内去重）"])
@@ -269,6 +280,9 @@ def report(filters=Depends(event_filters)):
             if row.get("region"):
                 lines.append("地区 " + row["region"])
             lines.append(f'{row["source"]} · {row["record"]} · {row["url"]}')
+            lines.append("HiJenny 单条归档 · " + archive_page + urlencode({"event": row["id"]}))
+            if row["source"] == "FDA Orange Book":
+                lines.append("专利和独占期分别归档。这些日期不能单独确定仿制药上市时间。")
             if row["source"] == "jRCT":
                 lines.append("登记所列关联试验 · https://clinicaltrials.gov/study/" + row["trial"])
             for trial in row.get("label_trials", []):

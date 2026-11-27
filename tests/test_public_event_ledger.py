@@ -63,6 +63,9 @@ def test_review_digest_uses_taipei_discovery_day_and_exports_all_matches(tmp_pat
     assert result["total"] == 2 and result["items"][0]["id"] == "2"
     report = client.get("/api/public-events/report.txt", params=params)
     assert report.text.count(row["url"]) == 2 and "共 2 条" in report.text
+    assert "导出时数据库尚无采集回执" in report.text
+    links = [line.split(" · ")[1] for line in report.text.splitlines() if line.startswith("HiJenny 单条归档")]
+    assert links == ["http://testserver/#/public-events?event=2", "http://testserver/#/public-events?event=1"]
     assert "15:59:59Z" in report.text and "2026-11-26T15:59:59Z" not in report.text
     assert client.get("/api/public-events", params=dict(params, discovered_to="2026-11-26")).status_code == 422
 
