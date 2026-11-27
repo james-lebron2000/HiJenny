@@ -77,11 +77,18 @@ def active_cycle(events):
     return events
 
 
-def followup_stage(question, events):
+def terminal_stage(question):
     if question.get("review_status") == "rejected" or question.get("status") == "dismissed":
         return "rejected"
     if question.get("status") == "closed":
         return "closed"
+    return None
+
+
+def followup_stage(question, events):
+    terminal = terminal_stage(question)
+    if terminal:
+        return terminal
     events = active_cycle(events)
     last = next((e for e in reversed(events) if e["action"] != "comparison"), None)
     if not last:
@@ -101,7 +108,7 @@ def question_stages(questions, history):
 
 
 def allowed(events, question=None):
-    if question and (question["status"] in {"closed", "dismissed"} or question.get("review_status") == "rejected"):
+    if question and terminal_stage(question):
         return ["reopen"]
     events = active_cycle(events)
     last = next((e for e in reversed(events) if e["action"] != "comparison"), None)

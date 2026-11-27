@@ -1116,7 +1116,10 @@ def create_app() -> FastAPI:
         fields = payload.model_dump(exclude_none=True)
         actor = review_actor(request, fields.pop("actor", "reviewer"))
         with store.session_scope() as session:
-            _question_or_404(session, question_id)
+            session.execute(text("BEGIN IMMEDIATE"))
+            question = _question_or_404(session, question_id)
+            if diligence.terminal_stage(question) and not diligence.terminal_stage({**question, **fields}):
+                raise HTTPException(409, "请前往本问题的 BD 复核台账，填写原因后重新打开。")
             updated = store.update_question(session, question_id, actor=actor, **fields)
         return {"question": updated}
 

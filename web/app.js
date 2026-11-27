@@ -1386,7 +1386,9 @@ function questionsTableHtml() {
         ${(q.required_documents || []).length ? `<div class="muted" style="margin-top:3px">Required: ${esc((q.required_documents || []).join('; '))}</div>` : ''}
       </td>
       <td class="num">${(q.evidence_ids || []).length}</td>
-      <td><select ${projectEditAttribute()} data-change="patch-question" data-id="${esc(q.question_id)}" data-field="status">${selectOptions(QUESTION_STATUSES, q.status)}</select></td>
+      <td>${['closed','dismissed'].includes(q.status) || q.review_status === 'rejected'
+        ? `${statusChip(q.status)} <a href="#/followup?project=${esc(state.projectId)}&question=${esc(q.question_id)}">${state.projectPermissions.edit === false ? '查看台账' : '到台账重新打开'}</a>`
+        : `<select ${projectEditAttribute()} data-change="patch-question" data-id="${esc(q.question_id)}" data-field="status">${selectOptions(QUESTION_STATUSES, q.status)}</select>`}</td>
       <td>${statusChip(q.review_status)}</td>
       <td><button class="btn sm danger" ${projectEditAttribute()} data-action="delete-question" data-id="${esc(q.question_id)}">Delete</button></td>
     </tr>`).join('');
@@ -1886,6 +1888,7 @@ async function handleChange(change, el) {
       return;
     }
   } catch (error) {
+    if (change === 'patch-question' && error.status === 409 && state.view === 'findings') await renderView();
     toast(error.message || String(error), 'err');
   }
 }

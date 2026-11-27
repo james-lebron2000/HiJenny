@@ -1034,6 +1034,11 @@ def test_terminal_question_requires_explicit_reopen_with_reason(client):
         rev = 1 + 2 * i
         client.patch(question, json=state).raise_for_status()
         assert client.get(base).json()["allowed"][qid] == ["reopen"]
+        intent = {"status": "approved", "review_status": "approved", "question": "This stale update must be discarded"}
+        before = client.get(question).json()["question"]
+        assert client.patch(question, json=intent).status_code == 409
+        assert client.get(question).json()["question"] == before
+        assert client.patch(question, json={"priority": "high"}).is_success
         assert record("request", rev, "Old form").status_code == 409
         assert record("reopen", rev, " ").status_code == 422
         record("reopen", rev, "Additional source received").raise_for_status()
