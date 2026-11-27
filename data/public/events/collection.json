@@ -1,6 +1,6 @@
 {
-  "started_utc": "2026-11-27T01:47:50+00:00",
-  "finished_utc": "2026-11-27T01:48:22+00:00",
+  "started_utc": "2026-11-27T01:51:14+00:00",
+  "finished_utc": "2026-11-27T01:51:51+00:00",
   "watchlist_sha256": "3fa326ebf3c25863075ca06c089cb4520a784f35c124649480ad69d7157bfcaf",
   "checks": [
     {
@@ -11,7 +11,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:47:51+00:00"
+      "last_success_utc": "2026-11-27T01:51:15+00:00"
     },
     {
       "source": "nmpa",
@@ -21,7 +21,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:47:52+00:00"
+      "last_success_utc": "2026-11-27T01:51:16+00:00"
     },
     {
       "source": "nmpa_index",
@@ -31,7 +31,7 @@
       "status": "ok",
       "records": 216,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:12+00:00"
+      "last_success_utc": "2026-11-27T01:51:39+00:00"
     },
     {
       "source": "orange_book_uses",
@@ -41,7 +41,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:13+00:00"
+      "last_success_utc": "2026-11-27T01:51:40+00:00"
     },
     {
       "source": "orange_book",
@@ -51,7 +51,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:13+00:00"
+      "last_success_utc": "2026-11-27T01:51:40+00:00"
     },
     {
       "source": "jrct",
@@ -61,7 +61,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:14+00:00"
+      "last_success_utc": "2026-11-27T01:51:42+00:00"
     },
     {
       "source": "ema",
@@ -71,7 +71,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:16+00:00"
+      "last_success_utc": "2026-11-27T01:51:43+00:00"
     },
     {
       "source": "ema",
@@ -81,7 +81,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:16+00:00"
+      "last_success_utc": "2026-11-27T01:51:43+00:00"
     },
     {
       "source": "sec",
@@ -91,7 +91,7 @@
       "status": "ok",
       "records": 5,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:16+00:00"
+      "last_success_utc": "2026-11-27T01:51:43+00:00"
     },
     {
       "source": "fda",
@@ -101,7 +101,7 @@
       "status": "ok",
       "records": 3,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:16+00:00"
+      "last_success_utc": "2026-11-27T01:51:43+00:00"
     },
     {
       "source": "fda",
@@ -111,7 +111,7 @@
       "status": "ok",
       "records": 25,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:17+00:00"
+      "last_success_utc": "2026-11-27T01:51:44+00:00"
     },
     {
       "source": "trials",
@@ -120,8 +120,8 @@
       "target_sha256": "4e9d54f831906889e74eaa7053984448fb8f57996fed63e25638547be0ec28f3",
       "status": "ok",
       "records": 1,
-      "new_events": 2,
-      "last_success_utc": "2026-11-27T01:48:17+00:00"
+      "new_events": 4,
+      "last_success_utc": "2026-11-27T01:51:44+00:00"
     },
     {
       "source": "trials",
@@ -130,8 +130,8 @@
       "target_sha256": "c4908c3619d5a09e879a600d0b4fad84c0d4f2dfbf9a3cf4a0c7cbcd17e83a14",
       "status": "ok",
       "records": 1,
-      "new_events": 2,
-      "last_success_utc": "2026-11-27T01:48:17+00:00"
+      "new_events": 4,
+      "last_success_utc": "2026-11-27T01:51:44+00:00"
     },
     {
       "source": "trials",
@@ -140,8 +140,8 @@
       "target_sha256": "a413f04744e66416bcf2c265b2de9804e284a32b9cd5933fd1c52d40abd963b8",
       "status": "ok",
       "records": 1,
-      "new_events": 2,
-      "last_success_utc": "2026-11-27T01:48:17+00:00"
+      "new_events": 4,
+      "last_success_utc": "2026-11-27T01:51:44+00:00"
     },
     {
       "source": "trials",
@@ -150,8 +150,8 @@
       "target_sha256": "139e54106fb2b96403073c4f9781e97f2903e42da5d1620d235449048fab7a38",
       "status": "ok",
       "records": 1,
-      "new_events": 2,
-      "last_success_utc": "2026-11-27T01:48:17+00:00"
+      "new_events": 4,
+      "last_success_utc": "2026-11-27T01:51:44+00:00"
     },
     {
       "source": "trials",
@@ -160,8 +160,8 @@
       "target_sha256": "a3ae4c3764c6f7607fc960a7abf5150ddc85d99b7a2cb9655545c54af4ae856e",
       "status": "ok",
       "records": 1,
-      "new_events": 2,
-      "last_success_utc": "2026-11-27T01:48:17+00:00"
+      "new_events": 4,
+      "last_success_utc": "2026-11-27T01:51:45+00:00"
     },
     {
       "source": "trials",
@@ -170,8 +170,8 @@
       "target_sha256": "b1402b2dc5ff41abd027f0a555a1f70d52b7bf23e4cf15917a181973d9c5179e",
       "status": "ok",
       "records": 1,
-      "new_events": 2,
-      "last_success_utc": "2026-11-27T01:48:17+00:00"
+      "new_events": 4,
+      "last_success_utc": "2026-11-27T01:51:45+00:00"
     },
     {
       "source": "publications",
@@ -181,7 +181,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:18+00:00"
+      "last_success_utc": "2026-11-27T01:51:45+00:00"
     },
     {
       "source": "publications",
@@ -191,7 +191,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:18+00:00"
+      "last_success_utc": "2026-11-27T01:51:46+00:00"
     },
     {
       "source": "publications",
@@ -201,7 +201,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:19+00:00"
+      "last_success_utc": "2026-11-27T01:51:47+00:00"
     },
     {
       "source": "publications",
@@ -211,7 +211,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:20+00:00"
+      "last_success_utc": "2026-11-27T01:51:48+00:00"
     },
     {
       "source": "publications",
@@ -221,7 +221,7 @@
       "status": "ok",
       "records": 9,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:21+00:00"
+      "last_success_utc": "2026-11-27T01:51:49+00:00"
     },
     {
       "source": "publications",
@@ -231,10 +231,10 @@
       "status": "ok",
       "records": 19,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T01:48:22+00:00"
+      "last_success_utc": "2026-11-27T01:51:51+00:00"
     }
   ],
-  "new_events": 12,
-  "run_id": "45924602713",
+  "new_events": 24,
+  "run_id": "45924922455",
   "trigger": "workflow_dispatch"
 }
