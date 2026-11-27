@@ -527,6 +527,7 @@ function renderPublicEvents() {
     <label>归档截止日期（台北）<input name="cutoff" type="date" required></label>
     <button class="btn">对照归档终点</button></form><div aria-live="polite" data-comparison></div></details>
     <form id="public-event-filters" class="card">
+    <label>归档编号<input name="event" type="search" placeholder="粘贴简报中的完整归档编号"></label>
     <label>资产或公司<input name="asset" placeholder="依达方、奥希替尼或 Summit"></label>
     <label>字段名称或文本值关键词<input name="keyword" type="search" placeholder="例如：首付款、里程碑、登记状态"></label>
     <input type="hidden" name="asset_label"><input type="hidden" name="unassigned_asset">
@@ -674,7 +675,8 @@ function renderPublicEvents() {
   async function load(reset) {
     if (reset) {
       query = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
-      const eventId = hashParams().get('event');
+      const eventId = query.get('event')?.trim();
+      query.delete('event');
       if (eventId) query.set('event_id', eventId);
       showAssetEvidence($('#asset-evidence'),query.has('unassigned_asset')?'':query.get('asset_label') || query.get('asset')?.trim() || '',query.get('as_of'),query.has('exact_asset') || query.has('asset_label'));
       setSavedQuery(null); offset = 0; generation++; list.replaceChildren();
@@ -1009,8 +1011,7 @@ function renderPublicEvents() {
   form.onsubmit = event=>{
     event.preventDefault();
     const params = new URLSearchParams([...new FormData(form)].filter(([,value])=>value));
-    const eventId = hashParams().get('event');
-    if (eventId) params.set('event',eventId);
+    if (params.has('event')) params.set('event',params.get('event').trim());
     history.replaceState(history.state,'','#/public-events'+(params.size?'?'+params:''));
     load(true);
   };

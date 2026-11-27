@@ -72,10 +72,12 @@ async function showHomeUpdates(panel,filters,lang) {
 function downloadHomeEvidence(asset,result,lang) {
   const copy=homeReport[lang], headers=homeEvidence[lang];
   const link=url=>`<p>${copy.source} · <a href="${esc(url)}">${esc(url)}</a></p>`;
+  const citations=new Map();
   const archive=id=>{
     if (!id) return '';
     const href=location.origin+location.pathname+'#/public-events?'+new URLSearchParams({event:id,as_of:result.as_of});
-    return ` · <a href="${esc(href)}">${copy.archive}</a>`;
+    if (!citations.has(id)) citations.set(id,{number:citations.size+1,href});
+    return ` · <a href="${esc(href)}">${copy.archive} [${citations.get(id).number}]</a>`;
   };
   const details=pairs=>'<dl>'+pairs.filter(([,v])=>v).map(([k,v,id])=>`<dt>${esc(k)}</dt><dd>${esc(v)}${archive(id)}</dd>`).join('')+'</dl>';
   const section=(name,items,render)=>`<section><h2>${name} (${items.length})</h2>`+
@@ -112,6 +114,13 @@ function downloadHomeEvidence(asset,result,lang) {
         ? registryTable(analyses.headers,analysisRows(m,analyses.fields),analyses.empty,copy.missing)
         : '<p>'+analyses.missing+'</p>')+'</li>';
   }).join('');
+  const citationIndex=()=>{
+    if (!citations.size) return '';
+    const title={zh:'归档编号索引',en:'Archive reference index',ja:'収録記録番号一覧'}[lang];
+    const hint={zh:'在「公开资产动态」按归档编号和本简报截止日查找原记录。',en:'In Public updates, search by archive ID and the cutoff date of this brief.',ja:'公開情報画面で収録記録番号とこの資料の基準日を指定して検索できます。'}[lang];
+    return `<section><h2>${title}</h2><p>${hint}</p><ol>`+
+      [...citations].map(([id,{href}])=>`<li><a href="${esc(href)}"><code>${esc(id)}</code></a></li>`).join('')+'</ol></section>';
+  };
   const report=`<!doctype html><html lang="${lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(asset)} · ${copy.title}</title>
     <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}.comparison-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.85em}th,td{padding:.25rem;text-align:left;vertical-align:top;border:1px solid #aab8be;overflow-wrap:anywhere}
     @page{margin:15mm 13mm 17mm;@bottom-right{content:counter(page) " / " counter(pages);font:9pt system-ui;color:#47565d}}
@@ -132,7 +141,7 @@ function downloadHomeEvidence(asset,result,lang) {
     section(headers.results,result.outcomes,r=>`<h3 id="outcome-${esc(r.record)}">${esc(r.record)}</h3><ul>${outcomeMeasures(r)}</ul>`+
       details([[copy.date,r.source_date,r.id]])+link(registry(r)+'?tab=results'))+
     section(headers.guidance,result.guidance,g=>`<h3>${esc(g.publisher)} · ${esc(g.reference)}</h3><p>${esc(g.type)} · ${esc(g.topic)} · ${esc(g.region)}</p>`+
-      details([[copy.version,g.version_date],[copy.observed,g.observed]])+link(g.url))+'</main></html>';
+      details([[copy.version,g.version_date],[copy.observed,g.observed]])+link(g.url))+citationIndex()+'</main></html>';
   const url=URL.createObjectURL(new Blob([report],{type:'text/html;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download='HiJenny-'+asset.replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,60)+'-'+result.as_of+'-'+lang+'.html';a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
