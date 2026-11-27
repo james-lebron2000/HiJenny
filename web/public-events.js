@@ -1,3 +1,5 @@
+const fdaDocumentTypes = {Label:'药品标签',Letter:'批准函',Review:'审评资料','Summary Review':'审评摘要','Medication Guide':'用药指南'};
+
 function publicCoverage(receipt) {
   // Region refers to the source institution, independent of study sites and patient location.
   const sources = {
@@ -112,6 +114,7 @@ function renderPublicEvents() {
     <label>资产或公司<input name="asset" placeholder="依达方、奥希替尼或 Summit"></label>
     <label>国家药监局公告编号<input name="notice_id" inputmode="numeric" pattern="[0-9]+" placeholder="1073516"></label>
     <label>国家药监局栏目标题关键词<input name="notice_title" placeholder="例如 Good Clinical Practice"></label>
+    <label>当前归档含 FDA 文件<select name="document_type"><option value="">全部</option>${Object.entries(fdaDocumentTypes).map(([value,label])=>option(value,'',label)).join('')}</select></label>
     <label>FDA 申请号<input name="application" placeholder="NDA208065" title="NDA、ANDA 或 BLA 加六位数字"></label>
     <label>试验登记号<input name="trial" placeholder="NCT 或 jRCT 编号" pattern="[Nn][Cc][Tt][0-9]{8}|[Jj][Rr][Cc][Tt][0-9]{10}" title="NCT 加八位数字或 jRCT 加十位数字"></label>
     <label>历史截面（台北日期）<input type="date" name="as_of"><small>查看截至当天已披露且已收录的每个字段的最后记录。留空可看全部变化。</small></label>
@@ -325,7 +328,6 @@ function renderPublicEvents() {
         }
         const fileChanges=result.document_changes?.[r.id] || {};
         if (r.documents?.length || fileChanges.removed?.length) {
-          const types = {Label:'药品标签',Letter:'批准函',Review:'审评资料','Medication Guide':'用药指南'};
           const links = document.createElement('ul');
           const current=(r.documents || []).map(doc=>{
             const added=fileChanges.added?.some(d=>d.type===doc.type && d.url===doc.url);
@@ -337,7 +339,8 @@ function renderPublicEvents() {
             const item = document.createElement('li');
             const link = document.createElement('a');
             link.href=doc.url; link.target='_blank'; link.rel='noopener noreferrer';
-            link.textContent=types[doc.type] || doc.type;
+            link.textContent=fdaDocumentTypes[doc.type] || doc.type;
+            if (query.get('document_type')===doc.type && !label.startsWith('仅上次')) link.style.fontWeight='bold';
             item.append(label,link); links.append(item);
           }
           card.append(links);

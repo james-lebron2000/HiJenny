@@ -19,6 +19,7 @@ KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原�
 def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
                   disclosed_to: date | None = None, source: Literal["NMPA", "SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA", "jRCT", "FDA Orange Book"] | None = None,
+                  document_type: Literal["Label", "Letter", "Review", "Summary Review", "Medication Guide"] | None = None,
                   source_record: str = "", notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None):
     if discovered_from and discovered_to and discovered_from > discovered_to:
@@ -34,6 +35,11 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
         args.append(mapping["name"])
     sql = " WHERE (" + " OR ".join(match) + ") AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"
     args.extend([region.strip(), since.isoformat() if since else ""])
+    if document_type:
+        sql += """ AND json_extract(payload, '$.source')='Drugs@FDA' AND EXISTS (
+                   SELECT 1 FROM json_each(payload, '$.documents') AS doc
+                   WHERE json_extract(doc.value, '$.type')=?)"""
+        args.append(document_type)
     source_record = source_record.strip()
     if source_record:
         sql += " AND json_extract(payload, '$.record')=?"
@@ -108,7 +114,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     order = (" ORDER BY julianday(json_extract(payload, '$.observed')) DESC, date DESC, id"
              if source_record or discovered_from or discovered_to else " ORDER BY date DESC, id")
     labels = [f"{label}：{value}" for label, value in (
-        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("来源", source), ("来源记录编号", source_record), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
+        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("当前归档含 FDA 文件类型", document_type), ("来源", source), ("来源记录编号", source_record), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("记录类型", KINDS.get(kind))) if value]
     table = "events"
     if as_of:
