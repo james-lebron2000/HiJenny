@@ -1,5 +1,13 @@
 const fdaDocumentTypes = {Label:'药品标签',Letter:'批准函',Review:'审评资料','Summary Review':'审评摘要','Medication Guide':'用药指南'};
 
+function relatedArchiveQuery(filters, record) {
+  const params=new URLSearchParams(record);
+  for (const field of ['as_of','disclosed_to','discovered_to']) {
+    if (filters.has(field)) params.set(field,filters.get(field));
+  }
+  return params;
+}
+
 function publicScheduleStatus(schedule) {
   const p=document.createElement('p');
   p.id='public-schedule';
@@ -679,20 +687,14 @@ function renderPublicEvents() {
           trail.append(link); card.append(trail);
         }
         if (r.source==='SEC' && r.kind==='reviewed' && !r.related_sec_record) {
-          const params=new URLSearchParams({source:'SEC',related_sec_record:r.record});
-          for (const field of ['as_of','discovered_to','disclosed_to']) {
-            if (query.has(field)) params.set(field,query.get(field));
-          }
+          const params=relatedArchiveQuery(query,{source:'SEC',related_sec_record:r.record});
           const link=document.createElement('a'), p=document.createElement('p');
           link.href='#/public-events?'+params;
           link.textContent='查询引用此申报的后续披露';
           p.append(link); card.append(p);
         }
         if (r.source==='SEC' && r.related_sec_record) {
-          const params=new URLSearchParams({source:'SEC',source_record:r.related_sec_record});
-          for (const field of ['as_of','discovered_to','disclosed_to']) {
-            if (query.has(field)) params.set(field,query.get(field));
-          }
+          const params=relatedArchiveQuery(query,{source:'SEC',source_record:r.related_sec_record});
           const link=document.createElement('a'), p=document.createElement('p');
           link.href='#/public-events?'+params; link.textContent='查看相关交易首次披露 · '+r.related_sec_record;
           p.append(link); card.append(p);
@@ -717,8 +719,7 @@ function renderPublicEvents() {
           }
         }
         if (r.source==='NMPA' && !query.has('notice_id')) {
-          const params = new URLSearchParams({notice_id:r.record});
-          if (query.has('as_of')) params.set('as_of',query.get('as_of'));
+          const params = relatedArchiveQuery(query,{notice_id:r.record});
           const link = document.createElement('a');
           link.href = '#/public-events?' + params;
           link.textContent = '查看同一公告的全部归档';
@@ -728,8 +729,7 @@ function renderPublicEvents() {
         if (['FDA Orange Book','Drugs@FDA'].includes(r.source)) {
           const application = r.record.split('/')[0];
           if (!query.has('application') || query.has('source')) {
-            const params = new URLSearchParams({application});
-            if (query.has('as_of')) params.set('as_of', query.get('as_of'));
+            const params = relatedArchiveQuery(query,{application});
             const link = document.createElement('a');
             link.href = '#/public-events?' + params;
             link.textContent = '查看同一 FDA 申请的全部归档';
