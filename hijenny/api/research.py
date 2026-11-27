@@ -6,7 +6,7 @@ from typing import Literal
 from xml.etree import ElementTree
 
 import httpx
-from hijenny.asset_names import verified_asset
+from hijenny.asset_names import chinese_search_name
 from hijenny.publication import publication_notices
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -145,7 +145,7 @@ async def search_public_records(request: SearchRequest):
     if not query:
         raise HTTPException(422, "请输入公开的药物名、适应症或检索式。")
     # Translate exact Chinese names only. Preserve user-written database syntax and English queries.
-    mapping = verified_asset(query) if re.search(r"[㐀-鿿]", query) else None
+    mapping = chinese_search_name(query)
     term = effective_search(request, mapping["name"] if mapping else query)
     retrieve = trials if request.source == "trials" else pubmed
     try:

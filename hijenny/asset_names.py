@@ -18,3 +18,10 @@ def verified_asset(query):
         if normalized in {alias.casefold() for alias in (name, *aliases)}:
             return {"name": name, "source": source}
     return None
+
+
+def chinese_search_name(query):
+    """Resolve a complete Chinese name while preserving database syntax and English search terms."""
+    if any("\u3400" <= char <= "\u9fff" for char in query):
+        return verified_asset(query)
+    return None

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 
 from hijenny import store
+from hijenny.asset_names import chinese_search_name
 
 router = APIRouter()
 REGISTRY = "https://clinicaltrials.gov/api/v2/studies"
@@ -45,6 +46,7 @@ class Criteria(BaseModel):
 
 class RegistryScreen(BaseModel):
     criteria: Criteria
+    literal_intervention: bool = False
     cursor: str = Field(default="", max_length=4000)
 
 
@@ -54,8 +56,10 @@ async def fetch_screen(client, request):
               "fields": "NCTId,BriefTitle,LeadSponsorName,Condition,Phase,OverallStatus,InterventionName,InterventionOtherName,LastUpdatePostDate,LocationCountry,HasResults,ResultsFirstPostDate"}
     if criteria.condition:
         params["query.cond"] = criteria.condition
-    if criteria.intervention:
-        params["query.intr"] = criteria.intervention
+    mapping = None if request.literal_intervention else chinese_search_name(criteria.intervention)
+    registry_intervention = mapping["name"] if mapping else criteria.intervention
+    if registry_intervention:
+        params["query.intr"] = registry_intervention
     if criteria.sponsor.strip():
         params["query.lead"] = criteria.sponsor.strip()
     filters = []
@@ -93,7 +97,7 @@ async def fetch_screen(client, request):
             "results_posted": (status.get("resultsFirstPostDateStruct") or {}).get("date", ""),
             "updated": status.get("lastUpdatePostDateStruct", {}).get("date", ""),
         })
-    return {"items": rows, "total": data.get("totalCount") if request.cursor else data["totalCount"], "cursor": data.get("nextPageToken", ""),
+    return {"items": rows, "registry_intervention": registry_intervention, "total": data.get("totalCount") if request.cursor else data["totalCount"], "cursor": data.get("nextPageToken", ""),
             "retrieved": datetime.now(timezone.utc).isoformat()}
 
 
@@ -112,6 +116,7 @@ class InterventionAliases(BaseModel):
 
 
 class Opportunity(BaseModel):
+    registry_intervention: str | None = Field(default=None, max_length=200)
     snapshot_id: UUID
     retrieved: datetime
     criteria: Criteria
