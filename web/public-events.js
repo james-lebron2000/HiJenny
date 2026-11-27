@@ -463,7 +463,7 @@ function renderPublicEvents() {
     <button type="button" class="btn" data-refresh-counts hidden>刷新新增数量</button><ul></ul><form><label>筛选名称<input name="label" required maxlength="100" placeholder="例如：依达方监管动态"></label>
     <label><input type="checkbox" name="week"> 每次打开时查看最近七天发现，替换已选的历史截面和发现日期</label>
     <button class="btn" disabled>保存当前结果的筛选条件</button></form><p role="status"></p></details>
-    <p id="public-event-feed" hidden><a>订阅当前筛选（Atom）</a><br><small>将链接添加到可访问 HiJenny 的订阅阅读器。保留当前日期条件，按首次发现时间提供最近 100 条。</small></p>
+    <p id="public-event-feed" hidden><a>订阅当前筛选（Atom）</a> · <a data-week>订阅滚动七天</a><br><small>滚动订阅每次读取时按台北日期重算最近七天，替换历史截面和发现日期。两种订阅均保留其他条件，最多列出最近 100 条。</small></p>
     <a id="public-event-report" hidden>下载当前筛选的完整简报</a>
     <p id="public-event-status" role="status"></p><nav id="public-source-counts" aria-label="按来源查看归档"></nav><div id="public-event-list"></div>
     <button type="button" class="btn" id="public-event-more" hidden>加载更多</button></section>`);
@@ -792,6 +792,10 @@ function renderPublicEvents() {
       reportQuery.delete('offset');
       download.href = '/api/public-events/report.txt?' + reportQuery;
       feed.querySelector('a').href='/api/public-events/feed.atom'+(reportQuery.size?'?'+reportQuery:'');
+      const rollingQuery=new URLSearchParams(reportQuery);
+      for (const field of ['as_of','discovered_from','discovered_to']) rollingQuery.delete(field);
+      rollingQuery.set('rolling_week','true');
+      feed.querySelector('[data-week]').href='/api/public-events/feed.atom?'+rollingQuery;
       feed.hidden=false;
       const savedQuery=new URLSearchParams(reportQuery);
       if (savedQuery.has('event_id')) {

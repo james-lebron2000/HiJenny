@@ -381,3 +381,38 @@ def test_jrct_target_preserves_previous_check_without_fetch(tmp_path, monkeypatc
     row, = json.loads(receipt.read_text())["checks"]
     assert row["status"] == "manual_review" and row["records"] is None
     assert row["last_success_utc"] == "2026-11-24T00:00:00Z"
+
+
+def test_rolling_week_feed_recalculates_at_taipei_midnight(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from xml.etree import ElementTree
+    from hijenny.api import public_events as routes
+
+    class Clock(datetime):
+        instant = datetime(2026, 11, 27, 15, 59, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.instant.astimezone(tz)
+
+    monkeypatch.setattr(routes, "datetime", Clock)
+    monkeypatch.setattr(public_events, "DATA_DIR", tmp_path)
+    with closing(public_events.connect()) as db, db:
+        for key, day in [("old", "21"), ("recent", "27"), ("next", "28")]:
+            observed = f"2026-11-{day}T00:00:00+08:00"
+            row = dict(id=key, source="SEC", asset="demo", subject="demo", kind="reviewed", field="公告",
+                       source_date="2026-11-10", record=key, url="https://www.sec.gov/", observed=observed, value=key)
+            db.execute("insert into events values (?,?,?,?,?)", (key, "demo", "", row["source_date"], json.dumps(row)))
+    app = FastAPI()
+    app.include_router(routes.router)
+    client = TestClient(app)
+    path = "/api/public-events/feed.atom?rolling_week=true&source=SEC"
+    def keys():
+        root = ElementTree.fromstring(client.get(path).content)
+        return [entry.text.rsplit("=", 1)[-1] for entry in root.findall("{*}entry/{*}id")]
+    assert keys() == ["recent", "old"]
+    Clock.instant = datetime(2026, 11, 27, 16, 0, tzinfo=timezone.utc)
+    assert keys() == ["next", "recent"]
+    assert client.get(path + "&as_of=2026-11-21").status_code == 422

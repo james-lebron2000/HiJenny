@@ -24,7 +24,13 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                   observed_after: datetime | None = None, disclosed_to: date | None = None, source: Literal["NMPA", "SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA", "jRCT", "FDA Orange Book"] | None = None,
                   document_type: Literal["Label", "Letter", "Review", "Summary Review", "Medication Guide"] | None = None,
                   source_record: str = "", notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
-                  kind: Literal["baseline", "change", "reviewed"] | None = None):
+                  kind: Literal["baseline", "change", "reviewed"] | None = None,
+                  rolling_week: bool = False):
+    if rolling_week:
+        if as_of or discovered_from or discovered_to:
+            raise HTTPException(422, "滚动七天与固定历史截面或发现日期不能同时使用。")
+        discovered_to = datetime.now(timezone(timedelta(hours=8))).date()
+        discovered_from = discovered_to - timedelta(days=6)
     if discovered_from and discovered_to and discovered_from > discovered_to:
         raise HTTPException(422, "发现起始日期须早于或等于结束日期。")
     if since and disclosed_to and since > disclosed_to:
@@ -287,7 +293,7 @@ def event_details(row):
 
 
 @router.get("/api/public-events/feed.atom")
-def event_feed(request: Request, filters=Depends(event_filters)):
+def event_feed(request: Request, filters=Depends(event_filters), rolling_week: bool = False):
     table, sql, args, _, labels, _ = filters
     with closing(connect()) as db:
         db.execute("BEGIN")
@@ -299,6 +305,8 @@ def event_feed(request: Request, filters=Depends(event_filters)):
     feed_url = str(request.url)
     ET.SubElement(feed, "id").text = feed_url
     ET.SubElement(feed, "link", rel="self", href=feed_url)
+    if rolling_week:
+        labels = ["最近七天发现（台北）", *(label for label in labels if not label.startswith(("发现起始日：", "发现结束日：")))]
     ET.SubElement(feed, "title").text = "HiJenny 公开动态" + (" · " + " · ".join(labels) if labels else "")
     ET.SubElement(ET.SubElement(feed, "author"), "name").text = "HiJenny"
     updated = json.loads(receipt[0])["finished_utc"] if receipt else datetime.now(timezone.utc).isoformat()
