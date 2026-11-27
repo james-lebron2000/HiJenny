@@ -318,6 +318,8 @@ def event_details(row):
     if row.get("region"):
         lines.append("地区 " + row["region"])
     lines.append(f'{row["source"]} · {row["record"]} · {row["url"]}')
+    if row["source"] == "SEC" and row.get("related_sec_record"):
+        lines.append("相关交易首次披露 · SEC " + row["related_sec_record"])
     if row["source"] == "FDA Orange Book":
         lines.append("专利和独占期分别归档。这些日期不能单独确定仿制药上市时间。")
     if row["source"] == "jRCT":

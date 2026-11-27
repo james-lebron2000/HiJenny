@@ -677,6 +677,15 @@ function renderPublicEvents() {
           link.textContent='查看此来源编号的归档历史';
           trail.append(link); card.append(trail);
         }
+        if (r.source==='SEC' && r.related_sec_record) {
+          const params=new URLSearchParams({source:'SEC',source_record:r.related_sec_record});
+          for (const field of ['as_of','discovered_to','disclosed_to']) {
+            if (query.has(field)) params.set(field,query.get(field));
+          }
+          const link=document.createElement('a'), p=document.createElement('p');
+          link.href='#/public-events?'+params; link.textContent='查看相关交易首次披露 · '+r.related_sec_record;
+          p.append(link); card.append(p);
+        }
         if (r.source==='ClinicalTrials.gov' && r.asset) {
           const link=document.createElement('a'), p=document.createElement('p');
           link.href='#/discovery?event='+encodeURIComponent(r.id);
