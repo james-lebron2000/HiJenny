@@ -9,6 +9,7 @@ HTTP layer stay decoupled from the ORM.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from contextlib import contextmanager
 from pathlib import Path
@@ -217,6 +218,8 @@ def _evidence_dict(r: Evidence) -> dict:
         "bbox": bbox,
         "confidence": r.confidence,
         "extractor": r.extractor,
+        "review_token": hashlib.sha256(_dump([r.evidence_id, r.verification_status,
+                                              r.verification_note, r.verified_by]).encode()).hexdigest(),
         "verification_status": r.verification_status,
         "verification_note": r.verification_note,
         "verified_by": r.verified_by,

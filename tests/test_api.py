@@ -911,3 +911,26 @@ def test_gateway_review_identity_covers_review_and_followup_writes(client, monke
     events = client.get(base + "/review-events", headers=editor).json()["events"]
     assert len(events) >= len(writes)
     assert {event["actor"] for event in events} == {user["X-User-Id"]}
+
+
+def test_concurrent_evidence_review_preserves_first_result(client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    pid = create_project(client)["project_id"]
+    path = "/api/evidence/" + seed_review_data(pid)["evidence_id"]
+    initial = client.get(path).json()["evidence"]["review_token"]
+
+    def save(actor, token):
+        return client.patch(path, json={"verification_status": "verified", "note": actor,
+                                        "actor": actor, "expected_review_token": token})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda actor: save(actor, initial), ["one", "two"]))
+    assert sorted(r.status_code for r in results) == [200, 409]
+    winner = next(r for r in results if r.is_success).json()["evidence"]
+    conflict = next(r for r in results if r.status_code == 409).json()["detail"]["evidence"]
+    assert winner == conflict == client.get(path).json()["evidence"]
+    events = f"/api/projects/{pid}/review-events"
+    assert client.get(events).json()["count"] == 1
+    assert save("reconciled", winner["review_token"]).is_success
+    assert client.get(events).json()["count"] == 2

@@ -456,6 +456,7 @@ class QuestionPatch(BaseModel):
 
 
 class EvidencePatch(BaseModel):
+    expected_review_token: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     verification_status: VerificationLit
     note: str | None = None
     actor: str = "reviewer"
@@ -998,7 +999,13 @@ def create_app() -> FastAPI:
     def patch_evidence(request: Request, evidence_id: str, payload: EvidencePatch):
         actor = review_actor(request, payload.actor)
         with store.session_scope() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
             evidence = _evidence_or_404(session, evidence_id)
+            if payload.expected_review_token is not None and payload.expected_review_token != evidence["review_token"]:
+                raise HTTPException(409, detail={
+                    "message": "这条证据已有新的复核结果，请对照后再保存。",
+                    "evidence": evidence,
+                })
             before = dict(evidence)
             updated = store.update_evidence_verification(
                 session,

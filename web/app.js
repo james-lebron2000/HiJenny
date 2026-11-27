@@ -1098,6 +1098,8 @@ function evidenceReviewForm(ev) {
   const statuses = {pending:'待复核', verified:'已核实', failed:'与原件不符', unverifiable:'现有材料无法核实'};
   return `<details><summary>登记证据复核</summary>
     <form data-form="review-evidence" data-id="${esc(ev.evidence_id)}">
+      <input type="hidden" name="expected_review_token" value="${esc(ev.review_token)}">
+      <div class="review-conflict" role="status"></div>
       <label>核对结果<select name="verification_status">${Object.entries(statuses).map(([key,label])=>option(key,ev.verification_status,label)).join('')}</select></label>
       <label>核对说明<textarea name="note" rows="2" maxlength="4000">${esc(ev.verification_note || '')}</textarea></label>
       <label>复核人<input name="actor" required maxlength="128" ${state.evidenceIdentityRequired ? `readonly value="${esc(state.evidenceUser)}"` : ''}></label>
@@ -1858,8 +1860,27 @@ async function handleSubmit(form, formEl) {
       renderEvidenceCards();
       if (state.selectedEvidenceId === id) $('#quote-panel').innerHTML = quotePanelHtml();
       toast('证据复核已保存。', 'ok');
-    } catch (error) { toast(error.message, 'error'); }
-    finally { submit.disabled = false; }
+    } catch (error) {
+      const latest = error.data?.detail?.evidence;
+      if (error.status === 409 && latest && formEl.isConnected) {
+        const panel = formEl.querySelector('.review-conflict');
+        const status = [...formEl.elements.verification_status.options].find(o => o.value === latest.verification_status)?.text;
+        panel.innerHTML = `<p>另一位复核人已保存意见。你的填写内容已保留。</p>
+          <p>最新结果 · ${esc(status || latest.verification_status)} · ${esc(latest.verified_by || '')}</p>
+          <p>核对说明 · ${esc(latest.verification_note || '未填写')}</p>
+          <button type="button" class="btn">已对照最新意见，继续编辑</button>`;
+        submit.disabled = true;
+        panel.querySelector('button').onclick = () => {
+          formEl.elements.expected_review_token.value = latest.review_token;
+          panel.textContent = '已对照，可修改并保存你的意见。';
+          submit.disabled = false;
+        };
+        return;
+      }
+      toast(error.message, 'error');
+    } finally {
+      if (!formEl.querySelector('.review-conflict button')) submit.disabled = false;
+    }
     return;
   }
   if (form !== 'create-project') return;
