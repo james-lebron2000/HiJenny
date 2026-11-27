@@ -168,9 +168,13 @@ def asset_evidence(asset: str, as_of: date | None = None):
         raise HTTPException(422, "请输入药物名。")
     cutoff = as_of or datetime.now(timezone(timedelta(hours=8))).date()
     table, sql, args, order, _, mapping = event_filters(as_of=cutoff, asset=asset, source="ClinicalTrials.gov")
-    sql += " AND (json_extract(payload, '$.field') IN ('登记状态','登记研究阶段','登记研究疾病') OR json_extract(payload, '$.category')='primary-outcomes')"
+    fields = {"登记状态": "status", "登记研究阶段": "phase", "登记研究疾病": "conditions",
+              "牵头申办方": "sponsor", "试验中心所在国家或地区": "countries", "登记年龄组": "ages",
+              "方案登记主要终点": "planned_endpoints"}
+    placeholders = ",".join("?" for _ in fields)
+    sql += f" AND (json_extract(payload, '$.field') IN ({placeholders}) OR json_extract(payload, '$.category')='primary-outcomes')"
+    args.extend(fields)
     trials, outcomes = {}, []
-    fields = {"登记状态": "status", "登记研究阶段": "phase", "登记研究疾病": "conditions"}
     with closing(connect()) as db:
         for (payload,) in db.execute("SELECT payload FROM " + table + sql + order, args):
             row = json.loads(payload)

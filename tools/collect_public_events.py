@@ -137,6 +137,13 @@ def trial_records(trial):
               "研究完成日期": status.get("completionDateStruct"), "结果首次公布": status.get("resultsFirstPostDateStruct")}
     fields["登记研究阶段"] = " / ".join(protocol.get("designModule", {}).get("phases", [])) or None
     fields["登记研究疾病"] = " / ".join(protocol.get("conditionsModule", {}).get("conditions", [])) or None
+    fields["牵头申办方"] = protocol.get("sponsorCollaboratorsModule", {}).get("leadSponsor", {}).get("name") or None
+    sites = protocol.get("contactsLocationsModule", {}).get("locations", [])
+    fields["试验中心所在国家或地区"] = " / ".join(sorted({s["country"] for s in sites if s.get("country")})) or None
+    eligibility = protocol.get("eligibilityModule", {})
+    fields["登记年龄组"] = " / ".join(eligibility.get("stdAges", [])) or None
+    measures_planned = protocol.get("outcomesModule", {}).get("primaryOutcomes", [])
+    fields["方案登记主要终点"] = "\n".join(m["measure"] for m in measures_planned if m.get("measure")) or None
     stop = STOP_STATUS.get(status["overallStatus"])
     reason = (status.get("whyStopped") or "").strip()
     fields[STOP_FIELD] = f"{stop} · {reason or '登记记录未提供原因'}" if stop else None

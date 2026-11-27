@@ -155,14 +155,42 @@ async function showAssetEvidence(panel, asset, cutoff) {
   try {
     const data=await api('/api/public-events/asset-evidence?'+params);
     if (!current()) return;
-    const trialLink=r=>`<a href="#/public-events?event=${encodeURIComponent(r.id)}">${esc(r.record)}</a>`;
+    const trialLink=r=>`<a href="#/public-events?event=${encodeURIComponent(r.id)}&amp;as_of=${esc(data.as_of)}">${esc(r.record)}</a>`;
     const section=(label,rows)=>`<h3>${label}（${rows.length}）</h3>`+
       (rows.length?'<ul>'+rows.map(row=>'<li>'+row+'</li>').join('')+'</ul>':'<p>此范围内暂无归档。</p>');
     panel.innerHTML=`<h2>${esc(asset)} · 资产证据</h2><p>按药名及台北截止日 ${esc(data.as_of)} 汇总。试验范围为公开关注名单。</p>`+
-      section('管线试验',data.trials.map(r=>trialLink(r)+' · '+esc(r.asset)+' · '+esc(r.status)+' · '+esc(r.phase || '阶段未收录')+' · '+esc(r.conditions || '疾病未收录')))+
-      section('已公布主要终点的试验',data.outcomes.map(r=>trialLink(r)+' · '+esc(r.endpoints.join('、'))))+
+      '<form data-trial-filters><fieldset><legend>筛选试验与结果</legend></fieldset></form><div data-trial-matches></div>'+
       section('指南与技术评估',data.guidance.map(g=>`<a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.publisher)} ${esc(g.reference)}</a> · ${esc(g.type)} · ${esc(g.topic)}
         <br>${esc(g.region)} · 来源页面标注版本日期 ${esc(g.version_date)} · 人工收录 ${esc(g.observed)}`));
+    const filters=panel.querySelector('fieldset'), matches=panel.querySelector('[data-trial-matches]');
+    const facets={phase:'研究阶段',sponsor:'牵头申办方',countries:'中心所在国家或地区',ages:'登记年龄组'};
+    const values=(r,key)=>key==='sponsor'?[r.sponsor].filter(Boolean):(r[key] || '').split(' / ').filter(Boolean);
+    for (const [key,label] of Object.entries(facets)) {
+      const choices=[...new Set(data.trials.flatMap(r=>values(r,key)))].sort();
+      filters.insertAdjacentHTML('beforeend',`<label>${label}<select name="${key}"><option value="">全部</option>${choices.map(v=>option(v,'',v)).join('')}</select></label>`);
+    }
+    filters.insertAdjacentHTML('beforeend','<label>疾病关键词<input name="disease" type="search" placeholder="按登记原文"></label><label>主要终点关键词<input name="endpoint" type="search" placeholder="匹配方案或已公布结果"></label><button type="reset" class="btn">清除试验筛选</button>');
+    const resultsByTrial=new Map(data.outcomes.map(r=>[r.record,r.endpoints]));
+    function draw() {
+      const selected=filters.form.elements;
+      const disease=selected.disease.value.trim().toLowerCase(), endpoint=selected.endpoint.value.trim().toLowerCase();
+      const trials=data.trials.filter(r=>Object.keys(facets).every(key=>!selected[key].value || values(r,key).includes(selected[key].value)) &&
+        (r.conditions || '').toLowerCase().includes(disease) &&
+        [r.planned_endpoints || '',...(resultsByTrial.get(r.record) || [])].some(v=>v.toLowerCase().includes(endpoint)));
+      const ids=new Set(trials.map(r=>r.record));
+      const outcomes=data.outcomes.filter(r=>ids.has(r.record));
+      matches.innerHTML=section('管线试验',trials.map(r=>{
+        const params=new URLSearchParams({source:'ClinicalTrials.gov',source_record:r.record,as_of:data.as_of});
+        return trialLink(r)+' · '+esc(r.asset)+' · '+esc(r.status)+' · '+esc(r.phase || '阶段未收录')+' · '+esc(r.conditions || '疾病未收录')+
+          '<br>牵头申办方 · '+esc(r.sponsor || '未收录')+' · 年龄组 · '+esc(r.ages || '未收录')+
+          `<details><summary>中心地区及方案登记终点</summary><p>${esc(r.countries || '地区未收录')}</p><p style="white-space:pre-line">${esc(r.planned_endpoints || '终点未收录')}</p>
+          <a href="#/public-events?${esc(params.toString())}">核对这项试验当日的登记字段</a></details>`;
+      }))+section('已公布主要终点的试验',outcomes.map(r=>trialLink(r)+' · '+esc(r.endpoints.join('、'))));
+    }
+    filters.form.oninput=draw;
+    filters.form.onreset=()=>queueMicrotask(draw);
+    filters.form.onsubmit=e=>e.preventDefault();
+    draw();
   } catch (err) {if (current()) panel.textContent='资产证据暂时无法读取，请重新筛选。'+err.message;}
 }
 
