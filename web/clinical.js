@@ -65,6 +65,30 @@ function changedSections(before, after) {
   return changes;
 }
 
+function parallelDesignChanges(base,current,other) {
+  const rows=[];
+  function fields(labels,path,prefix='') {
+    for (const [key,name] of Object.entries(labels)) {
+      const values=[base,current,other].map(v=>[...path,key].reduce((obj,k)=>obj?.[k],v) ?? '');
+      const [original,left,right]=values;
+      if (left===original && right===original) continue;
+      const status=left===right?'两版改动一致':left===original?'仅对照版修改':right===original?'仅当前版修改':'两版改动不同';
+      rows.push({name:prefix+name,status,values});
+    }
+  }
+  fields({question:'研究问题',choice:'倾向方案',rationale:'选择依据',pending:'待复核事项'},[]);
+  for (const [i,choice] of ['A','B'].entries()) {
+    fields(designFields,['options',i],'候选设计 '+choice+' · ');
+    fields(protocolFields,['protocol',choice],'Protocol '+choice+' · ');
+    fields(csrFields,['csr',choice],'CSR '+choice+' · ');
+  }
+  fields(sapFields,['sap'],'SAP · ');
+  fields({product:'产品名称',cutoff:'截止日期'},['ib'],'IB · ');
+  for (const [key,label] of Object.entries(ibSections))
+    fields({summary:'摘要',source:'资料来源'},['ib','sections',key],'IB · '+label+' · ');
+  return rows;
+}
+
 function renderClinical() {
   const prefix = 'hijenny.clinical.';
   const blank = () => ({id:null, parent:null, created:'', question:'', options:[{},{}], choice:'',
@@ -86,6 +110,7 @@ function renderClinical() {
   }
   function draw() {
     const previous=parentOf(version);
+    const siblings=previous?versions().filter(v=>v.parent===previous.id && v.id!==version.id):[];
     const differences=designDifferences(previous,version);
     const refs = version.references;
     setView(`<section class="research-home" lang="zh-CN"><h1>比较两种临床研究设计</h1>
@@ -93,6 +118,10 @@ function renderClinical() {
       <label>已保存版本 <select id="design-history"><option value="">当前新草稿</option>
       ${versions().map(v=>option(v.id,version.id,fmtDate(v.created)+' · '+v.question)).join('')}</select></label>
       <button type="button" id="design-new" class="btn">新建空白设计</button>
+      ${siblings.length?`<details id="design-parallel"><summary>核对同一原稿的平行修订（${siblings.length}）</summary>
+      <label>对照版本<select>${siblings.map(v=>option(v.id,siblings[0].id,fmtDate(v.created)+' · '+v.question+' · '+v.id)).join('')}</select></label>
+      <p data-lineage></p><label><input type="checkbox">仅看两版改动不同的字段</label>
+      <div data-diffs></div><button type="button" class="btn">下载当前修订对照</button></details>`:''}
       <details id="design-handoff"><summary>交接设计版本与复核记录</summary>
       <p>下载当前版本及其历次修订、来源快照和复核意见。导入时文件会提交给当前 HiJenny 服务校验，通过后保存到本浏览器。</p>
       <button class="btn" type="button" data-download>下载交接包</button>
@@ -160,6 +189,31 @@ function renderClinical() {
       <div id="design-status" role="status"></div>
       ${version.changes.length ? '<h2>本版变更与影响</h2><ul>'+version.changes.map(c=>'<li>'+esc(c)+'</li>').join('')+'</ul>' : ''}</section>`);
     const form = $('#design-form');
+    const parallel=$('#design-parallel');
+    if (parallel) {
+      const picker=parallel.querySelector('select'), conflicts=parallel.querySelector('input');
+      let visible=[];
+      function compare() {
+        const other=siblings.find(v=>v.id===picker.value);
+        const rows=parallelDesignChanges(previous,version,other);
+        visible=conflicts.checked?rows.filter(r=>r.status==='两版改动不同'):rows;
+        parallel.querySelector('[data-lineage]').textContent='共同原稿 '+previous.id+' · 当前版 '+version.id+' · 对照版 '+other.id;
+        const different=rows.filter(r=>r.status==='两版改动不同').length;
+        parallel.querySelector('[data-diffs]').innerHTML=`<p>共 ${rows.length} 个修改字段，其中 ${different} 个字段的两版改动不同。</p>`+
+          visible.map(row=>`<details><summary>${esc(row.name)} · ${row.status}</summary>
+            ${row.values.map((value,i)=>`<strong>${['共同原稿','当前版','对照版'][i]}</strong><pre class="source-snapshot">${esc(value || '（空白）')}</pre>`).join('')}</details>`).join('');
+      }
+      parallel.onchange=compare;
+      parallel.querySelector('button').onclick=()=>{
+        const lines=['HiJenny 设计修订对照',parallel.querySelector('[data-lineage]').textContent,
+          conflicts.checked?'范围：两版改动不同的字段':'范围：全部修改字段',parallel.querySelector('[data-diffs] p').textContent];
+        for (const row of visible) lines.push('',row.name+' · '+row.status,...row.values.map((v,i)=>['共同原稿','当前版','对照版'][i]+'：'+(v || '（空白）')));
+        const url=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain;charset=utf-8'}));
+        const link=document.createElement('a');link.href=url;link.download='HiJenny-修订对照-'+version.id+'-'+picker.value+'.txt';link.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      };
+      compare();
+    }
     const choiceInput=$('#design-choice',form);
     function displayProtocol() {
       for (const section of $$('[data-protocol-choice],[data-csr-choice]',form)) {
