@@ -6,6 +6,7 @@ from typing import Literal
 from xml.etree import ElementTree
 
 import httpx
+from hijenny.asset_names import verified_asset
 from hijenny.publication import publication_notices
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -143,7 +144,9 @@ async def search_public_records(request: SearchRequest):
     query = request.query.strip()
     if not query:
         raise HTTPException(422, "请输入公开的药物名、适应症或检索式。")
-    term = effective_search(request, query)
+    # Translate exact Chinese names only. Preserve user-written database syntax and English queries.
+    mapping = verified_asset(query) if re.search(r"[㐀-鿿]", query) else None
+    term = effective_search(request, mapping["name"] if mapping else query)
     retrieve = trials if request.source == "trials" else pubmed
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -154,7 +157,7 @@ async def search_public_records(request: SearchRequest):
                 total, items = await retrieve(client, term)
     except (httpx.HTTPError, ElementTree.ParseError, ValueError, KeyError, TypeError) as exc:
         raise HTTPException(502, "暂时无法读取所选数据库，请稍后重试。") from exc
-    return {"query": query, "effective_query": term, "source": request.source, "total": total, "items": items}
+    return {"query": query, "effective_query": term, "asset_match": mapping, "source": request.source, "total": total, "items": items}
 
 
 def registry_result_snapshot(record, retrieved):

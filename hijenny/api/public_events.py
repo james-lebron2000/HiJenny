@@ -7,25 +7,13 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
+from hijenny.asset_names import verified_asset
 from hijenny.public_events import connect
 from hijenny.registry_report import outcome_text, safety_text
 
 router = APIRouter()
 OBSERVED_DAY = "date(json_extract(payload, '$.observed'), '+8 hours')"
 KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原文核实"}
-
-
-# Verified search aliases expand only to the archived asset field.
-ASSET_NAMES = {
-    "ivonescimab": (
-        ("依沃西单抗", "依沃西单抗注射液", "依达方"),
-        "https://akesobio.com/cn/rd-and-science/products-center/ivonescimab/",
-    ),
-    "osimertinib": (
-        ("奥希替尼", "甲磺酸奥希替尼片", "泰瑞沙", "Tagrisso"),
-        "https://www.astrazeneca.com.cn/zh/media/press-releases/2025/01-02-01.html",
-    ),
-}
 
 
 def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
@@ -38,15 +26,10 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     asset = asset.strip()
     match = ["instr(lower(asset), lower(?))>0", "instr(lower(json_extract(payload, '$.subject')), lower(?))>0"]
     args = [asset, asset]
-    normalized_name = asset.strip().removesuffix("®").strip().casefold()
-    mapping = None
-    for name, (aliases, url) in ASSET_NAMES.items():
-        if normalized_name in {alias.casefold() for alias in (name, *aliases)}:
-            mapping = {"name": name, "source": url}
-            # Preserve both ordinary substring matches and matches to the verified molecule.
-            match.append("instr(lower(json_extract(payload, '$.asset')), ?) > 0")
-            args.append(name)
-            break
+    mapping = verified_asset(asset)
+    if mapping:
+        match.append("instr(lower(json_extract(payload, '$.asset')), ?) > 0")
+        args.append(mapping["name"])
     sql = " WHERE (" + " OR ".join(match) + ") AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"
     args.extend([region.strip(), since.isoformat() if since else ""])
     notice_id = notice_id.strip()

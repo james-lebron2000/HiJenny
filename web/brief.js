@@ -125,7 +125,7 @@ function retrievalHistory(step) {
 }
 
 function libraryOrigin(item) {
-  return item.id+' · 原检索时间 '+(item.retrieved || '未记录')+' · 原检索式 '+(item.query || '未记录');
+  return item.id+' · 原检索时间 '+(item.retrieved || '未记录')+(item.inputQuery && item.inputQuery!==item.query?' · 输入词 '+item.inputQuery:'')+' · 原检索式 '+(item.query || '未记录');
 }
 
 function briefText(run) {
@@ -138,6 +138,7 @@ function briefText(run) {
       lines.push(step.error || '尚未完成检索');
       continue;
     }
+    if (step.result.effective_query && step.result.effective_query!==step.query) lines.push('实际检索式 '+step.result.effective_query);
     for (const id of missingExactPublications(step)) lines.push('本次未取回指定 PMID '+id);
     const items = step.result.items;
     if (step.fromLibrary) lines.push('从本机收藏选入 '+items.length+' 条，本次未执行数据库检索。');
@@ -249,6 +250,7 @@ async function renderBrief() {
     report.innerHTML = `<h2>${esc(run.question)}</h2><p>来源快照 · ${esc(new Date(run.created).toLocaleString())}</p>
       ${run.publicEvent?`<a href="#/public-events?event=${encodeURIComponent(run.publicEvent)}">查看发起底稿的公开动态</a>`:''}
       ${run.steps.map(step => `<section class="card"><h3>${briefSources[step.source]}</h3>
+      ${step.result?.effective_query && step.result.effective_query!==step.query?`<p>实际检索式 ${esc(step.result.effective_query)}</p>`:''}
       <span>${esc(step.query)} · 已尝试 ${step.attempts} 次</span>
       ${step.result ? `<p>${step.fromLibrary?'从本机收藏选入，本次未执行数据库检索':'原检索命中 '+step.result.total+' 条'}，本版收录 ${step.result.items.length} 条；其中 ${step.result.items.filter(i=>!i.passages.length).length} 条缺少来源片段。</p>
         ${(step.recoveries || []).map(r=>`<p>单独补查 PMID ${esc(r.pmid)} · ${esc(fmtDate(r.time))} · <a href="#/brief?version=${encodeURIComponent(r.parent)}">查看补查前的底稿</a></p>`).join('')}
@@ -355,7 +357,7 @@ async function renderBrief() {
         await saveReview();
         const saved=await briefStore('readonly',store=>store.get(id));
         const payload={id,publicEvent:saved.publicEvent,question:saved.question,created:saved.created,note:saved.note,publicationCheck:saved.publicationCheck || [],conflicts:saved.conflicts || [],steps:saved.steps.map(step=>({
-          source:step.source,query:step.query,retrieved:step.fromLibrary?'见逐条收藏记录':retrievalHistory(step),total:step.result?.total ?? null,
+          source:step.source,query:step.query,effectiveQuery:step.result?.effective_query,retrieved:step.fromLibrary?'见逐条收藏记录':retrievalHistory(step),total:step.result?.total ?? null,
           error:step.fromLibrary?'从本机收藏选入 '+step.result.items.length+' 条，本次未执行数据库检索。':step.error || '',
           records:(step.result?.items || []).map(item=>({
             id:item.id,title:item.title,date:item.date || '',libraryOrigin:step.fromLibrary?libraryOrigin(item):undefined,notices:item.notices || [],decision:saved.review[item.id] || '待复核',

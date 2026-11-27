@@ -37,6 +37,7 @@ class Record(BaseModel):
 class Step(BaseModel):
     source: Literal["pubmed", "trials"]
     query: Text
+    effectiveQuery: Text = ""
     retrieved: Text = ""
     total: int | None = Field(default=None, ge=0)
     error: Text = ""
@@ -114,6 +115,8 @@ def export_brief(brief: Brief):
         name = "PubMed" if step.source == "pubmed" else "ClinicalTrials.gov"
         status = (f"原检索数据库命中 {step.total}；本版收录 {len(step.records)}" if step.total is not None
                   else clean(step.error) or "未完成检索")
+        if step.effectiveQuery and step.effectiveQuery != step.query:
+            doc.add_paragraph("实际检索式 " + clean(step.effectiveQuery))
         doc.add_paragraph(f"{name} · {clean(step.query)}\n{status} · 检索时间 {clean(step.retrieved) or '未提供'}")
         if step.source == "pubmed" and step.total is not None and re.fullmatch(
                 r"\d+\[pmid\](?: OR \d+\[pmid\])*", step.query, re.IGNORECASE):

@@ -26,6 +26,7 @@ function publicationNotices(item) {
 function researchResults(data) {
 
   return `<h2>${esc(data.query)}</h2><p>${data.source === 'guidelines' ? 'PubMed 指南文献' : (data.source === 'pubmed' ? 'PubMed' : 'ClinicalTrials.gov')} · 共 ${esc(data.total)} 条，展示 ${data.items.length} 条</p>
+    ${data.asset_match ? `<p>核对药名 ${esc(data.asset_match.name)} · <a href="${esc(data.asset_match.source)}" target="_blank" rel="noopener noreferrer">名称来源</a></p>` : ''}
     ${data.source === 'guidelines' ? '<p>范围为 PubMed 标注的指南及实践指南。适用地区、更新状态和推荐级别请核对发布方原文。</p>' : ''}
     ${data.effective_query && data.effective_query!==data.query ? `<p>实际检索式 <code>${esc(data.effective_query)}</code></p><button class="btn" type="button" id="filtered-brief">带入研究底稿</button>`:''}
     <button id="save-search" class="btn" type="button">下载检索记录</button>
@@ -58,7 +59,7 @@ function libraryMatches(item, filter) {
   const matching = filter ? passages.filter(p => contains(p.text) || contains(p.label)) : [];
   const byline=paperByline(item);
   const matchedAuthors=filter?byline.filter(author=>contains(author.name) || contains(author.affiliation)):[];
-  return {byline,matchedAuthors,visible:matchedAuthors.length > 0 || matching.length > 0 || [item.title,item.detail,item.query,item.id,item.date,...(item.notices || [])].some(contains), matching};
+  return {byline,matchedAuthors,visible:matchedAuthors.length > 0 || matching.length > 0 || [item.title,item.detail,item.query,item.inputQuery,item.id,item.date,...(item.notices || [])].some(contains), matching};
 }
 
 function libraryEvidence(item, matching) {
@@ -66,6 +67,7 @@ function libraryEvidence(item, matching) {
   const empty = item.passages ? '本次检索未返回来源片段。' : '旧收藏仅保存了索引。重新检索并收藏可保存当前来源片段。';
   return `<details ${matching.length?'open':''}><summary>${matching.length?'匹配的来源片段':'收藏时的来源片段'}（${passages.length}）</summary>
     <p>${esc(item.id)} · 来源日期 ${esc(item.date || '未记录')} · 检索时间 ${esc(item.retrieved || '未记录')}</p>
+    ${item.inputQuery && item.inputQuery!==item.query?`<p>输入词 ${esc(item.inputQuery)}</p>`:''}
     ${item.query?`<p>检索式 <code>${esc(item.query)}</code></p>`:''}
     ${passages.map(p=>`<p><strong>${esc(p.label)}</strong><br>${esc(p.text)}</p>`).join('') || `<p>${empty}</p>`}</details>`;
 }
@@ -88,7 +90,7 @@ function renderResearch() {
     <p>输入公开药物名、适应症或检索式，查看数据库记录与原始来源。</p>
     <p>准备资产引进评审？<a href="#/pilot?lang=zh">查看单资产尽调交付物与试点报价申请</a> · <a href="#/pilot?lang=en" lang="en">Pilot quote</a> · <a href="#/pilot?lang=ja" lang="ja">見積もり依頼</a></p>
     <form id="research-form" class="card"><label for="research-query">检索内容</label>
-    <input id="research-query" required maxlength="400" placeholder="例如 imatinib 或 NCT00115739" value="${esc(researchSession.query)}">
+    <input id="research-query" required maxlength="400" placeholder="例如 依达方、imatinib 或 NCT00115739" value="${esc(researchSession.query)}">
     <label for="research-source">数据来源</label><select id="research-source"><option value="pubmed">PubMed 文献</option>
     <option value="guidelines">PubMed 指南文献</option><option value="trials">ClinicalTrials.gov 临床试验</option></select>
     <fieldset id="pubmed-filters"><legend>文献筛选</legend>
@@ -176,7 +178,7 @@ function renderResearch() {
     bindTrialResultButtons(output);
     const filteredBrief=$('#filtered-brief',output);
     if (filteredBrief) filteredBrief.onclick=()=>{
-      briefSeed={question:data.query,pubmed:data.effective_query,trials:data.query};nav('brief');
+      briefSeed={question:data.query,pubmed:data.effective_query,trials:data.asset_match?.name || data.query};nav('brief');
     };
     const follow = $('#follow-trials', output);
     if (follow) follow.onclick = async () => {
@@ -225,13 +227,13 @@ function renderResearch() {
       for (const item of data.items.filter(item => picked.has(item.id))) {
         entries.set(item.id, {id:item.id, title:item.title, detail:item.detail, date:item.date, retrieved:data.retrieved,
           authors:item.authors || [], author_affiliations:item.author_affiliations || [],
-          passages:item.passages || [], notices:item.notices || [], query:data.effective_query || data.query});
+          passages:item.passages || [], notices:item.notices || [], inputQuery:data.query, query:data.effective_query || data.query});
       }
       if (persist([...entries.values()])) toast('记录已加入本浏览器收藏。');
     };
     const save = $('#save-search', output);
     if (save) save.onclick = () => {
-      const lines = [data.query, data.source, data.retrieved, '实际检索式 '+(data.effective_query || data.query), '数据库命中 '+data.total+' · 取回 '+data.items.length, '', ...data.items.map(i =>
+      const lines = [data.query, data.source, data.retrieved, '实际检索式 '+(data.effective_query || data.query), ...(data.asset_match?['名称来源 '+data.asset_match.source]:[]), '数据库命中 '+data.total+' · 取回 '+data.items.length, '', ...data.items.map(i =>
         [i.title, [i.id, i.date, i.detail].filter(Boolean).join(' · '), i.url, ...(i.notices || []), ''].join('\n'))];
       const url = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/plain;charset=utf-8'}));
       const link = document.createElement('a');
