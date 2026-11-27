@@ -17,9 +17,25 @@
 
 ## 2026-11-27 部署核验与交付缺口
 
+### 当前可交给试点团队的任务
+
+11 月 27 日核验时，服务器运行版本为 `1dd038d`。以 12:19（台北时间）采集回执为准，生产 API 的 410 条事件与 GitHub 归档逐条一致，覆盖 8 个来源。23 项监测目标中 22 项成功，1 项 jRCT 登记待人工复核。服务器每小时同步定时器已启动。GitHub 本批由手动触发，每日 08:17 的计划任务仍待首条定时运行记录。[应用版本](https://github.com/james-lebron2000/HiJenny/commit/1dd038d) · [冻结归档](https://github.com/james-lebron2000/HiJenny/tree/26cae86/data/public/events) · [采集运行](https://github.com/james-lebron2000/HiJenny/actions/runs/45939218803)
+
+下表供产品负责人组织独立试用。主持人向参与者提供任务，保留核对样本供事后比对。下列样本均可从项目首页进入，截止日按台北日期填写。
+
+| 场景 | 给参与者的任务 | 主持人核对样本 | 待取得的验收证据 |
+|---|---|---|---|
+| HJ-10、HJ-11 临床资产简报 | 查询奥希替尼截至 2026-11-27 的主要终点。下载可打印简报，指出一项比较的分析人群、评价时间、效应估计和原报分析方法，再找回对应登记记录。 | NCT02296125 的中、日文简报各有 21 个登记分析字段。NCT03470922 的英文简报可用作第二个资产样本，共 11 个字段。 | 临床和统计试用者分别记录引用定位、字段理解、完成时间及需要协助的步骤。 |
+| HJ-11、HJ-13 商务尽调 | 在公开动态查找“约定扩区首付款”。从该条引用进入整份 SEC 申报的归档范围，说明约定首付款、地区权利及或有付款上限分别来自哪条披露，导出供同事复核。 | 申报编号 0001193125-24-152309，披露截止 2024-06-03、发现截止 2026-11-27。单条引用可展开 5 条归档，导出文件含相应 5 个归档编号。 | 买方人员提供所选归档编号、交给同事的简报、复核意见和遗漏的材料。 |
+| HJ-12 情报订阅 | 用自己的阅读器订阅一个关注资产，记录首次出现的新事件并再刷新一次。 | 先从首页按资产进入“公开资产动态”，核对订阅地址中的资产和滚动七天条件。新事件以仓库首次收录时间和唯一编号核对。 | 情报产品负责人记录采集运行编号、事件编号、首次送达时间、阅读器时区和重复提醒次数。等候新事件期间保留待验证状态。 |
+
+每次独立试用留存一行记录，填写角色、任务、应用版本、归档截止日、开始与结束时间、是否需要提示、实际产物和复核结论。采购进展沿用 HJ-10 的报价、交付和订单凭据。上述工程复验与真实试用分别登记。
+
+### 早期部署核验
+
 08:27 批次的历史核验版本为 `8a2c475`。以月度 JSONL 为基准逐条比对 API 返回的完整事件，在 4 个分页中核对了 319 条归档、8 个来源，来源内去重编号数及采集回执均一致。回执时间为台北时间 11 月 27 日 08:27，20 项采集目标全部核对成功。各类计数按归档或来源编号统计，同一批准事项和同一试验可能有多次归档或多个编号。[冻结数据](https://github.com/james-lebron2000/HiJenny/tree/6db75c6/data/public/events) · [采集回执](https://github.com/james-lebron2000/HiJenny/actions/runs/45916730192) · [应用 CI](https://github.com/james-lebron2000/HiJenny/actions/runs/45921253704)
 
-**11:29 复验（台北时间）。** 当前生产版本为 `cca639a`，发布测试通过 232 项。逐页核对 404 条归档与 8 个来源分类；11:03 手动采集回执共 23 项，22 项成功，1 项 jRCT 待人工复核。服务器的每小时同步定时器已启用。GitHub 每日 08:17 采集已配置，此时主分支的定时触发记录为 0。[生产版本](https://github.com/james-lebron2000/HiJenny/commit/cca639a) · [冻结归档及回执](https://github.com/james-lebron2000/HiJenny/tree/74d64d2/data/public/events) · [本次采集](https://github.com/james-lebron2000/HiJenny/actions/runs/45931823128) · [定时运行历史](https://github.com/james-lebron2000/HiJenny/actions/workflows/public-events.yml?query=event%3Aschedule)
+**11:29 复验（台北时间）。** 当时生产版本为 `cca639a`，发布测试通过 232 项。逐页核对 404 条归档与 8 个来源分类；11:03 手动采集回执共 23 项，22 项成功，1 项 jRCT 待人工复核。服务器的每小时同步定时器已启用。GitHub 每日 08:17 采集已配置，此时主分支的定时触发记录为 0。[生产版本](https://github.com/james-lebron2000/HiJenny/commit/cca639a) · [冻结归档及回执](https://github.com/james-lebron2000/HiJenny/tree/74d64d2/data/public/events) · [本次采集](https://github.com/james-lebron2000/HiJenny/actions/runs/45931823128) · [定时运行历史](https://github.com/james-lebron2000/HiJenny/actions/workflows/public-events.yml?query=event%3Aschedule)
 
 | 工作包 | 已部署，可由团队复验 | 下一项验收及牵头角色 |
 |---|---|---|
