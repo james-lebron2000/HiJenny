@@ -1,6 +1,7 @@
 """Recheck reviewed approval notices on the English NMPA site."""
 import hashlib
 import re
+import time
 from datetime import date
 from html import unescape
 
@@ -35,13 +36,22 @@ def records(target, fetch):
 
 def index_records(target, fetch):
     """Read title/date pairs only inside each official drug index listing."""
-    pages = target["pages"]
-    if not isinstance(pages, int) or not 1 <= pages <= 10:
+    requested = target["pages"]
+    if requested != "all" and (type(requested) is not int or not 1 <= requested <= 10):
         raise ValueError("Invalid NMPA index page count")
     seen = {}
-    for number in range(1, pages + 1):
+    number = 1
+    total = None
+    while True:
         page = "drugs.html" if number == 1 else f"drugs_{number}.html"
         html = fetch("https://english.nmpa.gov.cn/" + page, lambda response: response.read().decode("utf-8"))
+        pagination = re.search(r'id="displaypagenum" totalcount="([0-9]+)" currentpage="([0-9]+)"', html)
+        if not pagination or int(pagination[2]) != number:
+            raise ValueError("Unexpected NMPA index page")
+        page_count = int(pagination[1])
+        if page_count < number or (total is not None and total != page_count):
+            raise ValueError("NMPA index pagination changed during collection")
+        total = page_count
         entries = html.split('<div class="list-text">')[1:]
         if not entries:
             raise ValueError("NMPA index listings missing")
@@ -60,4 +70,8 @@ def index_records(target, fetch):
             if article in seen and row != seen[article]:
                 raise ValueError("Inconsistent NMPA notice across index pages")
             seen[article] = row
+        if number >= (total if requested == "all" else min(requested, total)):
+            break
+        number += 1
+        time.sleep(0.25)
     yield from seen.values()

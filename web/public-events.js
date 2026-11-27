@@ -37,6 +37,7 @@ function publicCoverage(receipt) {
       const params=new URLSearchParams({source:name});
       if (['fda','orange_book'].includes(sample.source)) params.set('application',sample.target);
       else if (['publications','trials','jrct'].includes(sample.source)) params.set('trial',sample.target);
+      else if (sample.source==='nmpa') params.set('notice_id',sample.target);
       else params.set('asset',sample.subject || '');
       const link=document.createElement('a');
       link.textContent='查看样本 '+sample.target;
@@ -57,6 +58,7 @@ function renderPublicEvents() {
     <div style="overflow-x:auto" aria-live="polite">正在读取覆盖范围…</div></details>
     <form id="public-event-filters" class="card">
     <label>资产或公司<input name="asset" placeholder="ivonescimab 或 Summit"></label>
+    <label>国家药监局公告编号<input name="notice_id" inputmode="numeric" pattern="[0-9]+" placeholder="1073516"></label>
     <label>国家药监局栏目标题关键词<input name="notice_title" placeholder="例如 Good Clinical Practice"></label>
     <label>FDA 申请号<input name="application" placeholder="NDA208065" title="NDA、ANDA 或 BLA 加六位数字"></label>
     <label>试验登记号<input name="trial" placeholder="NCT 或 jRCT 编号" pattern="[Nn][Cc][Tt][0-9]{8}|[Jj][Rr][Cc][Tt][0-9]{10}" title="NCT 加八位数字或 jRCT 加十位数字"></label>
@@ -147,6 +149,15 @@ function renderPublicEvents() {
           ${r.effective?'<p>事件发生或生效 '+esc(r.effective)+'</p>':''}
           ${r.region?'<p>地区 '+esc(r.region)+'</p>':''}
           <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.source)} · ${esc(r.record)}</a>`;
+        if (r.source==='NMPA' && !query.has('notice_id')) {
+          const params = new URLSearchParams({notice_id:r.record});
+          if (query.has('as_of')) params.set('as_of',query.get('as_of'));
+          const link = document.createElement('a');
+          link.href = '#/public-events?' + params;
+          link.textContent = '查看同一公告的全部归档';
+          const p = document.createElement('p');
+          p.append(link); card.append(p);
+        }
         if (['FDA Orange Book','Drugs@FDA'].includes(r.source)) {
           const application = r.record.split('/')[0];
           if (!query.has('application') || query.has('source')) {

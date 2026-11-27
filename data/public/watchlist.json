@@ -104,7 +104,7 @@
     {
       "id": "drugs",
       "company": "国家药监局药品栏目",
-      "pages": 3
+      "pages": "all"
     }
   ]
 }

@@ -18,7 +18,7 @@ KINDS = {"baseline": "首次收录", "change": "字段变化", "reviewed": "原�
 def event_filters(as_of: date | None = None, asset: str = "", region: str = "", since: date | None = None,
                   discovered_from: date | None = None, discovered_to: date | None = None,
                   disclosed_to: date | None = None, source: Literal["NMPA", "SEC", "PubMed", "ClinicalTrials.gov", "Drugs@FDA", "EMA", "jRCT", "FDA Orange Book"] | None = None,
-                  notice_title: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
+                  notice_title: str = "", notice_id: str = "", trial: str = "", application: str = "", event_id: str | None = None, publication_status: bool = False, study_interruption: bool = False,
                   kind: Literal["baseline", "change", "reviewed"] | None = None):
     if discovered_from and discovered_to and discovered_from > discovered_to:
         raise HTTPException(422, "发现起始日期须早于或等于结束日期。")
@@ -26,6 +26,12 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
                        OR instr(lower(json_extract(payload, '$.subject')), lower(?))>0)
                     AND instr(lower(coalesce(region,'')), lower(?))>0 AND date>=?"""
     args = [asset.strip(), asset.strip(), region.strip(), since.isoformat() if since else ""]
+    notice_id = notice_id.strip()
+    if notice_id:
+        if not re.fullmatch(r"[0-9]+", notice_id):
+            raise HTTPException(422, "请输入数字公告编号。")
+        sql += """ AND json_extract(payload, '$.source')='NMPA' AND json_extract(payload, '$.record')=?"""
+        args.append(notice_id)
     notice_title = notice_title.strip()
     if notice_title:
         sql += """ AND json_extract(payload, '$.category')='nmpa-index'
@@ -90,7 +96,7 @@ def event_filters(as_of: date | None = None, asset: str = "", region: str = "", 
     order = (" ORDER BY julianday(json_extract(payload, '$.observed')) DESC, date DESC, id"
              if discovered_from or discovered_to else " ORDER BY date DESC, id")
     labels = [f"{label}：{value}" for label, value in (
-        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("试验登记号", trial), ("FDA 申请号", application), ("来源", source), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
+        ("范围", "试验暂停、终止或撤回" if study_interruption else None), ("NMPA 栏目标题含", notice_title), ("NMPA 公告编号", notice_id), ("试验登记号", trial), ("FDA 申请号", application), ("来源", source), ("披露截止日", disclosed_to), ("范围", "论文出版状态" if publication_status else None), ("动态编号", event_id), ("资产或公司", asset), ("地区", region), ("披露起始日", since), ("发现起始日", discovered_from),
         ("发现结束日", discovered_to), ("记录类型", KINDS.get(kind))) if value]
     table = "events"
     if as_of:
