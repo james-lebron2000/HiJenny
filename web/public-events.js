@@ -30,6 +30,7 @@ function publicCoverage(receipt) {
     trials: ['美国','临床试验','ClinicalTrials.gov'],
     publications: ['美国','文献','PubMed'],
     orange_book: ['美国','药品专利','FDA Orange Book'],
+    orange_book_uses: ['美国','药品专利','FDA Orange Book'],
     fda: ['美国','监管','Drugs@FDA'],
     jrct: ['日本','临床试验','jRCT'],
     ema: ['欧盟','监管','EMA']
@@ -56,17 +57,34 @@ function publicCoverage(receipt) {
       const dates=checks.map(r=>r.last_success_utc || (r.status==='ok'?receipt.finished_utc:null)).filter(Boolean).sort();
       cell.append(name,document.createElement('br'),'核对成功 '+ok.length+' / '+checks.length);
       if (dates.length) cell.append(document.createElement('br'),'最近成功 '+fmtDate(dates.at(-1)));
-      const sample=ok.find(r=>r.records>0);
-      if (!sample) continue;
-      const params=new URLSearchParams({source:name});
-      if (['fda','orange_book'].includes(sample.source)) params.set('application',sample.target);
-      else if (['publications','trials','jrct'].includes(sample.source)) params.set('trial',sample.target);
-      else if (sample.source==='nmpa') params.set('notice_id',sample.target);
-      else params.set('asset',sample.subject || '');
-      const link=document.createElement('a');
-      link.textContent='查看样本 '+sample.target;
-      link.href='#/public-events?'+params;
-      cell.append(document.createElement('br'),link);
+      const details=document.createElement('details');
+      const summary=document.createElement('summary');
+      summary.textContent='查看 '+checks.length+' 项核对明细';
+      details.append(summary);
+      const list=document.createElement('ul');
+      for (const check of checks) {
+        const item=document.createElement('li');
+        const section={orange_book:'专利与独占期',orange_book_uses:'专利用途释义',nmpa_index:'公告目录'}[check.source];
+        item.append([check.subject,check.target,section].filter(Boolean).join(' · '));
+        if (check.status==='ok') item.append(' · 命中 '+check.records+' 条来源记录');
+        else item.append(' · 核对失败'+(check.error?' · '+check.error:''));
+        const last=check.last_success_utc || (check.status==='ok'?receipt.finished_utc:null);
+        item.append(document.createElement('br'),last?'最近成功 '+fmtDate(last):'尚无成功记录');
+        if (check.status==='ok' && check.records>0) {
+          const params=new URLSearchParams({source:name});
+          if (['fda','orange_book','orange_book_uses'].includes(check.source)) params.set('application',check.target);
+          if (['publications','trials','jrct'].includes(check.source)) params.set('trial',check.target);
+          if (check.source==='nmpa') params.set('notice_id',check.target);
+          if (check.source==='ema') params.set('source_record',check.target);
+          const link=document.createElement('a');
+          link.textContent=check.source==='nmpa_index'?'查看该来源归档':'查看样本 '+check.target;
+          link.href='#/public-events?'+params;
+          item.append(document.createElement('br'),link);
+        }
+        list.append(item);
+      }
+      details.append(list);
+      cell.append(details);
     }
   }
   return table;
