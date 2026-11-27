@@ -252,6 +252,40 @@ def display(value):
     return "未披露" if value is None else str(value)
 
 
+def event_details(row):
+    value = display(row["value"])
+    kind = KINDS[row["kind"]]
+    if (row["kind"] == "change" and row["source"] == "Drugs@FDA" and
+            row["previous"] == row["value"] and row.get("previous_date") == row["source_date"]):
+        kind = "标签试验关联更新" if row.get("label_trials_changed") else "配套文件更新"
+    elif row["kind"] == "change" and row.get("category") in ("primary-outcomes", "safety-summary"):
+        value = "本次归档\n" + value + "\n\n上次归档\n" + display(row["previous"])
+    elif row["kind"] == "change":
+        value = display(row["previous"]) + " → " + value
+    lines = [f'{kind} · {value}', f'{row.get("date_label", "来源披露")} {row["source_date"]} · 首次发现 {row["observed"]}']
+    if row.get("category") == "publication-mention":
+        lines.append("题名或摘要提及该登记号，结果归属待原文复核。")
+    if row.get("effective"):
+        lines.append("事件发生或生效 " + row["effective"])
+    if row.get("region"):
+        lines.append("地区 " + row["region"])
+    lines.append(f'{row["source"]} · {row["record"]} · {row["url"]}')
+    if row["source"] == "FDA Orange Book":
+        lines.append("专利和独占期分别归档。这些日期不能单独确定仿制药上市时间。")
+    if row["source"] == "jRCT":
+        lines.append("登记所列关联试验 · https://clinicaltrials.gov/study/" + row["trial"])
+    for trial in row.get("label_trials", []):
+        lines.extend([f'标签所列试验 · {trial["name"]} · https://clinicaltrials.gov/study/{trial["id"]}',
+                      f'{trial["section"]} · 第 {trial["page"]} 页 · {trial["label"]}#page={trial["page"]}'])
+    diff = document_changes(row)
+    for doc in row.get("documents", []):
+        prefix = "本次新增归档链接 · " if doc in diff.get("added", []) else ""
+        lines.append(f'{prefix}{doc["type"]} · {doc["url"]}')
+    for doc in diff.get("removed", []):
+        lines.append(f'仅上次归档列出 · {doc["type"]} · {doc["url"]}')
+    return lines
+
+
 @router.get("/api/public-events/feed.atom")
 def event_feed(request: Request, filters=Depends(event_filters)):
     table, sql, args, _, labels, _ = filters
@@ -277,9 +311,7 @@ def event_feed(request: Request, filters=Depends(event_filters)):
         ET.SubElement(entry, "link", rel="related", title=row["source"], href=row["url"])
         ET.SubElement(entry, "updated").text = row["observed"]
         ET.SubElement(entry, "title").text = f'{row["asset"] or row["subject"]} · {row["field"]}'
-        ET.SubElement(entry, "summary").text = (
-            f'{KINDS[row["kind"]]} · {row["source"]} · {row["record"]} · '
-            f'{row.get("date_label", "来源披露")} {row["source_date"]}\n{display(row["value"])}')
+        ET.SubElement(entry, "summary", type="text").text = "\n".join(event_details(row))
     return Response(ET.tostring(feed, encoding="utf-8", xml_declaration=True), media_type="application/atom+xml")
 
 
@@ -307,37 +339,7 @@ def report(request: Request, filters=Depends(event_filters)):
         count = 0
         for count, (payload,) in enumerate(rows, 1):
             row = json.loads(payload)
-            value = display(row["value"])
-            kind = KINDS[row["kind"]]
-            if (row["kind"] == "change" and row["source"] == "Drugs@FDA" and
-                    row["previous"] == row["value"] and row.get("previous_date") == row["source_date"]):
-                kind = "标签试验关联更新" if row.get("label_trials_changed") else "配套文件更新"
-            elif row["kind"] == "change" and row.get("category") in ("primary-outcomes", "safety-summary"):
-                value = "本次归档\n" + value + "\n\n上次归档\n" + display(row["previous"])
-            elif row["kind"] == "change":
-                value = display(row["previous"]) + " → " + value
-            lines.extend(["", f'{count}. {row["asset"] or row["subject"]} · {row["field"]}',
-                          f'{kind} · {value}', f'{row.get("date_label", "来源披露")} {row["source_date"]} · 首次发现 {row["observed"]}'])
-            if row.get("category") == "publication-mention":
-                lines.append("题名或摘要提及该登记号，结果归属待原文复核。")
-            if row.get("effective"):
-                lines.append("事件发生或生效 " + row["effective"])
-            if row.get("region"):
-                lines.append("地区 " + row["region"])
-            lines.append(f'{row["source"]} · {row["record"]} · {row["url"]}')
+            lines.extend(["", f'{count}. {row["asset"] or row["subject"]} · {row["field"]}', *event_details(row)])
             lines.append("HiJenny 单条归档 · " + archive_page + urlencode({"event": row["id"]}))
-            if row["source"] == "FDA Orange Book":
-                lines.append("专利和独占期分别归档。这些日期不能单独确定仿制药上市时间。")
-            if row["source"] == "jRCT":
-                lines.append("登记所列关联试验 · https://clinicaltrials.gov/study/" + row["trial"])
-            for trial in row.get("label_trials", []):
-                lines.extend([f'标签所列试验 · {trial["name"]} · https://clinicaltrials.gov/study/{trial["id"]}',
-                              f'{trial["section"]} · 第 {trial["page"]} 页 · {trial["label"]}#page={trial["page"]}'])
-            diff = document_changes(row)
-            for doc in row.get("documents", []):
-                prefix = "本次新增归档链接 · " if doc in diff.get("added", []) else ""
-                lines.append(f'{prefix}{doc["type"]} · {doc["url"]}')
-            for doc in diff.get("removed", []):
-                lines.append(f'仅上次归档列出 · {doc["type"]} · {doc["url"]}')
     lines.append(f"\n共 {count} 条")
     return PlainTextResponse("\n".join(lines), headers={"Content-Disposition": 'attachment; filename="HiJenny-public-events.txt"'})
