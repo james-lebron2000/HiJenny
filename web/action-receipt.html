@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HiJenny · 会后行动回执</title>
+<style>body{font:1rem/1.6 system-ui,sans-serif;max-width:42rem;margin:2rem auto;padding:0 1rem;color:#172c36}label{display:block;margin:1rem 0}textarea,input{display:block;width:100%;box-sizing:border-box;font:inherit}button{font:inherit}dd{white-space:pre-wrap;overflow-wrap:anywhere}</style>
+<main><h1>会后行动回执</h1><dl><dt>会议问题</dt><dd id="question"></dd><dt>会后行动</dt><dd id="action"></dd><dt>负责人</dt><dd id="owner"></dd><dt>期限</dt><dd id="due"></dd><dt>会议确认版本</dt><dd id="version"></dd></dl>
+<form><label>登记人<input name="actor" required maxlength="120"></label><label>完成结果或交付物位置<textarea name="note" required maxlength="2000" rows="5"></textarea></label><button>下载完成回执</button></form><p role="status">填写后请将下载的 JSON 回执交回会议组织人。</p></main>
+<script>
+document.querySelector('form').onsubmit=event=>{
+  event.preventDefault();
+  const form=event.target, actor=form.elements.actor.value.trim(),note=form.elements.note.value.trim();
+  const version=document.getElementById('version').textContent,status=document.querySelector('[role=status]');
+  if (!version || !actor || !note) {status.textContent='请使用组织人提供的任务单，填写登记人和完成结果。';return;}
+  const task=document.getElementById('action').textContent;
+  const receipt={type:'hijenny.meeting-action.v1',version,task,actor,note};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(receipt,null,2)],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download='HiJenny-会后回执-'+version+'.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  status.textContent='请将回执文件交回组织人，由其复核并登记。';
+};
+</script></html>

@@ -226,6 +226,8 @@ async function renderMedical() {
             <button type="button" class="btn" data-open-action="${esc(v.id)}">${esc(v.question)} · 查看确认版</button>
             ${closed?`<p>完成记录 · ${esc(closed.actor)} · ${esc(fmtDate(closed.at))} · ${esc(closed.note)}</p>`:
               historical?'<p>历史版本未登记完成情况。</p>':`<details><summary>登记完成情况</summary><form data-close-action="${esc(v.id)}">
+              <button type="button" class="btn" data-send-action="${esc(v.id)}">下载给负责人的离线任务单</button>
+              <label>从负责人的回执填入<input type="file" data-read-receipt accept=".json,application/json"></label>
               <label>登记人<input required name="actor" maxlength="120"></label>
               <label>完成结果或交付物位置<textarea required name="note" maxlength="2000"></textarea></label>
               <button class="btn">保存完成记录</button></form></details>`}</article>`);
@@ -242,7 +244,41 @@ async function renderMedical() {
       }
       agenda.querySelector('[data-action-owner]').onchange=e=>{actionOwner=e.target.value;refreshActions();};
       filter.onchange=e=>{actionFilter=e.target.value;refreshActions();};
-      list.onclick=e=>{const button=e.target.closest('[data-open-action]');if(button) openSaved(button.dataset.openAction);};
+      const status=agenda.querySelector('[role=status]');
+      list.onclick=async e=>{
+        const open=e.target.closest('[data-open-action]');
+        if (open) openSaved(open.dataset.openAction);
+        const send=e.target.closest('[data-send-action]');
+        if (!send) return;
+        try {
+          const v=actions.find(item=>item.id===send.dataset.sendAction);
+          const response=await fetch('/static/action-receipt.html');
+          if (!response.ok) throw Error();
+          const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+          for (const [id,value] of Object.entries({version:v.id,question:v.question,action:v.action,owner:v.owner,due:v.due})) {
+            doc.getElementById(id).textContent=value || '未填写';
+          }
+          const url=URL.createObjectURL(new Blob(['<!doctype html>'+doc.documentElement.outerHTML],{type:'text/html;charset=utf-8'}));
+          const a=document.createElement('a');a.href=url;a.download='HiJenny-会后任务-'+v.id+'.html';a.click();
+          setTimeout(()=>URL.revokeObjectURL(url),1000);
+        } catch {status.textContent='任务单下载失败，请重试。';}
+      };
+      list.onchange=async e=>{
+        if (!e.target.matches('[data-read-receipt]')) return;
+        const file=e.target.files[0],form=e.target.form;
+        if (!file) return;
+        try {
+          if (file.size>131072) throw Error('文件超过回执大小限制。');
+          const r=JSON.parse(await file.text());
+          const v=actions.find(item=>item.id===form.dataset.closeAction);
+          if (r?.type!=='hijenny.meeting-action.v1' || r.version!==v.id || r.task!==v.action) throw Error('回执与本项行动或会议版本不符。');
+          if (typeof r.actor!=='string' || !r.actor.trim() || r.actor.length>120 ||
+              typeof r.note!=='string' || !r.note.trim() || r.note.length>2000) throw Error('回执的登记人或完成结果无效。');
+          form.elements.actor.value=r.actor;form.elements.note.value=r.note;
+          status.textContent='已填入回执，请核对登记人和结果后保存。';
+        } catch(error) {status.textContent='未导入：'+error.message;}
+        e.target.value='';
+      };
       list.onsubmit=e=>{
         e.preventDefault();
         const form=e.target, actor=form.elements.actor.value.trim(), note=form.elements.note.value.trim();
