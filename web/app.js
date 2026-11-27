@@ -207,6 +207,10 @@ function nav(view) {
   location.hash = `#/${view}${project ? '?project=' + encodeURIComponent(project) : ''}`;
 }
 
+function projectEditAttribute() {
+  return state.projectPermissions.edit === false ? 'disabled title="需要项目编辑权限"' : '';
+}
+
 function setView(html) {
   const view = $('#view');
   if (view) view.innerHTML = html;
@@ -895,7 +899,7 @@ async function renderUpload(seq) {
       const ocr = scans?.length ? `<div data-ocr-document="${esc(doc.document_id)}" data-original="${esc(fileUrl)}">
         <label>扫描原页页码 <input type="number" min="1" max="${Number(doc.page_count)}" value="${scans[0][0]}"></label>
         <label>识别语言 <select><option value="eng">英文</option><option value="chi_sim+eng">简体中文及英文</option><option value="chi_tra+eng">繁體中文及英文</option><option value="jpn+eng">日文及英文</option></select></label>
-        <button type="button" class="btn sm" data-action="page-ocr">读取本页文字</button>
+        <button type="button" class="btn sm" ${projectEditAttribute()} data-action="page-ocr">读取本页文字</button>
         <div role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></div></div>
         <div><label>打开同事的核对记录（JSON）<input type="file" data-change="open-ocr-note"
           data-document="${esc(doc.document_id)}" accept=".json,application/json"></label>
@@ -924,12 +928,12 @@ async function renderUpload(seq) {
     setView(`
       <div class="page-head">
         <div><h1>Upload &amp; Analysis</h1>
-          <div class="sub">${esc(state.project ? state.project.name : '')} · drag &amp; drop the full due-diligence package, then run the evidence pipeline.</div>
+          <div class="sub">${esc(state.project ? state.project.name : '')} · ${state.projectPermissions.edit === false ? '只读访问，可从下方材料列表打开原件。' : 'drag &amp; drop the full due-diligence package, then run the evidence pipeline.'}</div>
         </div>
         <div class="actions">
           <button class="btn" data-action="refresh-view">Refresh</button>
-          <button class="btn" ${state.projectPermissions.edit === false ? 'disabled' : ''} data-action="run-analysis" data-force="1">Force re-run</button>
-          <button class="btn primary" ${state.projectPermissions.edit === false ? 'disabled' : ''} data-action="run-analysis">▶ Run analysis</button>
+          <button class="btn" ${projectEditAttribute()} data-action="run-analysis" data-force="1">Force re-run</button>
+          <button class="btn primary" ${projectEditAttribute()} data-action="run-analysis">▶ Run analysis</button>
         </div>
       </div>
       ${ingestionMissing ? `<div class="notice warn"><span>⚠️</span><div>The parsing module (<code>hijenny.ingestion</code>) is not installed yet. Uploads are registered and saved; pages/evidence appear once the parser is available and analysis is run.</div></div>` : ''}
@@ -941,7 +945,7 @@ async function renderUpload(seq) {
         { k: 'Questions', v: s.questions || 0 },
         { k: 'Coverage checks', v: s.coverage || 0 },
       ])}
-      <div class="card">
+      ${state.projectPermissions.edit === false ? '' : `<div class="card">
         <div class="card-head"><h2>Package upload</h2><span class="sub">multi-file · PDF, DOCX, XLSX, PPTX</span></div>
         <div class="card-body">
           <div class="dropzone" data-action="browse-files" role="button" tabindex="0">
@@ -955,7 +959,7 @@ async function renderUpload(seq) {
           <input type="file" id="file-input" multiple class="hidden" data-input="file-upload" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.txt,.md" />
           ${queueHtml}
         </div>
-      </div>
+      </div>`}
       <div id="run-progress-host">${runProgressHtml()}</div>
       <div class="card">
         <div class="card-head"><h2>Documents</h2><span class="sub">${state.documents.length} registered</span>
@@ -965,7 +969,7 @@ async function renderUpload(seq) {
         <div class="table-wrap"><table class="data">
           <thead><tr><th>Filename</th><th>Type</th><th>Version</th><th class="num">Pages</th><th>Status</th><th class="num">Evidence</th><th>Version state</th><th>Parse error</th><th>File</th></tr></thead>
           <tbody>${docRows}</tbody>
-        </table></div>` : emptyPanel('No documents yet', 'Upload the seller package to start building the evidence chain.')}
+        </table></div>` : emptyPanel('No documents yet', state.projectPermissions.edit === false ? '本项目尚无可查阅的材料。' : 'Upload the seller package to start building the evidence chain.')}
       </div>`);
   } catch (error) {
     if (seq === state.renderSeq) setView(errorPanel(error));
@@ -1274,7 +1278,7 @@ function findingsTableHtml() {
     const evId = (finding.evidence_ids || [])[0];
     return `<tr>
       <td>
-        <select data-change="patch-finding" data-id="${esc(finding.finding_id)}" data-field="severity" class="sev-${esc(finding.severity)}">
+        <select ${projectEditAttribute()} data-change="patch-finding" data-id="${esc(finding.finding_id)}" data-field="severity" class="sev-${esc(finding.severity)}">
           ${selectOptions(SEVERITIES, finding.severity)}
         </select>
       </td>
@@ -1286,7 +1290,7 @@ function findingsTableHtml() {
       </td>
       <td>${esc(finding.domain || '—')}</td>
       <td>
-        <select data-change="patch-finding" data-id="${esc(finding.finding_id)}" data-field="status">
+        <select ${projectEditAttribute()} data-change="patch-finding" data-id="${esc(finding.finding_id)}" data-field="status">
           ${selectOptions(FINDING_STATUSES, finding.status)}
         </select>
       </td>
@@ -1319,8 +1323,8 @@ function questionsTableHtml() {
   });
   const body = rows.map((q) => `
     <tr>
-      <td><select data-change="patch-question" data-id="${esc(q.question_id)}" data-field="priority">${selectOptions(PRIORITIES, q.priority)}</select></td>
-      <td><select data-change="patch-question" data-id="${esc(q.question_id)}" data-field="owner">${selectOptions(OWNERS, q.owner)}</select></td>
+      <td><select ${projectEditAttribute()} data-change="patch-question" data-id="${esc(q.question_id)}" data-field="priority">${selectOptions(PRIORITIES, q.priority)}</select></td>
+      <td><select ${projectEditAttribute()} data-change="patch-question" data-id="${esc(q.question_id)}" data-field="owner">${selectOptions(OWNERS, q.owner)}</select></td>
       <td>${esc(q.category || '—')}</td>
       <td>
         <div class="title-cell">${esc(q.question)}</div><a href="#/followup?project=${esc(state.projectId)}&question=${esc(q.question_id)}">跟踪卖方答复 →</a>
@@ -1328,9 +1332,9 @@ function questionsTableHtml() {
         ${(q.required_documents || []).length ? `<div class="muted" style="margin-top:3px">Required: ${esc((q.required_documents || []).join('; '))}</div>` : ''}
       </td>
       <td class="num">${(q.evidence_ids || []).length}</td>
-      <td><select data-change="patch-question" data-id="${esc(q.question_id)}" data-field="status">${selectOptions(QUESTION_STATUSES, q.status)}</select></td>
+      <td><select ${projectEditAttribute()} data-change="patch-question" data-id="${esc(q.question_id)}" data-field="status">${selectOptions(QUESTION_STATUSES, q.status)}</select></td>
       <td>${statusChip(q.review_status)}</td>
-      <td><button class="btn sm danger" data-action="delete-question" data-id="${esc(q.question_id)}">Delete</button></td>
+      <td><button class="btn sm danger" ${projectEditAttribute()} data-action="delete-question" data-id="${esc(q.question_id)}">Delete</button></td>
     </tr>`).join('');
   return `
     <div class="card">
@@ -1382,10 +1386,10 @@ function findingsViewHtml() {
       <div class="actions">
         <button class="btn" data-action="refresh-view">Refresh</button>
         <button class="btn" data-action="toggle-events">${state.showEvents ? 'Hide' : 'Review'} events</button>
-        <button class="btn" ${state.projectPermissions.edit === false ? 'disabled' : ''} data-action="run-analysis" data-force="1">Re-run analysis</button>
-        <button class="btn" data-action="export-xlsx">内部尽调工作簿</button>
+        <button class="btn" ${projectEditAttribute()} data-action="run-analysis" data-force="1">Re-run analysis</button>
+        <button class="btn" ${projectEditAttribute()} data-action="export-xlsx">内部尽调工作簿</button>
         <button class="btn" data-action="seller-reply">导出已批准的卖方问题单</button>
-        <button class="btn primary" data-action="generate-report">Generate report</button>
+        <button class="btn primary" ${projectEditAttribute()} data-action="generate-report">Generate report</button>
       </div>
     </div>
     <div class="card" style="margin-bottom:14px"><div class="card-head"><h2>Risk profile</h2><span class="sub">active findings only${historyCount ? ` · ${historyCount} in history` : ''}</span></div>
@@ -1540,7 +1544,7 @@ function renderReportView() {
       </div>
       <div class="actions">
         <button class="btn" data-action="refresh-view">Refresh</button>
-        <button class="btn navy" data-action="generate-report">${md.exists ? 'Regenerate report' : 'Generate report'}</button>
+        <button class="btn navy" ${projectEditAttribute()} data-action="generate-report">${md.exists ? 'Regenerate report' : 'Generate report'}</button>
         ${docx.exists ? `<a class="btn" href="${esc(docx.url)}">Download DOCX</a>` : ''}
         ${md.exists ? `<a class="btn" href="${esc(md.url)}" download>Download MD</a>` : ''}
         ${xlsx.exists ? `<a class="btn" href="${esc(xlsx.url)}">内部尽调工作簿</a>` : ''}
@@ -1557,8 +1561,8 @@ function renderReportView() {
     <div class="notice info"><span>📋</span><div><strong>Decision Brief — Section 1</strong> — one-page summary for BD heads / investment committee, with evidence highlights, top open risks, seller questions and missing evidence. No automated Go/No-Go recommendation is made; the brief summarises evidence and open items for human review.</div></div>
     ${md.exists && state.reportMd ? `<div class="report">${renderMarkdown(state.reportMd)}</div>` : `
       <div class="card">${emptyPanel('No report generated yet',
-        'Run the analysis pipeline, then generate the Markdown + DOCX report and the Excel workbooks from the reviewed evidence chain.',
-        '<button class="btn primary" data-action="generate-report">Generate report</button>')}</div>`}
+        state.projectPermissions.edit === false ? '编辑人员生成报告后，即可在此查阅和下载。' : 'Run the analysis pipeline, then generate the Markdown + DOCX report and the Excel workbooks from the reviewed evidence chain.',
+        state.projectPermissions.edit === false ? '' : '<button class="btn primary" data-action="generate-report">Generate report</button>')}</div>`}
     <div class="card" style="margin-top:16px">
       <div class="card-head"><h2>Outputs</h2><span class="sub">Files under data/projects/&lt;id&gt;/exports/</span></div>
       <div class="card-body">
