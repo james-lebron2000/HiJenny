@@ -106,7 +106,18 @@ function downloadHomeEvidence(asset,result,lang) {
         : '<p>'+analyses.missing+'</p>')+'</li>';
   }).join('');
   const report=`<!doctype html><html lang="${lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(asset)} · ${copy.title}</title>
-    <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}.comparison-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.85em}th,td{padding:.25rem;text-align:left;vertical-align:top;border:1px solid #aab8be;overflow-wrap:anywhere}@media print{.comparison-scroll{overflow:visible}li:has(table){break-inside:auto}body{margin:0;font-size:10pt}h2,h3{break-after:avoid}article{break-inside:avoid}}</style>
+    <style>body{font:16px/1.55 system-ui,sans-serif;max-width:54rem;margin:3rem auto;padding:0 1.2rem;color:#172b35}h1,h2,h3{line-height:1.25}h2{border-bottom:1px solid #66838b;padding-bottom:.4rem}article{margin:1.4rem 0}dt{font-weight:600}dd{margin:0 0 .4rem}a{color:#075f70;overflow-wrap:anywhere}.comparison-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.85em}th,td{padding:.25rem;text-align:left;vertical-align:top;border:1px solid #aab8be;overflow-wrap:anywhere}
+    @page{margin:15mm 13mm 17mm;@bottom-right{content:counter(page) " / " counter(pages);font:9pt system-ui;color:#47565d}}
+    @media print{
+      body{margin:0;padding:0;max-width:none;font-size:10pt}
+      .comparison-scroll{overflow:visible}
+      h2,h3,h4,dt{break-after:avoid}
+      thead{display:table-header-group;break-inside:avoid}
+      tr{break-inside:avoid}
+      article{break-inside:avoid}
+      article:has(table){break-inside:auto}
+      table{font-size:9pt}
+    }</style>
     <main><p>HiJenny · ${copy.title}</p><h1>${esc(asset)}</h1><p>${headers.cutoff} ${esc(result.as_of)}</p><p>${copy.scope}</p>`+
     section(headers.trials,result.trials,r=>`<h3>${esc(r.record)} · ${esc(r.asset)}</h3>`+
       details([['phase',copy.phase],['status',copy.status],['sponsor',copy.sponsor],['conditions',copy.conditions],['countries',copy.sites]]
