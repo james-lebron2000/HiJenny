@@ -1091,6 +1091,9 @@ function quotePanelHtml() {
 
 function evidenceReviewForm(ev) {
   if (state.projectPermissions.edit === false) return '';
+  if (state.previewDocId !== ev.document_id || state.previewPage !== Number(ev.page || 1)) {
+    return `<button class="btn sm" data-action="select-evidence" data-id="${esc(ev.evidence_id)}">返回引文所在页登记复核</button>`;
+  }
   if (state.evidenceIdentityRequired && !state.evidenceUser) return '<p>通过身份网关登录后可登记复核。</p>';
   const statuses = {pending:'待复核', verified:'已核实', failed:'与原件不符', unverifiable:'现有材料无法核实'};
   return `<details><summary>登记证据复核</summary>
