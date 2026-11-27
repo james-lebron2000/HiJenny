@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hijenny import config, exports, pipeline, reporting, store
 from sqlalchemy import text
-from hijenny.api.org_scope import request_org
+from hijenny.api.org_scope import PrivateProjectCachePolicy, request_org
 from hijenny.parse_coverage import pdf_review_ranges
 from hijenny import diligence
 from hijenny.schemas import Owner, utcnow
@@ -534,6 +534,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.add_middleware(PrivateProjectCachePolicy)
 
     if _WEB_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(_WEB_DIR)), name="static")

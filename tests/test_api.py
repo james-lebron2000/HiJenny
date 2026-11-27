@@ -299,8 +299,14 @@ def test_org_scope_follows_project_resources_and_downloads(client):
               f"/api/documents/{rows['document_id']}", f"/api/evidence/{rows['evidence_id']}",
               f"/api/questions/{rows['question_id']}", f"/api/findings/{rows['finding_id']}"]
     for path in routes:
-        assert client.get(path, headers={"X-Org-Id": "ORG_DEFAULT"}).status_code == 200, path
-        assert client.get(path, headers={"X-Org-Id": "ORG_OTHER"}).status_code == 404, path
+        for org, status in [("ORG_DEFAULT", 200), ("ORG_OTHER", 404)]:
+            response = client.get(path, headers={"X-Org-Id": org})
+            assert response.status_code == status, path
+            assert response.headers["cache-control"] == "private, no-store", path
+            assert "X-Org-Id" in response.headers["vary"], path
+    assert client.get("/api/projects").headers["cache-control"] == "private, no-store"
+    feed = client.get("/api/public-events/feed.atom")
+    assert feed.headers["cache-control"] == "no-cache" and "etag" in feed.headers
 
 
 # ---------------------------------------------------------------------------
