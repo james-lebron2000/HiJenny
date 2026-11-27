@@ -39,7 +39,10 @@ def import_month(db, name, sha, content):
         return
     for line in content.splitlines():
         row = json.loads(line)
-        if row["url"] != "https://www.accessdata.fda.gov/scripts/cder/ob/results_patent.cfm" and not row["url"].startswith(("https://www.sec.gov/Archives/", "https://clinicaltrials.gov/study/", "https://pubmed.ncbi.nlm.nih.gov/",
+        if row["source"] == "NMPA":
+            if not re.fullmatch(r"https://english\.nmpa\.gov\.cn/[0-9]{4}-[0-9]{2}/[0-9]{2}/c_([0-9]+)\.htm", row["url"]) or not row["url"].endswith("/c_" + row["record"] + ".htm"):
+                raise ValueError("Unexpected NMPA notice URL")
+        elif row["url"] != "https://www.accessdata.fda.gov/scripts/cder/ob/results_patent.cfm" and not row["url"].startswith(("https://www.sec.gov/Archives/", "https://clinicaltrials.gov/study/", "https://pubmed.ncbi.nlm.nih.gov/",
                                       "https://www.accessdata.fda.gov/scripts/cder/ob/patent_info.cfm?",
                                       "https://www.ema.europa.eu/en/medicines/human/EPAR/", "https://jrct.mhlw.go.jp/en-latest-detail/",
                                       "https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=")):

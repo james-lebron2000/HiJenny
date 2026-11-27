@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from hijenny.publication import publication_notices
-from tools import jrct, orange_book
+from tools import jrct, nmpa, orange_book
 
 ROOT = Path(__file__).resolve().parents[1] / "data/public"
 AGENT = "HiJenny research jakeljm12@163.com"
@@ -262,7 +262,8 @@ def collect(root=ROOT, receipt=None):
     ema_dataset = cache(lambda: fetch(EMA_MEDICINES))
     orange_dataset = cache(lambda: fetch(orange_book.DOWNLOAD, orange_book.read_archive))
     use_definitions = cache(lambda: fetch(orange_book.USE_CODES, orange_book.read_definitions))
-    for group, read in (("orange_book_uses", lambda t: orange_book.records(t, orange_dataset, use_definitions, now[:10])),
+    for group, read in (("nmpa", lambda target: nmpa.records(target, fetch)),
+                        ("orange_book_uses", lambda t: orange_book.records(t, orange_dataset, use_definitions, now[:10])),
                         ("orange_book", lambda target: orange_book.records(target, orange_dataset)), ("jrct", lambda target: jrct.records(target, fetch)), ("ema", lambda target: ema_records(target, ema_dataset)), ("sec", sec_records), ("fda", fda_records), ("trials", trial_records), ("publications", publication_records)):
         for target in watch.get("orange_book" if group == "orange_book_uses" else group, []):
             check = {"source": group, "target": target.get("id") or target.get("cik")}

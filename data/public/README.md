@@ -31,3 +31,5 @@ Drugs@FDA 按公开名单中的 NDA、ANDA 或 BLA 申请号核对原始与补�
 美国专利来源采用 [FDA Orange Book 月度下载文件](https://www.fda.gov/drugs/drug-approvals-and-databases/orange-book-data-files)。按申请及产品编号对照产品、专利与独占期三张表；同一专利的不同用途代码各自保留。来源日期取下载文件的最后修改日。
 
 Orange Book 专利用途代码另与 [FDA 官方释义表](https://www.accessdata.fda.gov/scripts/cder/ob/results_patent.cfm) 逐码对应，按产品归档英文原义和关联专利号。释义核对日为 UTC 观察日期；FDA 月度专利原表保留自身文件日期。
+
+中国监管样本按名单复核国家药监局英文公告。首项为依沃西单抗与培美曲塞、卡铂联合方案。归档保留公告更新日、人工核对的适应症摘要和原始链接，批准决定日留空。采集核对公告编号及规范化首段的 SHA-256；首段变更后该目标报告失败，待复核后再更新中文摘要。名单以外的新公告尚未自动发现。
