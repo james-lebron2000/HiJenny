@@ -481,9 +481,9 @@ async function showAssetEvidence(panel, asset, cutoff, exactAsset) {
   } catch (err) {if (current()) panel.textContent='资产证据暂时无法读取，请重新筛选。'+err.message;}
 }
 
-function appendPublicCitation(card, event) {
+function appendPublicCitation(card, event, filters) {
   const link=document.createElement('a');
-  link.href=location.pathname+'#/public-events?'+new URLSearchParams({event:event.id});
+  link.href=location.pathname+'#/public-events?'+relatedArchiveQuery(filters,{event:event.id});
   link.textContent='此条归档的固定链接';
   // Capture only the archived heading and facts, before any live lookup controls are attached.
   const facts=Array.from(card.querySelectorAll('h2,p'),node=>node.textContent);
@@ -786,7 +786,7 @@ function renderPublicEvents() {
           note.textContent='文献在题名或摘要中提到此登记号；是否报告该试验的结果仍需核对原文。';
           card.append(note);
         }
-        appendPublicCitation(card,r);
+        appendPublicCitation(card,r,query);
         if (!query.has('source_record') || !query.has('source') ||
             [...query.keys()].some(key=>!['source_record','source','offset','disclosed_to','discovered_to'].includes(key))) {
           const params=new URLSearchParams({source:r.source,source_record:r.record});
