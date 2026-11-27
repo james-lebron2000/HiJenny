@@ -633,13 +633,19 @@ function renderPublicEvents() {
           link.href='#/discovery?event='+encodeURIComponent(r.id);
           link.textContent='以此资产筛选候选试验'; p.append(link); card.append(p);
         }
-        if (r.source==='NMPA' && r.asset && (!query.has('asset') || query.has('source') || query.has('notice_id'))) {
-          const params = new URLSearchParams({asset:r.asset});
-          if (query.has('as_of')) params.set('as_of',query.get('as_of'));
-          const p=document.createElement('p'), link=document.createElement('a');
-          link.href='#/public-events?'+params;
-          link.textContent='查看该药物的跨来源记录';
-          p.append(link); card.append(p);
+        if (r.asset) {
+          const params=new URLSearchParams({asset:r.asset});
+          for (const field of ['as_of','since','disclosed_to','discovered_from','discovered_to','observed_after']) {
+            if (query.has(field)) params.set(field,query.get(field));
+          }
+          const atAsset=query.get('asset')===r.asset &&
+            [...query.keys()].every(key=>key==='offset' || params.has(key));
+          if (!atAsset) {
+            const p=document.createElement('p'), link=document.createElement('a');
+            link.href='#/public-events?'+params;
+            link.textContent='查看该药物的跨来源记录';
+            p.append(link); card.append(p);
+          }
         }
         if (r.source==='NMPA' && !query.has('notice_id')) {
           const params = new URLSearchParams({notice_id:r.record});
