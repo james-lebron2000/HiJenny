@@ -38,9 +38,15 @@ function valuationWorkbook(plan, project, parent) {
     for (const warning of laterDisclosures(version)) rows.push(row([label('晚于估值日的依据'),label(warning)]));
     return rows;
   }
-  const sources=[row(['披露编号','字段','披露日','值','来源网址'].map(label)),
-    ...(plan.disclosures || []).map(r=>row([r.id,r.field,r.source_date,r.value,r.url].map(label)))];
   const sheet=(name,widths,data)=>`<Worksheet ss:Name="${name}"><Table>${widths.map(w=>'<Column ss:Width="'+w+'"/>').join('')}${data.join('')}</Table></Worksheet>`;
+  function evidence(version,prefix) {
+    const disclosures=version.disclosures || [], deals=version.deals || [];
+    return (disclosures.length?sheet(prefix+'引用的公开披露',[230,170,90,240,260],[
+      row(['披露编号','字段','披露日','值','来源网址'].map(label)),
+      ...disclosures.map(r=>row([r.id,r.field,r.source_date,r.value,r.url].map(label))) ]):'')+
+      (deals.length?sheet(prefix+'可比交易',dealFields.map(()=>150),[row(dealFields.map(([,title])=>label(title))),
+        ...deals.map(deal=>row(dealFields.map(([key])=>label(deal[key] ?? ''))))]):'');
+  }
   return '<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>'+
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+
     '<Styles><Style ss:ID="Default"><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style>'+
@@ -50,9 +56,7 @@ function valuationWorkbook(plan, project, parent) {
     (parent?sheet('原版情景复算',[150,100,170,155,125,130,260,220],schedule(parent)):'')+
     (plan.parent?sheet('保存时的版本比较',[460],(parent ? versionComparison(parent,plan) :
       ['未找到原版 '+plan.parent]).map(line=>row([label(line)]))):'')+
-    (sources.length>1?sheet('引用的公开披露',[230,170,90,240,260],sources):'')+
-    (plan.deals?.length?sheet('可比交易',dealFields.map(()=>150),[row(dealFields.map(([,title])=>label(title))),
-      ...plan.deals.map(deal=>row(dealFields.map(([key])=>label(deal[key] ?? ''))))]):'')+'</Workbook>';
+    evidence(plan,'')+(parent?evidence(parent,'原版'):'')+'</Workbook>';
 }
 
 function laterDisclosures(plan) {
