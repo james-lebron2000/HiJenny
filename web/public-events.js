@@ -546,8 +546,7 @@ function renderPublicEvents() {
   });
   let query, offset, generation = 0;
   function trialTrail(id) {
-    const params = new URLSearchParams({trial:id});
-    if (query.get('as_of')) params.set('as_of', query.get('as_of'));
+    const params = relatedArchiveQuery(query,{trial:id});
     const link = document.createElement('a');
     link.href = '#/public-events?' + params;
     link.textContent = '查看此试验的跨来源记录';
