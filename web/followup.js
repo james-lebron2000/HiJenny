@@ -1,6 +1,6 @@
 'use strict';
 
-const bdLabels = {comparison:'添加可比资产', request:'索取材料', reply:'登记卖方答复',
+const bdLabels = {reopen:'重新打开问题', comparison:'添加可比资产', request:'索取材料', reply:'登记卖方答复',
   review:'验证判断', experiment_result:'登记实验结果', publish:'更新 Decision Brief'};
 const bdColumns = {asset:'资产', population:'分析人群', line:'治疗线次', method:'评价方法',
   followup:'随访', endpoint:'终点', value:'结果', limits:'可比性限制'};
@@ -88,7 +88,7 @@ async function renderFollowup(seq) {
     <section class="card bd"><h2>答复与复核记录</h2>
     ${events.length ? '<ol>'+events.map(e=>`<li><strong>${esc(bdLabels[e.action])}</strong> · ${esc(e.actor)} · ${esc(fmtDate(e.ts))}
       <p>${esc(bdDecisions[e.after.decision] || '')} ${esc(e.after.note || e.after.asset || '')}</p>
-      ${e.after.document_id ? sourceLink(e.after) : ''}</li>`).join('')+'</ol>' : '<p>尚未登记。可先索取材料或添加可比资产。</p>'}
+      ${e.after.document_id ? sourceLink(e.after) : ''}</li>`).join('')+'</ol>' : '<p>尚无跟进记录。</p>'}
     ${mayRecord ? `<form id="bd-form"><label>下一步<select name="kind">${data.allowed[id].map(k=>option(k,'',bdLabels[k])).join('')}</select></label>
     <div id="bd-fields"></div><label>经办人${data.gateway_identity_required ? `<input name="actor" readonly value="${esc(data.gateway_user)}">` : '<input name="actor" required maxlength="120">'}</label>
     <button class="btn primary" type="submit">保存记录</button><p role="status"></p></form>` : `<p>${mayEdit ? '请通过身份网关登录后登记。' : '当前项目为只读。'}</p>`}
@@ -120,7 +120,7 @@ async function renderFollowup(seq) {
   const form = $('#bd-form');
   if (!form) return;
   const select = form.elements.kind;
-  const preferred = {request:'request', clarify:'request', reply:'reply', record:'reply', review:'review', experiment:'experiment_result', publish:'publish'}[stages.get(id)];
+  const preferred = {closed:'reopen', rejected:'reopen', request:'request', clarify:'request', reply:'reply', record:'reply', review:'review', experiment:'experiment_result', publish:'publish'}[stages.get(id)];
   select.value = data.allowed[id].includes(preferred) ? preferred : data.allowed[id].find(k=> !['comparison','request'].includes(k)) || 'request';
   const fields = () => {
     const kind = select.value;
@@ -131,7 +131,7 @@ async function renderFollowup(seq) {
       (kind === 'review' ? `<label>判断<select name="decision">${Object.entries(bdDecisions).map(([k,v])=>option(k,'',v)).join('')}</select></label>` : '') +
       (attached ? `<label>项目材料<select name="document_id"><option value="">选择已有文件，或在下方上传</option>${data.documents.map(d=>option(d.document_id,'',d.filename)).join('')}</select></label>
         <label>上传新材料<input type="file" name="attachment"></label>`+input('locator','页码、表号或工作表') : '') +
-      (kind === 'comparison' ? '' : `<label>${({request:'所需资料及待解问题',reply:'答复内容和仍缺材料',review:'判断依据与后续动作',experiment_result:'结果、限制与原始数据位置',publish:'写入 Decision Brief 的结论'})[kind]}<textarea required name="note" maxlength="4000"></textarea></label>`);
+      (kind === 'comparison' ? '' : `<label>${({reopen:'重新打开的原因',request:'所需资料及待解问题',reply:'答复内容和仍缺材料',review:'判断依据与后续动作',experiment_result:'结果、限制与原始数据位置',publish:'写入 Decision Brief 的结论'})[kind]}<textarea required name="note" maxlength="4000"></textarea></label>`);
   };
   fields(); select.onchange = fields;
   form.onsubmit = async e => {

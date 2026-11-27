@@ -52,7 +52,12 @@ class Publish(Entry):
     note: Text
 
 
-Action = Annotated[Union[Comparison, Request, Reply, Review, Publish], Field(discriminator="kind")]
+class Reopen(Entry):
+    kind: Literal["reopen"]
+    note: Text
+
+
+Action = Annotated[Union[Comparison, Request, Reply, Review, Publish, Reopen], Field(discriminator="kind")]
 DECISIONS = {"documents": "资料复核即可，无需新增实验", "experiment": "需要实验验证", "clarify": "继续补资料"}
 
 
@@ -65,11 +70,19 @@ def histories(session, project_id):
     return result
 
 
+def active_cycle(events):
+    for i in range(len(events) - 1, -1, -1):
+        if events[i]["action"] == "reopen":
+            return events[i + 1:]
+    return events
+
+
 def followup_stage(question, events):
     if question.get("review_status") == "rejected" or question.get("status") == "dismissed":
         return "rejected"
     if question.get("status") == "closed":
         return "closed"
+    events = active_cycle(events)
     last = next((e for e in reversed(events) if e["action"] != "comparison"), None)
     if not last:
         return {"sent": "reply", "answered": "record"}.get(question.get("status"), "request")
@@ -88,6 +101,9 @@ def question_stages(questions, history):
 
 
 def allowed(events, question=None):
+    if question and (question["status"] in {"closed", "dismissed"} or question.get("review_status") == "rejected"):
+        return ["reopen"]
+    events = active_cycle(events)
     last = next((e for e in reversed(events) if e["action"] != "comparison"), None)
     choices = ["comparison", "request"]
     if not last:
@@ -121,7 +137,10 @@ def append(session, project_id, question_id, action):
     events = histories(session, project_id).get(question_id, [])
     if action.revision != len(events):
         raise HTTPException(409, "记录已更新，请刷新后重试")
-    if action.kind not in allowed(events, question):
+    choices = allowed(events, question)
+    if choices == ["reopen"] and action.kind != "reopen":
+        raise HTTPException(409, "问题已关闭或驳回。请先重新打开并登记原因。")
+    if action.kind not in choices:
         raise HTTPException(409, "请先完成前一项复核步骤")
     payload = action.model_dump(exclude={"actor", "kind"})
     if "document_id" in payload:
@@ -130,6 +149,8 @@ def append(session, project_id, question_id, action):
             raise HTTPException(422, "请选择本项目的来源文件")
         payload["filename"] = doc["filename"]
     payload["revision"] += 1
+    if action.kind == "reopen":
+        store.update_question(session, question_id, actor=action.actor, status="draft", review_status="pending")
     if action.kind in ("request", "reply"):
         status = "sent" if action.kind == "request" else "answered"
         store.update_question(session, question_id, actor=action.actor, status=status)

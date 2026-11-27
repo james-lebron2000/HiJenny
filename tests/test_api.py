@@ -1017,3 +1017,29 @@ def test_brief_seller_queue_matches_followup_and_keeps_historical_questions(clie
     check("closed")
     client.patch(question, json={"review_status": "rejected"}).raise_for_status()
     check("rejected")
+
+
+def test_terminal_question_requires_explicit_reopen_with_reason(client):
+    project = create_project(client)["project_id"]
+    qid = seed_review_data(project)["question_id"]
+    base = f"/api/projects/{project}/followup"
+    route = base + "/" + qid
+    question = "/api/questions/" + qid
+
+    def record(kind, revision, note):
+        return client.post(route, json=dict(kind=kind, actor="pilot", revision=revision, note=note))
+
+    record("request", 0, "First request").raise_for_status()
+    for i, state in enumerate(({"status": "closed"}, {"status": "dismissed"}, {"review_status": "rejected"})):
+        rev = 1 + 2 * i
+        client.patch(question, json=state).raise_for_status()
+        assert client.get(base).json()["allowed"][qid] == ["reopen"]
+        assert record("request", rev, "Old form").status_code == 409
+        assert record("reopen", rev, " ").status_code == 422
+        record("reopen", rev, "Additional source received").raise_for_status()
+        assert record("reopen", rev, "Duplicate").status_code == 409
+        ledger = client.get(base).json()
+        assert ledger["stages"][qid] == "request" and "publish" not in ledger["allowed"][qid]
+        assert ledger["history"][qid][-1]["after"]["note"] == "Additional source received"
+        assert ledger["questions"][0]["review_status"] == "pending"
+        record("request", rev + 1, "Next request").raise_for_status()
