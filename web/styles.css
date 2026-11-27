@@ -935,7 +935,7 @@ table.data td select:focus { outline: none; border-color: var(--blue); backgroun
 .research-results a { overflow-wrap: anywhere; }
 #research-output:not(:empty) { padding: 12px 0 24px; }
 @media (max-width: 900px) { #mobile-nav { display: block; max-width: 120px; } }
-.research-results input[type=checkbox] { width: auto; }
+.research-home input[type=checkbox] { width: auto; }
 .research-home details { margin: 12px 0; }
 .research-home summary { cursor: pointer; }
 #public-library { margin: 20px 0; }

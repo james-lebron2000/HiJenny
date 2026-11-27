@@ -471,6 +471,7 @@ function renderPublicEvents() {
   setView(`<section class="research-home"><h1>公开资产动态</h1>
     <p>跟踪公开演示名单中的公司申报、中国 NMPA 公告、美国 FDA 批准记录、欧盟 EMA 人用药集中程序、日本 jRCT 登记、临床登记及 PubMed 登记号关联。公司申报按公司归档，已核实的资产事件列出对应药物。</p>
     ${hashParams().get('event')?'<p>正在查看引用链接指向的单条归档。<a href="#/public-events">查看全部动态</a></p>':''}
+    <button type="button" class="btn" id="public-jump-results">跳到当前查询结果</button>
     <details class="card" id="public-collection"><summary>最近一次公开采集</summary><div aria-live="polite">正在读取核对记录…</div></details>
     <details class="card" id="public-coverage"><summary>四地区数据覆盖与缺口</summary>
     <p>按来源机构所在地区列出本轮核对的目标。跨国试验和文献可涉及多个地区。成功数按关注目标计算；最近成功时间取该格内最近一次成功核对。日期样本取该来源归档中最新的完整来源日期，与首次收录该日期记录的台北日历日比较。历史补录也计入，间隔仅描述该样本。</p>
@@ -518,10 +519,15 @@ function renderPublicEvents() {
     <a data-week>订阅滚动七天</a> <button class="btn" type="button" data-copy-feed="a[data-week]">复制滚动七天订阅地址</button>
     <span role="status"></span><input type="text" aria-label="可复制的订阅地址" readonly hidden><br><small>滚动订阅每次读取时按台北日期重算最近七天，替换历史截面和发现日期。两种订阅均保留其他条件，最多列出最近 100 条。</small></p>
     <a id="public-event-report" hidden>下载当前筛选的完整简报</a>
-    <p id="public-event-status" role="status"></p><nav id="public-source-counts" aria-label="按来源查看归档"></nav><div id="public-event-list"></div>
+    <p id="public-event-status" role="status" tabindex="-1"></p><nav id="public-source-counts" aria-label="按来源查看归档"></nav><div id="public-event-list" role="region" aria-label="公开动态查询结果" tabindex="-1"></div>
     <button type="button" class="btn" id="public-event-more" hidden>加载更多</button></section>`);
   const form = $('#public-event-filters'), status = $('#public-event-status');
   const list = $('#public-event-list'), more = $('#public-event-more');
+  $('#public-jump-results').onclick=()=>{
+    const target=list.childElementCount ? list : status;
+    target.focus({preventScroll:true});
+    target.scrollIntoView({block:'start'});
+  };
   const feed=$('#public-event-feed'), feedStatus=feed.querySelector('[role=status]'), feedAddress=feed.querySelector('input');
   let copyAttempt=0;
   for (const button of feed.querySelectorAll('[data-copy-feed]')) button.onclick=async()=>{
