@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-11-27T00:26:39+00:00",
-  "finished_utc": "2026-11-27T00:27:13+00:00",
-  "watchlist_sha256": "b0b741af4f518f8727dd34ccec0c7cc9ab637f610d517b94b9539dec4994cc7d",
+  "started_utc": "2026-11-27T01:37:58+00:00",
+  "finished_utc": "2026-11-27T01:38:37+00:00",
+  "watchlist_sha256": "3fa326ebf3c25863075ca06c089cb4520a784f35c124649480ad69d7157bfcaf",
   "checks": [
     {
       "source": "nmpa",
@@ -11,7 +11,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:26:41+00:00"
+      "last_success_utc": "2026-11-27T01:38:00+00:00"
     },
     {
       "source": "nmpa",
@@ -20,8 +20,8 @@
       "target_sha256": "d410a5ddcd9c6e7b080b236dc4dba6ca271f1c0bac55869a920eddcbf8305412",
       "status": "ok",
       "records": 1,
-      "new_events": 1,
-      "last_success_utc": "2026-11-27T00:26:41+00:00"
+      "new_events": 0,
+      "last_success_utc": "2026-11-27T01:38:00+00:00"
     },
     {
       "source": "nmpa_index",
@@ -30,8 +30,8 @@
       "target_sha256": "8c39167dea59b5b2d49ba30eaa167ca97189aeceae969897e5d8c1202aedb0b4",
       "status": "ok",
       "records": 216,
-      "new_events": 198,
-      "last_success_utc": "2026-11-27T00:27:03+00:00"
+      "new_events": 0,
+      "last_success_utc": "2026-11-27T01:38:23+00:00"
     },
     {
       "source": "orange_book_uses",
@@ -41,7 +41,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:04+00:00"
+      "last_success_utc": "2026-11-27T01:38:25+00:00"
     },
     {
       "source": "orange_book",
@@ -51,7 +51,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:05+00:00"
+      "last_success_utc": "2026-11-27T01:38:25+00:00"
     },
     {
       "source": "jrct",
@@ -61,7 +61,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:07+00:00"
+      "last_success_utc": "2026-11-27T01:38:28+00:00"
     },
     {
       "source": "ema",
@@ -71,7 +71,17 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:08+00:00"
+      "last_success_utc": "2026-11-27T01:38:29+00:00"
+    },
+    {
+      "source": "ema",
+      "target": "EMEA/H/C/004124",
+      "subject": "Tagrisso (osimertinib)",
+      "target_sha256": "a2f6eca7f7cd31544c0c74ae8d3da0bedcf64d1399917d7de152b003fab73750",
+      "status": "ok",
+      "records": 1,
+      "new_events": 5,
+      "last_success_utc": "2026-11-27T01:38:29+00:00"
     },
     {
       "source": "sec",
@@ -81,7 +91,7 @@
       "status": "ok",
       "records": 5,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:08+00:00"
+      "last_success_utc": "2026-11-27T01:38:29+00:00"
     },
     {
       "source": "fda",
@@ -91,7 +101,7 @@
       "status": "ok",
       "records": 3,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:09+00:00"
+      "last_success_utc": "2026-11-27T01:38:29+00:00"
     },
     {
       "source": "fda",
@@ -101,7 +111,7 @@
       "status": "ok",
       "records": 25,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:09+00:00"
+      "last_success_utc": "2026-11-27T01:38:30+00:00"
     },
     {
       "source": "trials",
@@ -111,7 +121,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:09+00:00"
+      "last_success_utc": "2026-11-27T01:38:30+00:00"
     },
     {
       "source": "trials",
@@ -121,7 +131,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:09+00:00"
+      "last_success_utc": "2026-11-27T01:38:30+00:00"
     },
     {
       "source": "trials",
@@ -131,7 +141,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:09+00:00"
+      "last_success_utc": "2026-11-27T01:38:30+00:00"
     },
     {
       "source": "trials",
@@ -141,7 +151,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:09+00:00"
+      "last_success_utc": "2026-11-27T01:38:30+00:00"
     },
     {
       "source": "trials",
@@ -151,7 +161,17 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:09+00:00"
+      "last_success_utc": "2026-11-27T01:38:30+00:00"
+    },
+    {
+      "source": "trials",
+      "target": "NCT02296125",
+      "subject": "Tagrisso (osimertinib)",
+      "target_sha256": "b1402b2dc5ff41abd027f0a555a1f70d52b7bf23e4cf15917a181973d9c5179e",
+      "status": "ok",
+      "records": 1,
+      "new_events": 6,
+      "last_success_utc": "2026-11-27T01:38:31+00:00"
     },
     {
       "source": "publications",
@@ -161,7 +181,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:10+00:00"
+      "last_success_utc": "2026-11-27T01:38:31+00:00"
     },
     {
       "source": "publications",
@@ -171,7 +191,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:10+00:00"
+      "last_success_utc": "2026-11-27T01:38:32+00:00"
     },
     {
       "source": "publications",
@@ -181,7 +201,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:11+00:00"
+      "last_success_utc": "2026-11-27T01:38:33+00:00"
     },
     {
       "source": "publications",
@@ -191,7 +211,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:12+00:00"
+      "last_success_utc": "2026-11-27T01:38:34+00:00"
     },
     {
       "source": "publications",
@@ -201,10 +221,20 @@
       "status": "ok",
       "records": 9,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T00:27:13+00:00"
+      "last_success_utc": "2026-11-27T01:38:35+00:00"
+    },
+    {
+      "source": "publications",
+      "target": "NCT02296125",
+      "subject": "Tagrisso (osimertinib)",
+      "target_sha256": "b1402b2dc5ff41abd027f0a555a1f70d52b7bf23e4cf15917a181973d9c5179e",
+      "status": "ok",
+      "records": 19,
+      "new_events": 38,
+      "last_success_utc": "2026-11-27T01:38:37+00:00"
     }
   ],
-  "new_events": 199,
-  "run_id": "45916730192",
+  "new_events": 49,
+  "run_id": "45923654068",
   "trigger": "workflow_dispatch"
 }
