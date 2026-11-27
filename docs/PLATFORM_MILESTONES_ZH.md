@@ -31,6 +31,12 @@
 
 每次独立试用留存一行记录，填写角色、任务、应用版本、归档截止日、开始与结束时间、是否需要提示、实际产物和复核结论。采购进展沿用 HJ-10 的报价、交付和订单凭据。上述工程复验与真实试用分别登记。
 
+### 公开事件库恢复演练
+
+在服务器上的独立临时目录，以发布版自带的月度 JSONL 和采集回执重建空的 SQLite 公开事件库。通过公开 API 分页读取恢复结果，每条记录的完整内容、各来源事件数和去重编号数、采集回执均与归档逐项比对。随后对同一目录重复导入，再次执行相同比对。演练使用 410 条事件、8 个来源，采集运行编号为 `45939218803`。演练后，对运行中的生产 API 另行比对亦通过。[冻结数据与回执](https://github.com/james-lebron2000/HiJenny/tree/26cae86/data/public/events)
+
+在安装项目测试依赖的检出目录运行 `python -m pytest -q tests/test_public_event_ledger.py -k restore_complete_public_archive_offline_and_replay` 可重复演练。测试使用当前检出版本的数据与 pytest 临时目录，拦截采集器的远程读取。企业租户原件、角色权限及删除恢复按 HJ-05、HJ-20 单独验收。
+
 ### 早期部署核验
 
 08:27 批次的历史核验版本为 `8a2c475`。以月度 JSONL 为基准逐条比对 API 返回的完整事件，在 4 个分页中核对了 319 条归档、8 个来源，来源内去重编号数及采集回执均一致。回执时间为台北时间 11 月 27 日 08:27，20 项采集目标全部核对成功。各类计数按归档或来源编号统计，同一批准事项和同一试验可能有多次归档或多个编号。[冻结数据](https://github.com/james-lebron2000/HiJenny/tree/6db75c6/data/public/events) · [采集回执](https://github.com/james-lebron2000/HiJenny/actions/runs/45916730192) · [应用 CI](https://github.com/james-lebron2000/HiJenny/actions/runs/45921253704)

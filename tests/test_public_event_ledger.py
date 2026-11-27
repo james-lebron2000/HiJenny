@@ -471,3 +471,28 @@ def test_atom_conditional_refresh_for_empty_and_changed_feed(tmp_path, monkeypat
         db.execute("insert into events values (?,?,?,?,?)", ("first", "demo", None, row["source_date"], json.dumps(row)))
     changed = client.get(url, headers={"If-None-Match": tag})
     assert changed.status_code == 200 and changed.headers["etag"] != tag and "8-K" in changed.text
+
+
+def test_restore_complete_public_archive_offline_and_replay(tmp_path, monkeypatch):
+    """Rebuild the public index from this checkout, including its collection receipt."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from hijenny.api.public_events import router
+    from tools.verify_public_archive import verify
+
+    monkeypatch.setattr(public_events, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(public_events, "get", lambda *args: pytest.fail("unexpected network request"))
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        def read(suffix):
+            response = client.get("/api/public-events" + suffix)
+            response.raise_for_status()
+            return response.json()
+
+        assert not (tmp_path / "public-events.db").exists()
+        for _ in range(2):
+            count = public_events.sync(local=True)
+            result = verify("", read_json=read)
+            assert count == result["events_verified"] > 0
+            assert result["sources_verified"] > 0
