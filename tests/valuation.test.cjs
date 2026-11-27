@@ -50,3 +50,17 @@ test('as-of review checks manual and indexed disclosures against the same inclus
   assert.match(issues[0],/Later deal.*2024-06-04/);
   assert.match(issues[1],/Payment confirmed.*2026-04-30/);
 });
+
+test('unchanged cash flows distinguish scenario-only disclosures by archive identity', () => {
+  const differences=runInNewContext(source+'\nscenarioDifferences');
+  const cases=[['shared','old','old'],['new','shared']].map(disclosureIds=>({
+    amount:10,year:0,probability:100,disclosureIds
+  }));
+  const outputs=cases.map(c=>price([c],0));
+  const disclosures=['old','new'].map(id=>({id,field:'付款披露',source_date:'2024-06-03'}));
+  const [row]=differences({flows:[{cases}],outputs,disclosures});
+  assert.equal(row.delta,0);
+  assert.deepEqual(Array.from(row.evidenceChanges),[
+    '仅基准引用：付款披露 · 2024-06-03 · old','仅替代引用：付款披露 · 2024-06-03 · new'
+  ]);
+});

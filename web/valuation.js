@@ -30,7 +30,17 @@ function scenarioDifferences(plan) {
       }
     }
     const delta=plan.outputs[1].presentValues[index]-plan.outputs[0].presentValues[index];
-    return {index,delta,assumptions};
+    const evidenceChanges=[];
+    const references=flow.cases.map(c=>new Set(c.disclosureIds || []));
+    references.forEach((ids,j)=>{
+      for (const id of ids) {
+        if (references[1-j].has(id)) continue;
+        const record=(plan.disclosures || []).find(r=>r.id===id);
+        const label=record ? [record.field,record.source_date,id].filter(Boolean).join(' · ') : id;
+        evidenceChanges.push('仅'+scenarioNames[j]+'引用：'+label);
+      }
+    });
+    return {index,delta,assumptions,evidenceChanges};
   }).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta) || a.index-b.index);
 }
 
@@ -158,7 +168,7 @@ async function renderValuation(seq) {
       result.innerHTML=`<h2>买方风险调整净现值</h2><p>${esc(v.asOf)} · 百万 ${esc(v.currency)} · 年折现率 ${esc(v.rate)}%</p>
         ${late.length?`<section class="card"><h3>本版含估值日后披露的依据</h3><ul>${late.map(line=>`<li>${esc(line)}</li>`).join('')}</ul></section>`:''}
         <table><caption>按现值差额的绝对值排序，差额为替代减基准</caption><thead><tr><th>现金流</th><th>基准现值</th><th>替代现值</th><th>差额</th></tr></thead><tbody>
-        ${differences.map(({index:i,delta,assumptions})=>`<tr><th>${esc(v.flows[i].label)}<br><small>${esc(assumptions.join(' · ') || '金额、年份和概率相同')}</small></th>${v.outputs.map((o,j)=>`<td>${number(o.presentValues[i])}${scenarioSources(v,v.flows[i].cases[j]).map(r=>
+        ${differences.map(({index:i,delta,assumptions,evidenceChanges})=>`<tr><th>${esc(v.flows[i].label)}<br><small>${esc(assumptions.join(' · ') || '金额、年份和概率相同')}</small>${evidenceChanges.map(line=>`<br><small>${esc(line)}</small>`).join('')}</th>${v.outputs.map((o,j)=>`<td>${number(o.presentValues[i])}${scenarioSources(v,v.flows[i].cases[j]).map(r=>
           `<br>${esc(r.field)} · ${esc(r.source_date)} · ${disclosureLinks(r)}`).join('')}</td>`).join('')}<td>${number(delta)}</td></tr>`).join('')}
         <tr><th>合计</th>${totals.map(t=>`<td>${number(t)}</td>`).join('')}<td>${number(totals[1]-totals[0])}</td></tr></tbody></table>
         <p>替代情景较基准变化 ${number(totals[1]-totals[0])} 百万 ${esc(v.currency)}。</p>
@@ -195,8 +205,8 @@ async function renderValuation(seq) {
           lines.push('依据 '+f.basis);
         });
         lines.push('','现金流差额（替代减基准，按绝对值排序）');
-        for (const {index,delta,assumptions} of differences) {
-          lines.push(v.flows[index].label+' · '+delta+' 百万 '+v.currency+' · '+(assumptions.join(' · ') || '金额、年份和概率相同'));
+        for (const {index,delta,assumptions,evidenceChanges} of differences) {
+          lines.push(v.flows[index].label+' · '+delta+' 百万 '+v.currency+' · '+(assumptions.join(' · ') || '金额、年份和概率相同'), ...evidenceChanges);
         }
         lines.push('',...totals.map((t,j)=>scenarioNames[j]+'净现值 '+t),'情景差额 '+(totals[1]-totals[0]));
         const url=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain;charset=utf-8'}));
