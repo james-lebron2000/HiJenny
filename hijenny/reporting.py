@@ -43,23 +43,29 @@ def _atomic_write(path: Path, write_fn) -> Path:
     return path
 
 
-def export_review_state(path: Path, current_digest: str) -> str:
+def export_review_state(path: Path, evidence_digest: str, diligence_digest: str) -> dict[str, str]:
     """Compare the snapshot embedded in this file with the current evidence reviews."""
     try:
         if path.suffix == ".md":
             with path.open("rb") as stream:
-                first_line = stream.readline(128)
-            match = re.fullmatch(rb"<!-- hijenny-review ([0-9a-f]{64}) -->", first_line.strip())
+                first_line = stream.readline(192)
+            match = re.fullmatch(rb"<!-- hijenny-review ([0-9a-f]{64}(?::[0-9a-f]{64})?) -->", first_line.strip())
             digest = match[1].decode() if match else None
         else:
             with ZipFile(path) as archive:
                 root = ElementTree.fromstring(archive.read("docProps/core.xml"))
             digest = root.findtext("{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}keywords")
     except (OSError, BadZipFile, KeyError, ElementTree.ParseError):
-        return "unknown"
-    if not digest or not re.fullmatch(r"[0-9a-f]{64}", digest):
-        return "unknown"
-    return "current" if digest == current_digest else "changed"
+        digest = None
+    parts = (digest or "").split(":")
+
+    def compare(index: int, current: str) -> str:
+        if index >= len(parts) or not re.fullmatch(r"[0-9a-f]{64}", parts[index]):
+            return "unknown"
+        return "current" if parts[index] == current else "changed"
+
+    return {"evidence_review_state": compare(0, evidence_digest),
+            "diligence_review_state": compare(1, diligence_digest)}
 
 
 def generate_project_outputs(session, project_id: str, force: bool = False) -> dict:

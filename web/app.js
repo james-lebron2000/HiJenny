@@ -1456,7 +1456,7 @@ async function renderFindings(seq) {
 
 /* ----------------------------------------------------------------- report */
 function renderMarkdown(md) {
-  const lines = String(md || '').replace(/^<!-- hijenny-review [0-9a-f]{64} -->\r?\n/, '').split(/\r?\n/);
+  const lines = String(md || '').replace(/^<!-- hijenny-review [0-9a-f]{64}(?::[0-9a-f]{64})? -->\r?\n/, '').split(/\r?\n/);
   const out = [];
   let i = 0;
   let paragraph = [];
@@ -1568,7 +1568,10 @@ function renderReportView() {
   const xlsx = outputs.questions_xlsx || {};
   const stats = state.stats || {};
   const reviewStatus = {changed:'证据或复核意见已有变化', unknown:'缺少可核对的复核版本'};
-  const warnings = Object.values(outputs).filter(file => file.exists && reviewStatus[file.evidence_review_state]);
+  const diligenceStatus = {changed:'项目资料、风险发现或卖方问题已有变化', unknown:'缺少可核对的项目尽调版本'};
+  const warnings = Object.values(outputs).filter(file => file.exists).map(file => ({
+    name: file.name, reasons: [reviewStatus[file.evidence_review_state], diligenceStatus[file.diligence_review_state]].filter(Boolean)
+  })).filter(file => file.reasons.length);
   setView(`
     <div class="page-head">
       <div><h1>Report</h1>
@@ -1591,7 +1594,7 @@ function renderReportView() {
       { k: 'Coverage', v: stats.coverage || 0 },
     ])}
     ${warnings.length ? `<div class="notice" role="status"><div><strong>分发前需重新生成</strong>
-      <ul>${warnings.map(file => `<li>${esc(file.name)} · ${reviewStatus[file.evidence_review_state]}</li>`).join('')}</ul>
+      <ul>${warnings.map(file => `<li>${esc(file.name)} · ${file.reasons.join('；')}</li>`).join('')}</ul>
       ${state.projectPermissions.edit === false ? '请联系项目编辑人员更新文件。' : '点击 Regenerate report，生成包含当前复核结果的文件。'}</div></div>` : ''}
     <div class="notice info"><span>📋</span><div><strong>Decision Brief — Section 1</strong> — one-page summary for BD heads / investment committee, with evidence highlights, top open risks, seller questions and missing evidence. No automated Go/No-Go recommendation is made; the brief summarises evidence and open items for human review.</div></div>
     ${md.exists && state.reportMd ? `<div class="report">${renderMarkdown(state.reportMd)}</div>` : `

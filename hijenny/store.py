@@ -198,6 +198,16 @@ def review_digest(tokens: Iterable[str]) -> str:
     return hashlib.sha256("".join(sorted(tokens)).encode("ascii")).hexdigest()
 
 
+def diligence_digest(project: dict, findings: list[dict], questions: list[dict]) -> str:
+    snapshot = {
+        "project": {k: project.get(k) for k in ("project_id", "name", "asset_name", "indication", "phase")},
+        "findings": sorted(findings, key=lambda f: f["finding_id"]),
+        "questions": sorted(questions, key=lambda q: q["question_id"]),
+    }
+    content = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(content.encode()).hexdigest()
+
+
 def project_review_digest(session: Session, project_id: str) -> str:
     rows = session.execute(select(Evidence.evidence_id, Evidence.verification_status,
                                   Evidence.verification_note, Evidence.verified_by)

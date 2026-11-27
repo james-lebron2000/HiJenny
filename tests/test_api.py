@@ -956,3 +956,29 @@ def test_download_review_state_tracks_each_generated_file(client, env):
     assert states()["report_md"] == "unknown"
     client.post(base + "/exports/report").raise_for_status()
     assert set(states().values()) == {"current"}
+
+
+def test_report_review_state_tracks_project_findings_and_seller_questions(client, env):
+    pid = create_project(client)["project_id"]
+    rows = seed_review_data(pid)
+    base = f"/api/projects/{pid}"
+
+    def outputs():
+        return client.get(base + "/outputs").json()["outputs"]
+
+    for path, change in ((base, {"indication": "Updated indication"}),
+                         ("/api/findings/" + rows["finding_id"], {"severity": "high"}),
+                         ("/api/questions/" + rows["question_id"], {"priority": "low"})):
+        client.post(base + "/exports/report").raise_for_status()
+        assert all(f["diligence_review_state"] == "current" for f in outputs().values())
+        client.patch(path, json=change).raise_for_status()
+        assert all((f["diligence_review_state"], f["evidence_review_state"]) == ("changed", "current")
+                   for f in outputs().values())
+    client.post(base + "/exports/questions").raise_for_status()
+    assert outputs()["questions_xlsx"]["diligence_review_state"] == "current"
+    assert outputs()["report_docx"]["diligence_review_state"] == "changed"
+    md = env["data_dir"] / "projects" / pid / "exports" / "HiJenny_Report.md"
+    marker, tail = md.read_text().split("\n", 1)
+    md.write_text(marker.split(":")[0] + " -->\n" + tail)
+    legacy = outputs()["report_md"]
+    assert legacy["diligence_review_state"] == "unknown" and legacy["evidence_review_state"] == "current"

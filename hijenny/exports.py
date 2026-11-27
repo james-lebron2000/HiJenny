@@ -363,7 +363,8 @@ def collect_export_data(session, project_id: str) -> dict:
     from hijenny.diligence import brief_updates
 
     return {
-        "review_digest": store.review_digest(ev["review_token"] for ev in evidence),
+        "review_digest": (store.review_digest(ev["review_token"] for ev in evidence) + ":" +
+                          store.diligence_digest(project, findings_all, questions)),
         "bd_updates": brief_updates(session, project_id, questions),
         "project": project,
         "stats": stats,
