@@ -731,3 +731,41 @@ pipeline.run_pipeline(sys.argv[1])
         assert not retry["already_running"] and retry["run_id"] != run["run"]["run_id"]
         final = pipeline.wait_for_run(retry["run_id"], timeout=30)
         assert final["status"] == "succeeded", final["error"]
+
+
+def test_simultaneous_analysis_requests_share_one_worker(client, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier, Event
+
+    project_id = create_project(client)["project_id"]
+    callers = 6
+    at_start = Barrier(callers)
+    release = Event()
+    original_start = pipeline.start_pipeline
+    launched = []
+
+    def simultaneous_start(project_id, force=False):
+        at_start.wait(timeout=10)
+        return original_start(project_id, force=force)
+
+    def worker(run_id, project_id, force=False):
+        launched.append(run_id)
+        release.wait(timeout=20)
+        with store.session_scope() as session:
+            store.update_run(session, run_id, status="succeeded", finished=True)
+
+    monkeypatch.setattr(pipeline, "start_pipeline", simultaneous_start)
+    monkeypatch.setattr(pipeline, "_execute", worker)
+    try:
+        with ThreadPoolExecutor(max_workers=callers) as pool:
+            futures = [pool.submit(client.post, f"/api/projects/{project_id}/analyze",
+                                   json={"force": bool(i % 2)}) for i in range(callers)]
+            replies = [future.result().json() for future in futures]
+        assert sum(not reply["already_running"] for reply in replies) == 1
+        assert {reply["run_id"] for reply in replies} == {launched[0]}
+        assert len(launched) == 1
+        assert client.get(f"/api/projects/{project_id}/runs").json()["count"] == 1
+    finally:
+        release.set()
+        for run_id in launched:
+            pipeline.wait_for_run(run_id, timeout=10)

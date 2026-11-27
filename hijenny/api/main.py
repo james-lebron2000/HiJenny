@@ -811,21 +811,21 @@ def create_app() -> FastAPI:
         force = bool(payload.force) if payload else False
         with store.session_scope() as session:
             _project_or_404(session, project_id)
-            runs = store.list_runs(session, project_id, limit=1)
-            if runs and runs[0].get("status") == "running":
-                return {
-                    "run_id": runs[0]["run_id"],
-                    "project_id": project_id,
-                    "already_running": True,
-                    "progress": _progress(runs[0]),
-                }
-        run_id = pipeline.start_pipeline(project_id, force=force)
-        with store.session_scope() as session:
-            run = store.get_run(session, run_id)
+            run = store.running_run(session, project_id)
+        already_running = True
+        if run is None:
+            try:
+                run_id = pipeline.start_pipeline(project_id, force=force)
+            except store.AnalysisAlreadyRunning as exc:
+                run = exc.run
+            else:
+                already_running = False
+                with store.session_scope() as session:
+                    run = store.get_run(session, run_id)
         return {
-            "run_id": run_id,
+            "run_id": run["run_id"] if run else run_id,
             "project_id": project_id,
-            "already_running": False,
+            "already_running": already_running,
             "progress": _progress(run) if run else {"run_id": run_id, "percent": 0, "status": "running"},
         }
 

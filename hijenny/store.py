@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
 
-from sqlalchemy import create_engine, delete, func, literal_column, select
+from sqlalchemy import create_engine, delete, func, literal_column, select, text
 from sqlalchemy.event import listen
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -1142,6 +1142,30 @@ def list_coverage(session: Session, project_id: str, status: str | None = None) 
 # ---------------------------------------------------------------------------
 # Runs / review events / stats
 # ---------------------------------------------------------------------------
+
+
+def running_run(session: Session, project_id: str) -> dict | None:
+    row = session.scalars(
+        select(AgentRun).where(AgentRun.project_id == project_id, AgentRun.status == "running")
+        .order_by(AgentRun.started_at.desc(), literal_column("rowid").desc()).limit(1)
+    ).first()
+    return _run_dict(row) if row else None
+
+
+class AnalysisAlreadyRunning(RuntimeError):
+    def __init__(self, run: dict):
+        self.run = run
+        super().__init__(f"Analysis {run['run_id']} is already running for {run['project_id']}")
+
+
+def reserve_run(session: Session, project_id: str, stages: Sequence[str]) -> dict:
+    # This must be the first statement of the reservation transaction. SQLite
+    # serializes competing creators before either can read an empty slot.
+    session.execute(text("BEGIN IMMEDIATE"))
+    active = running_run(session, project_id)
+    if active:
+        raise AnalysisAlreadyRunning(active)
+    return create_run(session, project_id, stages)
 
 
 def create_run(session: Session, project_id: str, stages: Sequence[str]) -> dict:

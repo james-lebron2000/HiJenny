@@ -154,7 +154,7 @@ def _owned_run(project_id: str):
     lock = None
     try:
         with store.session_scope() as session:
-            run = store.create_run(session, project_id, STAGES)
+            run = store.reserve_run(session, project_id, STAGES)
             if fcntl is not None:
                 directory = _lock_directory()
                 directory.mkdir(mode=0o700, exist_ok=True)
@@ -222,10 +222,10 @@ def start_pipeline(project_id: str, force: bool = False) -> str:
                 _ACTIVE.pop(run_id, None)
 
     thread = threading.Thread(target=work, name=f"hijenny-{run_id}", daemon=True)
-    with _LOCK:
-        _ACTIVE[run_id] = thread
     try:
-        thread.start()
+        with _LOCK:
+            _ACTIVE[run_id] = thread
+            thread.start()
     except Exception as exc:
         try:
             _fail(run_id, project_id, str(exc))
