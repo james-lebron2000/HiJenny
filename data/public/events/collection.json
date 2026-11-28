@@ -1,6 +1,6 @@
 {
-  "started_utc": "2026-11-27T08:39:41+00:00",
-  "finished_utc": "2026-11-27T08:40:19+00:00",
+  "started_utc": "2026-11-28T07:53:51+00:00",
+  "finished_utc": "2026-11-28T07:54:26+00:00",
   "watchlist_sha256": "588af31a550ec6225aca8e4e007d85c93bbffc551df5993e93e6d0b8d0b09ca9",
   "checks": [
     {
@@ -11,7 +11,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:39:43+00:00"
+      "last_success_utc": "2026-11-28T07:53:52+00:00"
     },
     {
       "source": "nmpa",
@@ -21,7 +21,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:39:43+00:00"
+      "last_success_utc": "2026-11-28T07:53:52+00:00"
     },
     {
       "source": "nmpa_index",
@@ -31,7 +31,7 @@
       "status": "ok",
       "records": 216,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:07+00:00"
+      "last_success_utc": "2026-11-28T07:54:16+00:00"
     },
     {
       "source": "orange_book_uses",
@@ -41,7 +41,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:08+00:00"
+      "last_success_utc": "2026-11-28T07:54:16+00:00"
     },
     {
       "source": "orange_book",
@@ -51,7 +51,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:09+00:00"
+      "last_success_utc": "2026-11-28T07:54:17+00:00"
     },
     {
       "source": "jrct",
@@ -71,7 +71,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:11+00:00"
+      "last_success_utc": "2026-11-28T07:54:18+00:00"
     },
     {
       "source": "ema",
@@ -81,7 +81,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:11+00:00"
+      "last_success_utc": "2026-11-28T07:54:18+00:00"
     },
     {
       "source": "sec",
@@ -91,7 +91,7 @@
       "status": "ok",
       "records": 8,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:11+00:00"
+      "last_success_utc": "2026-11-28T07:54:18+00:00"
     },
     {
       "source": "fda",
@@ -101,7 +101,7 @@
       "status": "ok",
       "records": 3,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:11+00:00"
+      "last_success_utc": "2026-11-28T07:54:18+00:00"
     },
     {
       "source": "fda",
@@ -111,7 +111,7 @@
       "status": "ok",
       "records": 25,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:11+00:00"
+      "last_success_utc": "2026-11-28T07:54:19+00:00"
     },
     {
       "source": "trials",
@@ -121,7 +121,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:11+00:00"
+      "last_success_utc": "2026-11-28T07:54:19+00:00"
     },
     {
       "source": "trials",
@@ -131,7 +131,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:11+00:00"
+      "last_success_utc": "2026-11-28T07:54:19+00:00"
     },
     {
       "source": "trials",
@@ -141,7 +141,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:12+00:00"
+      "last_success_utc": "2026-11-28T07:54:19+00:00"
     },
     {
       "source": "trials",
@@ -151,7 +151,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:12+00:00"
+      "last_success_utc": "2026-11-28T07:54:19+00:00"
     },
     {
       "source": "trials",
@@ -161,7 +161,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:12+00:00"
+      "last_success_utc": "2026-11-28T07:54:19+00:00"
     },
     {
       "source": "trials",
@@ -171,7 +171,7 @@
       "status": "ok",
       "records": 1,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:12+00:00"
+      "last_success_utc": "2026-11-28T07:54:20+00:00"
     },
     {
       "source": "publications",
@@ -181,7 +181,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:13+00:00"
+      "last_success_utc": "2026-11-28T07:54:20+00:00"
     },
     {
       "source": "publications",
@@ -191,7 +191,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:13+00:00"
+      "last_success_utc": "2026-11-28T07:54:21+00:00"
     },
     {
       "source": "publications",
@@ -201,7 +201,7 @@
       "status": "ok",
       "records": 2,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:15+00:00"
+      "last_success_utc": "2026-11-28T07:54:22+00:00"
     },
     {
       "source": "publications",
@@ -211,7 +211,7 @@
       "status": "ok",
       "records": 0,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:16+00:00"
+      "last_success_utc": "2026-11-28T07:54:23+00:00"
     },
     {
       "source": "publications",
@@ -221,7 +221,7 @@
       "status": "ok",
       "records": 9,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:17+00:00"
+      "last_success_utc": "2026-11-28T07:54:24+00:00"
     },
     {
       "source": "publications",
@@ -231,12 +231,12 @@
       "status": "ok",
       "records": 19,
       "new_events": 0,
-      "last_success_utc": "2026-11-27T08:40:19+00:00"
+      "last_success_utc": "2026-11-28T07:54:26+00:00"
     }
   ],
   "new_events": 0,
-  "run_id": "45967376059",
+  "run_id": "46123279191",
   "trigger": "schedule",
-  "collector_commit": "18a6fa8075362d941942c42ae7392a7e5db70709",
+  "collector_commit": "fea3c4eee5dd96140c8e9a43da68ba1dbea4d423",
   "run_attempt": "1"
 }
